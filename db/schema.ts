@@ -39,9 +39,19 @@ export const athletes = sqliteTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     fullName: text("full_name").notNull(),
     birthYear: integer("birth_year").notNull(),
+    birthDate: text("birth_date"),
     category: text("category").notNull(),
     guardianName: text("guardian_name").notNull(),
     guardianPhone: text("guardian_phone"),
+    guardianEmail: text("guardian_email"),
+    emergencyName: text("emergency_name"),
+    emergencyPhone: text("emergency_phone"),
+    allergies: text("allergies"),
+    medications: text("medications"),
+    medicalNotes: text("medical_notes"),
+    imageAuthorized: integer("image_authorized", { mode: "boolean" })
+      .notNull()
+      .default(false),
     attendanceRate: integer("attendance_rate").notNull().default(100),
     financialStatus: text("financial_status", {
       enum: ["paid", "pending"],
@@ -57,6 +67,36 @@ export const athletes = sqliteTable(
     index("athletes_organization_idx").on(table.organizationId),
     index("athletes_name_idx").on(table.organizationId, table.fullName),
     index("athletes_category_idx").on(table.organizationId, table.category),
+  ],
+);
+
+export const athleteDocuments = sqliteTable(
+  "athlete_documents",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    athleteId: text("athlete_id")
+      .notNull()
+      .references(() => athletes.id, { onDelete: "cascade" }),
+    objectKey: text("object_key").notNull().unique(),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    kind: text("kind", {
+      enum: ["identity", "medical", "authorization", "other"],
+    })
+      .notNull()
+      .default("other"),
+    uploadedBy: text("uploaded_by").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    index("athlete_documents_athlete_idx").on(
+      table.organizationId,
+      table.athleteId,
+    ),
   ],
 );
 

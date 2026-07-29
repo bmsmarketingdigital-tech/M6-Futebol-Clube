@@ -1,7 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
-import { getChatGPTUser } from "../../chatgpt-auth";
-import { getDb, getOrCreateOrganization } from "../../../db";
+import { getDb } from "../../../db";
 import { athletes } from "../../../db/schema";
+import { getApiContext } from "../api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,24 +14,16 @@ const categories = new Set([
   "Sub-17",
 ]);
 
-async function getRequestUser(request: Request) {
-  const user = await getChatGPTUser();
-  if (user) return user;
-
-  const hostname = new URL(request.url).hostname;
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
-    return {
-      email: "administrador@baseforte.local",
-      displayName: "Administrador local",
-      fullName: "Administrador local",
-    };
-  }
-
-  return null;
-}
-
 function toDto(row: typeof athletes.$inferSelect) {
-  const age = Math.max(0, new Date().getFullYear() - row.birthYear);
+  const age = row.birthDate
+    ? Math.max(
+        0,
+        Math.floor(
+          (Date.now() - new Date(`${row.birthDate}T12:00:00`).getTime()) /
+            31_557_600_000,
+        ),
+      )
+    : Math.max(0, new Date().getFullYear() - row.birthYear);
   const initials = row.fullName
     .split(/\s+/)
     .slice(0, 2)
@@ -45,8 +37,16 @@ function toDto(row: typeof athletes.$inferSelect) {
     initials,
     category: row.category,
     age,
+    birthDate: row.birthDate,
     guardianName: row.guardianName,
     guardianPhone: row.guardianPhone,
+    guardianEmail: row.guardianEmail,
+    emergencyName: row.emergencyName,
+    emergencyPhone: row.emergencyPhone,
+    allergies: row.allergies,
+    medications: row.medications,
+    medicalNotes: row.medicalNotes,
+    imageAuthorized: row.imageAuthorized,
     attendance: row.attendanceRate,
     status: row.financialStatus === "pending" ? "Pendente" : "Em dia",
     tone: "green",
@@ -56,19 +56,11 @@ function toDto(row: typeof athletes.$inferSelect) {
 
 export async function GET(request: Request) {
   try {
-    const user = await getRequestUser(request);
-    if (!user) {
+    const context = await getApiContext(request);
+    if (!context) {
       return Response.json(
         { error: "Faça login para acessar os atletas." },
         { status: 401 },
-      );
-    }
-
-    const membership = await getOrCreateOrganization(user);
-    if (!membership) {
-      return Response.json(
-        { error: "Não foi possível localizar a sua escolinha." },
-        { status: 500 },
       );
     }
 
@@ -78,7 +70,7 @@ export async function GET(request: Request) {
       .from(athletes)
       .where(
         and(
-          eq(athletes.organizationId, membership.organizationId),
+          eq(athletes.organizationId, context.membership.organizationId),
           eq(athletes.active, true),
         ),
       )
@@ -97,8 +89,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await getRequestUser(request);
-    if (!user) {
+    const context = await getApiContext(request);
+    if (!context) {
       return Response.json(
         { error: "Faça login para cadastrar atletas." },
         { status: 401 },
@@ -144,21 +136,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const membership = await getOrCreateOrganization(user);
-    if (!membership) {
-      return Response.json(
-        { error: "Não foi possível localizar a sua escolinha." },
-        { status: 500 },
-      );
-    }
-
     const now = new Date();
     const db = getDb();
     const [created] = await db
       .insert(athletes)
       .values({
         id: crypto.randomUUID(),
-        organizationId: membership.organizationId,
+        organizationId: context.membership.organizationId,
         fullName: name,
         birthYear: now.getFullYear() - age,
         category,
@@ -167,7 +151,7 @@ export async function POST(request: Request) {
         attendanceRate: 100,
         financialStatus: "paid",
         active: true,
-        createdBy: user.email,
+        createdBy: context.user.email,
         createdAt: now,
         updatedAt: now,
       })

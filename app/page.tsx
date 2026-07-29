@@ -1,6 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  AthleteProfileModal,
+  type AthleteRecord,
+} from "./AthleteProfileModal";
 
 type Section =
   | "Visão geral"
@@ -12,18 +16,7 @@ type Section =
   | "Avaliações"
   | "Comunicação";
 
-type Athlete = {
-  id: string;
-  name: string;
-  initials: string;
-  category: string;
-  age: number;
-  guardianName?: string;
-  guardianPhone?: string | null;
-  attendance: number;
-  status: "Em dia" | "Pendente";
-  tone: string;
-};
+type Athlete = AthleteRecord;
 
 const navItems: { label: Section; icon: string }[] = [
   { label: "Visão geral", icon: "⌂" },
@@ -51,6 +44,7 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [showAthleteModal, setShowAthleteModal] = useState(false);
   const [showAttendance, setShowAttendance] = useState(false);
+  const [selectedAthlete, setSelectedAthlete] = useState<Athlete | null>(null);
   const [toast, setToast] = useState("");
   const [loadingAthletes, setLoadingAthletes] = useState(true);
   const [savingAthlete, setSavingAthlete] = useState(false);
@@ -230,6 +224,7 @@ export default function Home() {
               athletes={filteredAthletes}
               setSection={setSection}
               onAttendance={() => setShowAttendance(true)}
+              onOpenAthlete={setSelectedAthlete}
               notify={notify}
             />
           ) : (
@@ -238,6 +233,7 @@ export default function Home() {
               athletes={filteredAthletes}
               setShowAthleteModal={setShowAthleteModal}
               setShowAttendance={setShowAttendance}
+              onOpenAthlete={setSelectedAthlete}
               notify={notify}
             />
           )}
@@ -290,6 +286,28 @@ export default function Home() {
         </div>
       )}
 
+      {selectedAthlete && (
+        <AthleteProfileModal
+          key={selectedAthlete.id}
+          athlete={selectedAthlete}
+          onClose={() => setSelectedAthlete(null)}
+          onSaved={(updated) => {
+            setAthletes((current) =>
+              current.map((athlete) =>
+                athlete.id === updated.id ? updated : athlete,
+              ),
+            );
+            setSelectedAthlete(updated);
+          }}
+          onArchived={(athleteId) => {
+            setAthletes((current) =>
+              current.filter((athlete) => athlete.id !== athleteId),
+            );
+          }}
+          notify={notify}
+        />
+      )}
+
       {toast && <div className="toast" role="status"><span>✓</span>{toast}</div>}
     </main>
   );
@@ -299,11 +317,13 @@ function Dashboard({
   athletes,
   setSection,
   onAttendance,
+  onOpenAthlete,
   notify,
 }: {
   athletes: Athlete[];
   setSection: (section: Section) => void;
   onAttendance: () => void;
+  onOpenAthlete: (athlete: Athlete) => void;
   notify: (message: string) => void;
 }) {
   return (
@@ -361,7 +381,7 @@ function Dashboard({
           <CardHeader title="Atletas em destaque" subtitle="Frequência e evolução no mês" action="Ver todos" onAction={() => setSection("Atletas")} />
           <div className="athlete-table">
             <div className="table-row table-head"><span>ATLETA</span><span>CATEGORIA</span><span>FREQUÊNCIA</span><span>FINANCEIRO</span></div>
-            {athletes.slice(0, 4).map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} />)}
+            {athletes.slice(0, 4).map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} onOpen={onOpenAthlete} />)}
             {athletes.length === 0 && <EmptyAthletes compact />}
           </div>
         </div>
@@ -383,12 +403,14 @@ function SectionView({
   athletes,
   setShowAthleteModal,
   setShowAttendance,
+  onOpenAthlete,
   notify,
 }: {
   section: Section;
   athletes: Athlete[];
   setShowAthleteModal: (show: boolean) => void;
   setShowAttendance: (show: boolean) => void;
+  onOpenAthlete: (athlete: Athlete) => void;
   notify: (message: string) => void;
 }) {
   const descriptions: Record<Section, string> = {
@@ -415,7 +437,7 @@ function SectionView({
           <div className="module-toolbar"><strong>{athletes.length} atletas encontrados</strong><div><button className="filter-button">Todas as categorias⌄</button><button className="filter-button">Exportar</button></div></div>
           <div className="athlete-table expanded">
             <div className="table-row table-head"><span>ATLETA</span><span>CATEGORIA</span><span>FREQUÊNCIA</span><span>FINANCEIRO</span></div>
-            {athletes.map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} />)}
+            {athletes.map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} onOpen={onOpenAthlete} />)}
             {athletes.length === 0 && <EmptyAthletes />}
           </div>
         </div>
@@ -461,8 +483,8 @@ function CardHeader({ title, subtitle, action, onAction }: { title: string; subt
   return <div className="card-header"><div><h2>{title}</h2><p>{subtitle}</p></div>{action && <button onClick={onAction}>{action} <span>→</span></button>}</div>;
 }
 
-function AthleteRow({ athlete }: { athlete: Athlete }) {
-  return <div className="table-row"><span className="athlete-name"><i className={`mini-avatar ${athlete.tone}`}>{athlete.initials}</i><span><strong>{athlete.name}</strong><small>{athlete.age} anos</small></span></span><span><b className="category-tag">{athlete.category}</b></span><span className="attendance-cell"><strong>{athlete.attendance}%</strong><i><b style={{ width: `${athlete.attendance}%` }} /></i></span><span><b className={athlete.status === "Em dia" ? "status-tag paid" : "status-tag pending"}><i />{athlete.status}</b></span></div>;
+function AthleteRow({ athlete, onOpen }: { athlete: Athlete; onOpen: (athlete: Athlete) => void }) {
+  return <button className="table-row athlete-row-button" onClick={() => onOpen(athlete)}><span className="athlete-name"><i className={`mini-avatar ${athlete.tone}`}>{athlete.initials}</i><span><strong>{athlete.name}</strong><small>{athlete.age} anos</small></span></span><span><b className="category-tag">{athlete.category}</b></span><span className="attendance-cell"><strong>{athlete.attendance}%</strong><i><b style={{ width: `${athlete.attendance}%` }} /></i></span><span><b className={athlete.status === "Em dia" ? "status-tag paid" : "status-tag pending"}><i />{athlete.status}</b></span></button>;
 }
 
 function EmptyAthletes({ compact = false }: { compact?: boolean }) {

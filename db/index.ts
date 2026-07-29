@@ -39,15 +39,35 @@ export function ensureDatabase() {
           organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
           full_name TEXT NOT NULL,
           birth_year INTEGER NOT NULL,
+          birth_date TEXT,
           category TEXT NOT NULL,
           guardian_name TEXT NOT NULL,
           guardian_phone TEXT,
+          guardian_email TEXT,
+          emergency_name TEXT,
+          emergency_phone TEXT,
+          allergies TEXT,
+          medications TEXT,
+          medical_notes TEXT,
+          image_authorized INTEGER NOT NULL DEFAULT 0,
           attendance_rate INTEGER NOT NULL DEFAULT 100,
           financial_status TEXT NOT NULL DEFAULT 'paid',
           active INTEGER NOT NULL DEFAULT 1,
           created_by TEXT NOT NULL,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
+        )`),
+        d1.prepare(`CREATE TABLE IF NOT EXISTS athlete_documents (
+          id TEXT PRIMARY KEY NOT NULL,
+          organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+          object_key TEXT NOT NULL UNIQUE,
+          file_name TEXT NOT NULL,
+          content_type TEXT NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          kind TEXT NOT NULL DEFAULT 'other',
+          uploaded_by TEXT NOT NULL,
+          created_at INTEGER NOT NULL
         )`),
         d1.prepare(`CREATE TABLE IF NOT EXISTS teams (
           id TEXT PRIMARY KEY NOT NULL,
@@ -101,6 +121,9 @@ export function ensureDatabase() {
           "CREATE INDEX IF NOT EXISTS athletes_category_idx ON athletes (organization_id, category)",
         ),
         d1.prepare(
+          "CREATE INDEX IF NOT EXISTS athlete_documents_athlete_idx ON athlete_documents (organization_id, athlete_id)",
+        ),
+        d1.prepare(
           "CREATE INDEX IF NOT EXISTS teams_organization_idx ON teams (organization_id)",
         ),
         d1.prepare(
@@ -119,7 +142,31 @@ export function ensureDatabase() {
           "CREATE INDEX IF NOT EXISTS payments_organization_status_idx ON payments (organization_id, status)",
         ),
       ])
-      .then(() => undefined)
+      .then(async () => {
+        const columns = await d1
+          .prepare("PRAGMA table_info(athletes)")
+          .all<{ name: string }>();
+        const existing = new Set(columns.results.map((column) => column.name));
+        const additions = [
+          ["birth_date", "ALTER TABLE athletes ADD COLUMN birth_date TEXT"],
+          ["guardian_email", "ALTER TABLE athletes ADD COLUMN guardian_email TEXT"],
+          ["emergency_name", "ALTER TABLE athletes ADD COLUMN emergency_name TEXT"],
+          ["emergency_phone", "ALTER TABLE athletes ADD COLUMN emergency_phone TEXT"],
+          ["allergies", "ALTER TABLE athletes ADD COLUMN allergies TEXT"],
+          ["medications", "ALTER TABLE athletes ADD COLUMN medications TEXT"],
+          ["medical_notes", "ALTER TABLE athletes ADD COLUMN medical_notes TEXT"],
+          [
+            "image_authorized",
+            "ALTER TABLE athletes ADD COLUMN image_authorized INTEGER NOT NULL DEFAULT 0",
+          ],
+        ] as const;
+
+        for (const [column, statement] of additions) {
+          if (!existing.has(column)) {
+            await d1.prepare(statement).run();
+          }
+        }
+      })
       .catch((error) => {
         schemaReady = null;
         throw error;
