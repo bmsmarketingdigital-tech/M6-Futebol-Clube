@@ -110,11 +110,41 @@ export const teams = sqliteTable(
     name: text("name").notNull(),
     category: text("category").notNull(),
     coachName: text("coach_name"),
+    scheduleDays: text("schedule_days").notNull().default("[]"),
+    startTime: text("start_time").notNull().default("08:00"),
+    endTime: text("end_time").notNull().default("09:00"),
+    place: text("place").notNull().default("Campo 1"),
     capacity: integer("capacity").notNull().default(24),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
   (table) => [index("teams_organization_idx").on(table.organizationId)],
+);
+
+export const teamAthletes = sqliteTable(
+  "team_athletes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    athleteId: text("athlete_id")
+      .notNull()
+      .references(() => athletes.id, { onDelete: "cascade" }),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    enrolledAt: integer("enrolled_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("team_athletes_team_athlete_unique").on(
+      table.teamId,
+      table.athleteId,
+    ),
+    index("team_athletes_organization_idx").on(table.organizationId),
+    index("team_athletes_athlete_idx").on(table.athleteId),
+  ],
 );
 
 export const attendanceSessions = sqliteTable(

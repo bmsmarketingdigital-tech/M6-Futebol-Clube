@@ -5,6 +5,11 @@ import {
   AthleteProfileModal,
   type AthleteRecord,
 } from "./AthleteProfileModal";
+import {
+  AttendanceModal,
+  TeamModal,
+  type TeamRecord,
+} from "./TeamManagement";
 
 type Section =
   | "Visão geral"
@@ -29,26 +34,23 @@ const navItems: { label: Section; icon: string }[] = [
   { label: "Comunicação", icon: "◌" },
 ];
 
-const classes = [
-  { time: "08:30", category: "Sub-9", coach: "Prof. Diego", players: 18, place: "Campo 1", color: "green" },
-  { time: "10:00", category: "Sub-11", coach: "Prof. Marcos", players: 21, place: "Campo 2", color: "blue" },
-  { time: "14:30", category: "Sub-13", coach: "Prof. André", players: 19, place: "Campo 1", color: "orange" },
-  { time: "16:00", category: "Sub-15", coach: "Prof. Diego", players: 17, place: "Campo 2", color: "purple" },
-];
-
 const financeBars = [52, 68, 58, 76, 64, 84, 73, 92, 78, 96, 88, 100];
 
 export default function Home() {
   const [section, setSection] = useState<Section>("Visão geral");
   const [athletes, setAthletes] = useState<Athlete[]>([]);
+  const [teams, setTeams] = useState<TeamRecord[]>([]);
   const [search, setSearch] = useState("");
   const [showAthleteModal, setShowAthleteModal] = useState(false);
-  const [showAttendance, setShowAttendance] = useState(false);
   const [selectedAthlete, setSelectedAthlete] = useState<Athlete | null>(null);
+  const [teamModalOpen, setTeamModalOpen] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<TeamRecord | null>(null);
+  const [attendanceTeam, setAttendanceTeam] = useState<TeamRecord | null>(null);
   const [toast, setToast] = useState("");
   const [loadingAthletes, setLoadingAthletes] = useState(true);
   const [savingAthlete, setSavingAthlete] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [loadingTeams, setLoadingTeams] = useState(true);
 
   async function loadAthletes() {
     setLoadingAthletes(true);
@@ -76,8 +78,34 @@ export default function Home() {
     }
   }
 
+  async function loadTeams() {
+    setLoadingTeams(true);
+    try {
+      const response = await fetch("/api/teams", {
+        headers: { Accept: "application/json" },
+      });
+      const payload = (await response.json()) as {
+        teams?: TeamRecord[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(payload.error || "Não foi possível carregar as turmas.");
+      }
+      setTeams(payload.teams ?? []);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível carregar as turmas.",
+      );
+    } finally {
+      setLoadingTeams(false);
+    }
+  }
+
   useEffect(() => {
     void loadAthletes();
+    void loadTeams();
   }, []);
 
   const filteredAthletes = useMemo(
@@ -197,8 +225,8 @@ export default function Home() {
             <kbd>⌘ K</kbd>
           </label>
           <div className="top-actions">
-            <span className={loadingAthletes ? "sync-status loading" : "sync-status"}>
-              <i /> {loadingAthletes ? "Sincronizando" : "Dados salvos"}
+            <span className={loadingAthletes || loadingTeams ? "sync-status loading" : "sync-status"}>
+              <i /> {loadingAthletes || loadingTeams ? "Sincronizando" : "Dados salvos"}
             </span>
             <button className="icon-button" aria-label="Ajuda">?</button>
             <button className="icon-button notification" aria-label="Notificações">♢</button>
@@ -223,7 +251,12 @@ export default function Home() {
             <Dashboard
               athletes={filteredAthletes}
               setSection={setSection}
-              onAttendance={() => setShowAttendance(true)}
+              teams={teams}
+              onAttendance={setAttendanceTeam}
+              onOpenTeam={(team) => {
+                setEditingTeam(team);
+                setTeamModalOpen(true);
+              }}
               onOpenAthlete={setSelectedAthlete}
               notify={notify}
             />
@@ -231,8 +264,17 @@ export default function Home() {
             <SectionView
               section={section}
               athletes={filteredAthletes}
+              teams={teams}
               setShowAthleteModal={setShowAthleteModal}
-              setShowAttendance={setShowAttendance}
+              onNewTeam={() => {
+                setEditingTeam(null);
+                setTeamModalOpen(true);
+              }}
+              onOpenTeam={(team) => {
+                setEditingTeam(team);
+                setTeamModalOpen(true);
+              }}
+              onAttendance={setAttendanceTeam}
               onOpenAthlete={setSelectedAthlete}
               notify={notify}
             />
@@ -263,29 +305,6 @@ export default function Home() {
         </div>
       )}
 
-      {showAttendance && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowAttendance(false)}>
-          <div className="modal attendance-modal" role="dialog" aria-modal="true" aria-labelledby="attendance-title" onMouseDown={(event) => event.stopPropagation()}>
-            <button className="modal-close" onClick={() => setShowAttendance(false)} aria-label="Fechar">×</button>
-            <span className="eyebrow">CHAMADA RÁPIDA</span>
-            <h2 id="attendance-title">Sub-11 · 10:00</h2>
-            <p>Marque apenas as ausências. Todos começam como presentes.</p>
-            <div className="attendance-list">
-              {athletes.slice(0, 4).map((athlete) => (
-                <label key={athlete.name}>
-                  <span className={`mini-avatar ${athlete.tone}`}>{athlete.initials}</span>
-                  <span><strong>{athlete.name}</strong><small>{athlete.category}</small></span>
-                  <input type="checkbox" defaultChecked aria-label={`${athlete.name} presente`} />
-                  <span className="checkmark">✓</span>
-                </label>
-              ))}
-            </div>
-            {athletes.length === 0 && <div className="modal-empty">Cadastre atletas antes de realizar a chamada.</div>}
-            <button className="primary-button full" disabled={athletes.length === 0} onClick={() => { setShowAttendance(false); notify(`Chamada preparada: ${Math.min(athletes.length, 4)} atletas presentes.`); }}>Salvar chamada</button>
-          </div>
-        </div>
-      )}
-
       {selectedAthlete && (
         <AthleteProfileModal
           key={selectedAthlete.id}
@@ -308,6 +327,46 @@ export default function Home() {
         />
       )}
 
+      {teamModalOpen && (
+        <TeamModal
+          key={editingTeam?.id ?? "new-team"}
+          team={editingTeam}
+          athletes={athletes}
+          onClose={() => {
+            setTeamModalOpen(false);
+            setEditingTeam(null);
+          }}
+          onSaved={(savedTeam) => {
+            setTeams((current) => {
+              const exists = current.some((team) => team.id === savedTeam.id);
+              return exists
+                ? current.map((team) =>
+                    team.id === savedTeam.id ? savedTeam : team,
+                  )
+                : [...current, savedTeam].sort((a, b) =>
+                    a.startTime.localeCompare(b.startTime),
+                  );
+            });
+          }}
+          onArchived={(teamId) =>
+            setTeams((current) =>
+              current.filter((team) => team.id !== teamId),
+            )
+          }
+          notify={notify}
+        />
+      )}
+
+      {attendanceTeam && (
+        <AttendanceModal
+          key={attendanceTeam.id}
+          team={attendanceTeam}
+          onClose={() => setAttendanceTeam(null)}
+          onSaved={() => void loadAthletes()}
+          notify={notify}
+        />
+      )}
+
       {toast && <div className="toast" role="status"><span>✓</span>{toast}</div>}
     </main>
   );
@@ -315,17 +374,32 @@ export default function Home() {
 
 function Dashboard({
   athletes,
+  teams,
   setSection,
   onAttendance,
+  onOpenTeam,
   onOpenAthlete,
   notify,
 }: {
   athletes: Athlete[];
+  teams: TeamRecord[];
   setSection: (section: Section) => void;
-  onAttendance: () => void;
+  onAttendance: (team: TeamRecord) => void;
+  onOpenTeam: (team: TeamRecord) => void;
   onOpenAthlete: (athlete: Athlete) => void;
   notify: (message: string) => void;
 }) {
+  const averageAttendance = athletes.length
+    ? Math.round(
+        athletes.reduce((total, athlete) => total + athlete.attendance, 0) /
+          athletes.length,
+      )
+    : 0;
+  const totalTeamAthletes = teams.reduce(
+    (total, team) => total + team.players,
+    0,
+  );
+
   return (
     <>
       <div className="welcome-row">
@@ -339,26 +413,27 @@ function Dashboard({
 
       <section className="metrics-grid" aria-label="Indicadores principais">
         <Metric icon="◎" label="ATLETAS ATIVOS" value={String(athletes.length)} trend="cadastros persistentes" tone="green" />
-        <Metric icon="✓" label="FREQUÊNCIA MÉDIA" value="91,4%" trend="+2,1% vs. junho" tone="blue" />
+        <Metric icon="✓" label="FREQUÊNCIA MÉDIA" value={`${averageAttendance}%`} trend="calculada pelas chamadas" tone="blue" />
         <Metric icon="$" label="RECEITA DO MÊS" value="R$ 18.740" trend="87% da meta" tone="orange" progress />
         <Metric icon="!" label="PENDÊNCIAS" value="7" trend="3 mensalidades vencidas" tone="red" negative />
       </section>
 
       <section className="dashboard-grid">
         <div className="card schedule-card">
-          <CardHeader title="Agenda de hoje" subtitle="4 treinos · 75 atletas previstos" action="Ver agenda" onAction={() => setSection("Turmas")} />
+          <CardHeader title="Turmas ativas" subtitle={`${teams.length} turmas · ${totalTeamAthletes} matrículas`} action="Ver turmas" onAction={() => setSection("Turmas")} />
           <div className="schedule-list">
-            {classes.map((item, index) => (
-              <div className="schedule-item" key={item.time}>
-                <div className="time"><strong>{item.time}</strong><small>{index < 2 ? "MANHÃ" : "TARDE"}</small></div>
+            {teams.slice(0, 4).map((item) => (
+              <div className="schedule-item" key={item.id}>
+                <div className="time"><strong>{item.startTime}</strong><small>{item.scheduleDays.join(" · ")}</small></div>
                 <span className={`timeline-dot ${item.color}`} />
                 <div className="schedule-info">
                   <strong>{item.category} <span>{item.place}</span></strong>
-                  <small>{item.coach} · {item.players} atletas</small>
+                  <small>{item.coachName} · {item.players} atletas</small>
                 </div>
-                <button className={index === 1 ? "call-button active" : "call-button"} onClick={onAttendance}>{index === 1 ? "Fazer chamada" : "Ver turma"}</button>
+                <button className={item.players > 0 ? "call-button active" : "call-button"} onClick={() => item.players > 0 ? onAttendance(item) : onOpenTeam(item)}>{item.players > 0 ? "Fazer chamada" : "Adicionar atletas"}</button>
               </div>
             ))}
+            {teams.length === 0 && <div className="agenda-empty"><strong>Nenhuma turma cadastrada</strong><small>Crie uma turma para organizar horários e chamadas.</small></div>}
           </div>
         </div>
 
@@ -401,15 +476,21 @@ function Dashboard({
 function SectionView({
   section,
   athletes,
+  teams,
   setShowAthleteModal,
-  setShowAttendance,
+  onNewTeam,
+  onOpenTeam,
+  onAttendance,
   onOpenAthlete,
   notify,
 }: {
   section: Section;
   athletes: Athlete[];
+  teams: TeamRecord[];
   setShowAthleteModal: (show: boolean) => void;
-  setShowAttendance: (show: boolean) => void;
+  onNewTeam: () => void;
+  onOpenTeam: (team: TeamRecord) => void;
+  onAttendance: (team: TeamRecord) => void;
   onOpenAthlete: (athlete: Athlete) => void;
   notify: (message: string) => void;
 }) {
@@ -424,13 +505,28 @@ function SectionView({
     Comunicação: "Avisos segmentados para responsáveis, atletas e equipe.",
   };
 
-  const action = section === "Atletas" ? () => setShowAthleteModal(true) : section === "Presença" ? () => setShowAttendance(true) : () => notify(`Novo item de ${section.toLowerCase()} preparado.`);
+  const action =
+    section === "Atletas"
+      ? () => setShowAthleteModal(true)
+      : section === "Turmas"
+        ? onNewTeam
+        : section === "Presença" && teams.length > 0
+          ? () => onAttendance(teams[0])
+          : section === "Presença"
+            ? onNewTeam
+          : () => notify(`Novo item de ${section.toLowerCase()} preparado.`);
+  const actionLabel =
+    section === "Presença"
+      ? "Fazer chamada"
+      : section === "Turmas"
+        ? "Nova turma"
+        : "Novo registro";
 
   return (
     <>
       <div className="section-heading">
         <div><span className="eyebrow">BASEFORTE</span><h1>{section}</h1><p>{descriptions[section]}</p></div>
-        <button className="primary-button" onClick={action}>＋ {section === "Presença" ? "Fazer chamada" : "Novo registro"}</button>
+        <button className="primary-button" onClick={action}>＋ {actionLabel}</button>
       </div>
       {section === "Atletas" ? (
         <div className="card module-card">
@@ -442,7 +538,31 @@ function SectionView({
           </div>
         </div>
       ) : section === "Turmas" ? (
-        <div className="class-grid">{classes.map((item) => <div className="card class-card" key={item.category}><span className={`class-stripe ${item.color}`} /><div className="class-top"><span>{item.category}</span><small>{item.place}</small></div><h3>{item.time} · Qua e Sex</h3><p>{item.coach}</p><div className="capacity"><span><b>{item.players}</b> / 24 atletas</span><span>{Math.round((item.players / 24) * 100)}%</span></div><div className="capacity-bar"><i style={{ width: `${(item.players / 24) * 100}%` }} /></div><button onClick={() => notify(`Turma ${item.category} aberta.`)}>Abrir turma →</button></div>)}</div>
+        <div className="class-grid">
+          {teams.map((team) => (
+            <div className="card class-card" key={team.id}>
+              <span className={`class-stripe ${team.color}`} />
+              <div className="class-top"><span>{team.category}</span><small>{team.place}</small></div>
+              <h3>{team.name}</h3>
+              <p>{team.coachName} · {team.scheduleDays.join(" e ")} · {team.startTime}</p>
+              <div className="capacity"><span><b>{team.players}</b> / {team.capacity} atletas</span><span>{Math.round((team.players / team.capacity) * 100)}%</span></div>
+              <div className="capacity-bar"><i style={{ width: `${Math.min(100, (team.players / team.capacity) * 100)}%` }} /></div>
+              <div className="class-actions"><button onClick={() => onOpenTeam(team)}>Editar turma</button><button onClick={() => onAttendance(team)} disabled={team.players === 0}>Fazer chamada →</button></div>
+            </div>
+          ))}
+          {teams.length === 0 && <div className="card class-empty"><span>▦</span><strong>Nenhuma turma cadastrada</strong><small>Crie a primeira turma e selecione os atletas participantes.</small><button className="primary-button" onClick={onNewTeam}>Criar primeira turma</button></div>}
+        </div>
+      ) : section === "Presença" ? (
+        <div className="attendance-team-grid">
+          {teams.map((team) => (
+            <button className="card attendance-team-card" key={team.id} onClick={() => onAttendance(team)}>
+              <span className={`attention-icon ${team.color === "orange" ? "orange" : "green"}`}>✓</span>
+              <div><strong>{team.name} · {team.category}</strong><small>{team.scheduleDays.join(" e ")} · {team.startTime} · {team.players} atletas</small></div>
+              <b>Fazer chamada →</b>
+            </button>
+          ))}
+          {teams.length === 0 && <div className="card class-empty"><span>✓</span><strong>Nenhuma turma disponível</strong><small>Cadastre uma turma antes de registrar presenças.</small><button className="primary-button" onClick={onNewTeam}>Criar turma</button></div>}
+        </div>
       ) : section === "Treinos" ? (
         <div className="module-two-columns">
           <div className="card training-plan"><span className="eyebrow">PRÓXIMA SESSÃO</span><h2>Domínio e progressão</h2><p>Sub-11 · Sexta-feira, 10:00 · 75 minutos</p><div className="drill"><span>01</span><p><strong>Aquecimento com bola</strong><small>Mobilidade + condução · 12 min</small></p></div><div className="drill"><span>02</span><p><strong>Rondo 5 × 2</strong><small>Tomada de decisão · 18 min</small></p></div><div className="drill"><span>03</span><p><strong>Jogo posicional</strong><small>Progressão por setores · 25 min</small></p></div><button className="primary-button" onClick={() => notify("Plano de treino aberto para edição.")}>Editar sessão</button>
@@ -450,13 +570,13 @@ function SectionView({
           <div className="card insight-card"><span className="eyebrow">INSIGHT DA METODOLOGIA</span><h2>Equilibre o conteúdo</h2><div className="radial"><strong>68%</strong><small>com bola</small></div><p>Neste mês, o Sub-11 trabalhou mais fundamentos técnicos. Inclua uma sessão focada em princípios defensivos.</p><button onClick={() => notify("Sugestões adicionadas ao próximo planejamento.")}>Ver sugestões →</button></div>
         </div>
       ) : (
-        <GenericModule section={section} notify={notify} setShowAttendance={setShowAttendance} />
+        <GenericModule section={section} notify={notify} />
       )}
     </>
   );
 }
 
-function GenericModule({ section, notify, setShowAttendance }: { section: Section; notify: (message: string) => void; setShowAttendance: (show: boolean) => void }) {
+function GenericModule({ section, notify }: { section: Section; notify: (message: string) => void }) {
   const data: Record<string, { stat: string; label: string; secondary: string; cards: [string, string][] }> = {
     Presença: { stat: "91,4%", label: "frequência geral", secondary: "4 turmas hoje", cards: [["Sub-9 · 08:30", "17 de 18 presentes"], ["Sub-11 · 10:00", "Chamada pendente"], ["Sub-13 · 14:30", "Começa em 2 horas"]] },
     Financeiro: { stat: "R$ 18.740", label: "receita em julho", secondary: "87% da meta", cards: [["Recebido", "R$ 16.310"], ["A receber", "R$ 2.430"], ["Em atraso", "R$ 780"]] },
@@ -469,7 +589,7 @@ function GenericModule({ section, notify, setShowAttendance }: { section: Sectio
       <div className="card overview-module"><span className="eyebrow">RESUMO DO MÊS</span><strong className="giant-stat">{module.stat}</strong><p>{module.label}</p><span className="soft-tag">{module.secondary}</span><div className="overview-progress"><i style={{ width: section === "Financeiro" ? "87%" : "74%" }} /></div></div>
       <div className="card list-module">
         <CardHeader title={section === "Financeiro" ? "Situação das cobranças" : `Acompanhamento de ${section.toLowerCase()}`} subtitle="Atualizado agora" />
-        {module.cards.map(([title, value], index) => <button key={title} onClick={() => section === "Presença" && index === 1 ? setShowAttendance(true) : notify(`${title}: detalhes abertos.`)}><span className={`attention-icon ${index === 1 ? "orange" : "green"}`}>{index + 1}</span><p><strong>{title}</strong><small>{value}</small></p><b>›</b></button>)}
+        {module.cards.map(([title, value], index) => <button key={title} onClick={() => notify(`${title}: detalhes abertos.`)}><span className={`attention-icon ${index === 1 ? "orange" : "green"}`}>{index + 1}</span><p><strong>{title}</strong><small>{value}</small></p><b>›</b></button>)}
       </div>
     </div>
   );

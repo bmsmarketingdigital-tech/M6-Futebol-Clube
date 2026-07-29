@@ -5,14 +5,15 @@ import * as schema from "./schema";
 
 let schemaReady: Promise<void> | null = null;
 
-export function getDb() {
+export function getD1() {
   if (!env.DB) {
-    throw new Error(
-      "Cloudflare D1 binding `DB` is unavailable. Set the `d1` field in .openai/hosting.json to `DB` before using the database.",
-    );
+    throw new Error("Cloudflare D1 binding `DB` is unavailable.");
   }
+  return env.DB;
+}
 
-  return drizzle(env.DB, { schema });
+export function getDb() {
+  return drizzle(getD1(), { schema });
 }
 
 export function ensureDatabase() {
@@ -75,9 +76,21 @@ export function ensureDatabase() {
           name TEXT NOT NULL,
           category TEXT NOT NULL,
           coach_name TEXT,
+          schedule_days TEXT NOT NULL DEFAULT '[]',
+          start_time TEXT NOT NULL DEFAULT '08:00',
+          end_time TEXT NOT NULL DEFAULT '09:00',
+          place TEXT NOT NULL DEFAULT 'Campo 1',
           capacity INTEGER NOT NULL DEFAULT 24,
           active INTEGER NOT NULL DEFAULT 1,
           created_at INTEGER NOT NULL
+        )`),
+        d1.prepare(`CREATE TABLE IF NOT EXISTS team_athletes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+          athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+          active INTEGER NOT NULL DEFAULT 1,
+          enrolled_at INTEGER NOT NULL
         )`),
         d1.prepare(`CREATE TABLE IF NOT EXISTS attendance_sessions (
           id TEXT PRIMARY KEY NOT NULL,
@@ -127,6 +140,15 @@ export function ensureDatabase() {
           "CREATE INDEX IF NOT EXISTS teams_organization_idx ON teams (organization_id)",
         ),
         d1.prepare(
+          "CREATE UNIQUE INDEX IF NOT EXISTS team_athletes_team_athlete_unique ON team_athletes (team_id, athlete_id)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS team_athletes_organization_idx ON team_athletes (organization_id)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS team_athletes_athlete_idx ON team_athletes (athlete_id)",
+        ),
+        d1.prepare(
           "CREATE UNIQUE INDEX IF NOT EXISTS attendance_sessions_team_date_unique ON attendance_sessions (team_id, session_date)",
         ),
         d1.prepare(
@@ -163,6 +185,37 @@ export function ensureDatabase() {
 
         for (const [column, statement] of additions) {
           if (!existing.has(column)) {
+            await d1.prepare(statement).run();
+          }
+        }
+
+        const teamColumns = await d1
+          .prepare("PRAGMA table_info(teams)")
+          .all<{ name: string }>();
+        const existingTeamColumns = new Set(
+          teamColumns.results.map((column) => column.name),
+        );
+        const teamAdditions = [
+          [
+            "schedule_days",
+            "ALTER TABLE teams ADD COLUMN schedule_days TEXT NOT NULL DEFAULT '[]'",
+          ],
+          [
+            "start_time",
+            "ALTER TABLE teams ADD COLUMN start_time TEXT NOT NULL DEFAULT '08:00'",
+          ],
+          [
+            "end_time",
+            "ALTER TABLE teams ADD COLUMN end_time TEXT NOT NULL DEFAULT '09:00'",
+          ],
+          [
+            "place",
+            "ALTER TABLE teams ADD COLUMN place TEXT NOT NULL DEFAULT 'Campo 1'",
+          ],
+        ] as const;
+
+        for (const [column, statement] of teamAdditions) {
+          if (!existingTeamColumns.has(column)) {
             await d1.prepare(statement).run();
           }
         }

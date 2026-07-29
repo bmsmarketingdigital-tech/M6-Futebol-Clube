@@ -97,6 +97,9 @@ button { cursor: pointer; }
 .card-header button span { margin-left: 4px; }
 
 .schedule-list { padding: 4px 20px 10px; }
+.agenda-empty { min-height: 180px; display: grid; place-items: center; align-content: center; text-align: center; color: var(--muted); }
+.agenda-empty strong { color: var(--ink); font-size: 10px; }
+.agenda-empty small { margin-top: 4px; font-size: 8px; }
 .schedule-item { min-height: 58px; display: grid; grid-template-columns: 51px 12px 1fr auto; align-items: center; gap: 9px; position: relative; }
 .schedule-item:not(:last-child)::after { content: ""; position: absolute; left: 65px; top: 36px; bottom: -22px; width: 1px; background: #e5eae7; }
 .time strong { display: block; font-size: 11px; }
@@ -191,6 +194,19 @@ button { cursor: pointer; }
 .capacity-bar, .overview-progress { height: 5px; background: #e9eeeb; border-radius: 4px; margin: 8px 0 26px; overflow: hidden; }
 .capacity-bar i, .overview-progress i { display: block; height: 100%; background: var(--green); border-radius: inherit; }
 .class-card > button, .insight-card > button { padding: 0; border: 0; background: none; color: var(--green); font-size: 9px; font-weight: 800; }
+.class-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.class-actions button { padding: 0; border: 0; background: transparent; color: var(--green); font-size: 8px; font-weight: 800; }
+.class-actions button:disabled { color: #a9b4ae; cursor: not-allowed; }
+.class-empty { min-height: 240px; padding: 25px; display: grid; place-items: center; align-content: center; text-align: center; grid-column: 1 / -1; }
+.class-empty > span { width: 42px; height: 42px; margin-bottom: 10px; display: grid; place-items: center; border-radius: 11px; background: var(--green-soft); color: var(--green); font-size: 18px; }
+.class-empty strong { font-size: 11px; }
+.class-empty small { margin: 5px 0 16px; color: var(--muted); font-size: 8px; }
+.attendance-team-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.attendance-team-card { min-height: 82px; padding: 16px; display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 12px; border: 1px solid var(--line); text-align: left; color: var(--ink); }
+.attendance-team-card:hover { border-color: #b7dbc9; transform: translateY(-1px); }
+.attendance-team-card div strong { display: block; font-size: 10px; }
+.attendance-team-card div small { display: block; color: var(--muted); font-size: 8px; margin-top: 4px; }
+.attendance-team-card > b { color: var(--green); font-size: 8px; }
 .module-two-columns { display: grid; grid-template-columns: 1.2fr .8fr; gap: 15px; }
 .training-plan, .insight-card, .overview-module { padding: 26px; }
 .training-plan h2, .insight-card h2 { margin: 2px 0 6px; font-size: 21px; letter-spacing: -.5px; }
@@ -279,6 +295,52 @@ button { cursor: pointer; }
 .document-empty > span { width: 38px; height: 38px; margin-bottom: 8px; display: grid; place-items: center; border-radius: 10px; background: #edf5f1; color: var(--green); font-size: 16px; }
 .document-empty strong { color: var(--ink); font-size: 10px; }
 .document-empty small { margin-top: 4px; font-size: 8px; }
+
+.team-modal { width: min(750px, 100%); max-height: calc(100vh - 34px); overflow: hidden; display: flex; flex-direction: column; background: white; border-radius: 17px; box-shadow: 0 25px 70px rgba(0,0,0,.28); animation: rise .25s ease; }
+.team-modal-header, .attendance-panel-header { min-height: 96px; padding: 24px 28px 18px; display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid var(--line); }
+.team-modal-header h2, .attendance-panel-header h2 { margin: 0; font-size: 21px; letter-spacing: -.5px; }
+.team-modal-header p, .attendance-panel-header p { margin: 5px 0 0; color: var(--muted); font-size: 9px; }
+.team-modal-header .modal-close, .attendance-panel-header .modal-close { position: static; flex: 0 0 auto; }
+.team-form { padding: 22px 28px 26px; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+.team-form > label { color: #4f6259; font-size: 9px; font-weight: 800; }
+.team-form .wide { grid-column: 1 / -1; }
+.team-form input, .team-form select { width: 100%; height: 40px; margin-top: 6px; padding: 0 10px; border: 1px solid #dfe6e2; border-radius: 8px; background: #fbfcfb; color: var(--ink); outline: none; font-size: 10px; }
+.team-form input:focus, .team-form select:focus { border-color: #69bd98; box-shadow: 0 0 0 3px #e3f4ec; }
+.field-label { display: block; margin-bottom: 7px; color: #4f6259; font-size: 9px; font-weight: 800; }
+.weekday-picker { display: flex; gap: 7px; flex-wrap: wrap; }
+.weekday-picker label { cursor: pointer; }
+.weekday-picker input { position: absolute; opacity: 0; pointer-events: none; }
+.weekday-picker span { width: 42px; height: 34px; display: grid; place-items: center; border: 1px solid #dce4df; border-radius: 8px; background: white; color: #708078; font-size: 8px; font-weight: 800; }
+.weekday-picker input:checked + span { border-color: #7ac9a4; background: var(--green-soft); color: var(--green); }
+.roster-picker { margin-top: 4px; border: 1px solid var(--line); border-radius: 11px; overflow: hidden; }
+.roster-picker > div:first-child { min-height: 48px; padding: 11px 13px; display: flex; align-items: center; justify-content: space-between; background: #f8faf9; border-bottom: 1px solid var(--line); }
+.roster-picker > div:first-child strong { font-size: 9px; }
+.roster-picker > div:first-child small { color: var(--green); font-size: 8px; font-weight: 800; }
+.roster-picker > p { margin: 0; padding: 24px; color: var(--muted); text-align: center; font-size: 9px; }
+.roster-options { max-height: 220px; overflow-y: auto; padding: 5px 12px; }
+.roster-options label { min-height: 48px; display: grid; grid-template-columns: 0 30px 1fr 25px; gap: 9px; align-items: center; border-bottom: 1px solid #f0f2f1; cursor: pointer; }
+.roster-options label:last-child { border-bottom: 0; }
+.roster-options input { position: absolute; opacity: 0; pointer-events: none; }
+.roster-options label > span:nth-of-type(2) strong { display: block; font-size: 9px; }
+.roster-options label > span:nth-of-type(2) small { display: block; margin-top: 2px; color: var(--muted); font-size: 8px; }
+.roster-options label > b { width: 23px; height: 23px; display: grid; place-items: center; border-radius: 7px; background: #edf5f1; color: var(--green); font-size: 10px; }
+.attendance-panel { width: min(760px, 100%); max-height: calc(100vh - 34px); overflow: hidden; display: flex; flex-direction: column; background: white; border-radius: 17px; box-shadow: 0 25px 70px rgba(0,0,0,.28); animation: rise .25s ease; }
+.attendance-toolbar { min-height: 68px; padding: 12px 28px; display: flex; align-items: center; justify-content: space-between; gap: 15px; border-bottom: 1px solid var(--line); background: #fafcfb; }
+.attendance-toolbar label { color: #586a61; font-size: 8px; font-weight: 800; }
+.attendance-toolbar input { display: block; width: 145px; height: 34px; margin-top: 4px; padding: 0 8px; border: 1px solid #dbe3df; border-radius: 7px; background: white; color: var(--ink); font-size: 9px; }
+.attendance-toolbar > div { display: flex; align-items: center; gap: 13px; }
+.attendance-toolbar > div span { color: var(--muted); font-size: 8px; }
+.attendance-toolbar > div span b { color: var(--ink); font-size: 12px; }
+.attendance-toolbar em { padding: 5px 8px; border-radius: 10px; background: #e8f6ef; color: var(--green); font-size: 7px; font-style: normal; font-weight: 800; }
+.attendance-roster { padding: 5px 22px; overflow-y: auto; min-height: 180px; }
+.attendance-person { min-height: 61px; padding: 7px 6px; display: grid; grid-template-columns: 33px 30px 1fr 190px; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); }
+.attendance-person > button { width: 31px; height: 31px; padding: 0; border: 0; border-radius: 8px; background: #e8f7ef; color: var(--green); font-weight: 900; }
+.attendance-person.absent > button { background: #fff0ed; color: #cd584d; }
+.attendance-person > div strong { display: block; font-size: 9px; }
+.attendance-person > div small { display: block; margin-top: 3px; color: var(--muted); font-size: 8px; }
+.attendance-person > input { width: 100%; height: 34px; padding: 0 9px; border: 1px solid #e1e6e3; border-radius: 7px; background: #fbfcfb; color: var(--ink); font-size: 8px; }
+.attendance-person.absent { background: #fffafa; }
+.attendance-footer { min-height: 66px; padding: 13px 28px; display: flex; align-items: center; justify-content: flex-end; gap: 9px; border-top: 1px solid var(--line); background: #fafcfb; }
 @keyframes fade { from { opacity: 0; } } @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
 @keyframes pulse { from { opacity: .45; } to { opacity: 1; } }
 
@@ -323,6 +385,17 @@ button { cursor: pointer; }
   .documents-panel { padding: 18px; }
   .upload-card { grid-template-columns: 1fr; }
   .profile-actions { gap: 10px; }
+  .attendance-team-grid { grid-template-columns: 1fr; }
+  .team-modal, .attendance-panel { max-height: calc(100vh - 16px); border-radius: 14px; }
+  .team-modal-header, .attendance-panel-header { padding: 19px 18px 15px; }
+  .team-form { padding: 18px; grid-template-columns: 1fr; }
+  .team-form .wide { grid-column: 1; }
+  .attendance-toolbar { padding: 10px 18px; align-items: flex-start; flex-direction: column; }
+  .attendance-toolbar > div { flex-wrap: wrap; }
+  .attendance-roster { padding: 5px 12px; }
+  .attendance-person { grid-template-columns: 32px 30px 1fr; }
+  .attendance-person > input { grid-column: 3; }
+  .attendance-footer { padding: 12px 18px; }
 }
 
 @media (max-width: 430px) {

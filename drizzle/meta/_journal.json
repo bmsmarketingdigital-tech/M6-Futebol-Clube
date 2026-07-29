@@ -15,6 +15,13 @@
       "when": 1785365819431,
       "tag": "0001_far_eddie_brock",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785366624948,
+      "tag": "0002_natural_vindicator",
+      "breakpoints": true
     }
   ]
 }
