@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Section =
   | "Visão geral"
@@ -13,10 +13,13 @@ type Section =
   | "Comunicação";
 
 type Athlete = {
+  id: string;
   name: string;
   initials: string;
   category: string;
   age: number;
+  guardianName?: string;
+  guardianPhone?: string | null;
   attendance: number;
   status: "Em dia" | "Pendente";
   tone: string;
@@ -33,14 +36,6 @@ const navItems: { label: Section; icon: string }[] = [
   { label: "Comunicação", icon: "◌" },
 ];
 
-const initialAthletes: Athlete[] = [
-  { name: "Lucas Mendes", initials: "LM", category: "Sub-11", age: 10, attendance: 96, status: "Em dia", tone: "green" },
-  { name: "Gabriel Costa", initials: "GC", category: "Sub-13", age: 12, attendance: 91, status: "Em dia", tone: "navy" },
-  { name: "Rafael Almeida", initials: "RA", category: "Sub-9", age: 8, attendance: 88, status: "Pendente", tone: "orange" },
-  { name: "Pedro Henrique", initials: "PH", category: "Sub-15", age: 14, attendance: 94, status: "Em dia", tone: "blue" },
-  { name: "Arthur Souza", initials: "AS", category: "Sub-7", age: 6, attendance: 82, status: "Em dia", tone: "purple" },
-];
-
 const classes = [
   { time: "08:30", category: "Sub-9", coach: "Prof. Diego", players: 18, place: "Campo 1", color: "green" },
   { time: "10:00", category: "Sub-11", coach: "Prof. Marcos", players: 21, place: "Campo 2", color: "blue" },
@@ -52,11 +47,44 @@ const financeBars = [52, 68, 58, 76, 64, 84, 73, 92, 78, 96, 88, 100];
 
 export default function Home() {
   const [section, setSection] = useState<Section>("Visão geral");
-  const [athletes, setAthletes] = useState(initialAthletes);
+  const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [search, setSearch] = useState("");
   const [showAthleteModal, setShowAthleteModal] = useState(false);
   const [showAttendance, setShowAttendance] = useState(false);
   const [toast, setToast] = useState("");
+  const [loadingAthletes, setLoadingAthletes] = useState(true);
+  const [savingAthlete, setSavingAthlete] = useState(false);
+  const [loadError, setLoadError] = useState("");
+
+  async function loadAthletes() {
+    setLoadingAthletes(true);
+    setLoadError("");
+    try {
+      const response = await fetch("/api/athletes", {
+        headers: { Accept: "application/json" },
+      });
+      const payload = (await response.json()) as {
+        athletes?: Athlete[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(payload.error || "Não foi possível carregar os atletas.");
+      }
+      setAthletes(payload.athletes ?? []);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível carregar os atletas.",
+      );
+    } finally {
+      setLoadingAthletes(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadAthletes();
+  }, []);
 
   const filteredAthletes = useMemo(
     () =>
@@ -71,30 +99,47 @@ export default function Home() {
     window.setTimeout(() => setToast(""), 2600);
   }
 
-  function addAthlete(event: FormEvent<HTMLFormElement>) {
+  async function addAthlete(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const name = String(form.get("name") || "Novo atleta");
     const category = String(form.get("category") || "Sub-11");
-    setAthletes((current) => [
-      {
-        name,
-        initials: name
-          .split(" ")
-          .slice(0, 2)
-          .map((part) => part[0])
-          .join("")
-          .toUpperCase(),
-        category,
-        age: Number(form.get("age")) || 10,
-        attendance: 100,
-        status: "Em dia",
-        tone: "green",
-      },
-      ...current,
-    ]);
-    setShowAthleteModal(false);
-    notify(`${name} foi adicionado com sucesso.`);
+    setSavingAthlete(true);
+
+    try {
+      const response = await fetch("/api/athletes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          category,
+          age: Number(form.get("age")),
+          guardianName: String(form.get("guardian") || ""),
+          guardianPhone: String(form.get("guardianPhone") || ""),
+        }),
+      });
+      const payload = (await response.json()) as {
+        athlete?: Athlete;
+        error?: string;
+      };
+      if (!response.ok || !payload.athlete) {
+        throw new Error(payload.error || "Não foi possível cadastrar o atleta.");
+      }
+
+      setAthletes((current) => [payload.athlete!, ...current]);
+      formElement.reset();
+      setShowAthleteModal(false);
+      notify(`${name} foi cadastrado e salvo com sucesso.`);
+    } catch (error) {
+      notify(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível cadastrar o atleta.",
+      );
+    } finally {
+      setSavingAthlete(false);
+    }
   }
 
   return (
@@ -158,6 +203,9 @@ export default function Home() {
             <kbd>⌘ K</kbd>
           </label>
           <div className="top-actions">
+            <span className={loadingAthletes ? "sync-status loading" : "sync-status"}>
+              <i /> {loadingAthletes ? "Sincronizando" : "Dados salvos"}
+            </span>
             <button className="icon-button" aria-label="Ajuda">?</button>
             <button className="icon-button notification" aria-label="Notificações">♢</button>
             <button className="primary-button" onClick={() => setShowAthleteModal(true)}>
@@ -167,6 +215,16 @@ export default function Home() {
         </header>
 
         <div className="page-content">
+          {loadError && (
+            <div className="load-alert" role="alert">
+              <span>!</span>
+              <div>
+                <strong>Não foi possível sincronizar os dados</strong>
+                <small>{loadError}</small>
+              </div>
+              <button onClick={() => void loadAthletes()}>Tentar novamente</button>
+            </div>
+          )}
           {section === "Visão geral" ? (
             <Dashboard
               athletes={filteredAthletes}
@@ -200,7 +258,10 @@ export default function Home() {
                 <label>Categoria<select name="category" defaultValue="Sub-11"><option>Sub-7</option><option>Sub-9</option><option>Sub-11</option><option>Sub-13</option><option>Sub-15</option><option>Sub-17</option></select></label>
               </div>
               <label>Responsável<input name="guardian" required placeholder="Nome do responsável" /></label>
-              <button className="primary-button full" type="submit">Cadastrar atleta</button>
+              <label>Telefone do responsável<input name="guardianPhone" type="tel" placeholder="(11) 99999-9999" /></label>
+              <button className="primary-button full" type="submit" disabled={savingAthlete}>
+                {savingAthlete ? "Salvando..." : "Cadastrar e salvar atleta"}
+              </button>
             </form>
           </div>
         </div>
@@ -214,7 +275,7 @@ export default function Home() {
             <h2 id="attendance-title">Sub-11 · 10:00</h2>
             <p>Marque apenas as ausências. Todos começam como presentes.</p>
             <div className="attendance-list">
-              {initialAthletes.slice(0, 4).map((athlete) => (
+              {athletes.slice(0, 4).map((athlete) => (
                 <label key={athlete.name}>
                   <span className={`mini-avatar ${athlete.tone}`}>{athlete.initials}</span>
                   <span><strong>{athlete.name}</strong><small>{athlete.category}</small></span>
@@ -223,7 +284,8 @@ export default function Home() {
                 </label>
               ))}
             </div>
-            <button className="primary-button full" onClick={() => { setShowAttendance(false); notify("Chamada salva: 21 atletas presentes."); }}>Salvar chamada</button>
+            {athletes.length === 0 && <div className="modal-empty">Cadastre atletas antes de realizar a chamada.</div>}
+            <button className="primary-button full" disabled={athletes.length === 0} onClick={() => { setShowAttendance(false); notify(`Chamada preparada: ${Math.min(athletes.length, 4)} atletas presentes.`); }}>Salvar chamada</button>
           </div>
         </div>
       )}
@@ -256,7 +318,7 @@ function Dashboard({
       </div>
 
       <section className="metrics-grid" aria-label="Indicadores principais">
-        <Metric icon="◎" label="ATLETAS ATIVOS" value="126" trend="+8 este mês" tone="green" />
+        <Metric icon="◎" label="ATLETAS ATIVOS" value={String(athletes.length)} trend="cadastros persistentes" tone="green" />
         <Metric icon="✓" label="FREQUÊNCIA MÉDIA" value="91,4%" trend="+2,1% vs. junho" tone="blue" />
         <Metric icon="$" label="RECEITA DO MÊS" value="R$ 18.740" trend="87% da meta" tone="orange" progress />
         <Metric icon="!" label="PENDÊNCIAS" value="7" trend="3 mensalidades vencidas" tone="red" negative />
@@ -299,7 +361,8 @@ function Dashboard({
           <CardHeader title="Atletas em destaque" subtitle="Frequência e evolução no mês" action="Ver todos" onAction={() => setSection("Atletas")} />
           <div className="athlete-table">
             <div className="table-row table-head"><span>ATLETA</span><span>CATEGORIA</span><span>FREQUÊNCIA</span><span>FINANCEIRO</span></div>
-            {athletes.slice(0, 4).map((athlete) => <AthleteRow key={athlete.name} athlete={athlete} />)}
+            {athletes.slice(0, 4).map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} />)}
+            {athletes.length === 0 && <EmptyAthletes compact />}
           </div>
         </div>
 
@@ -352,7 +415,8 @@ function SectionView({
           <div className="module-toolbar"><strong>{athletes.length} atletas encontrados</strong><div><button className="filter-button">Todas as categorias⌄</button><button className="filter-button">Exportar</button></div></div>
           <div className="athlete-table expanded">
             <div className="table-row table-head"><span>ATLETA</span><span>CATEGORIA</span><span>FREQUÊNCIA</span><span>FINANCEIRO</span></div>
-            {athletes.map((athlete) => <AthleteRow key={athlete.name} athlete={athlete} />)}
+            {athletes.map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} />)}
+            {athletes.length === 0 && <EmptyAthletes />}
           </div>
         </div>
       ) : section === "Turmas" ? (
@@ -399,4 +463,16 @@ function CardHeader({ title, subtitle, action, onAction }: { title: string; subt
 
 function AthleteRow({ athlete }: { athlete: Athlete }) {
   return <div className="table-row"><span className="athlete-name"><i className={`mini-avatar ${athlete.tone}`}>{athlete.initials}</i><span><strong>{athlete.name}</strong><small>{athlete.age} anos</small></span></span><span><b className="category-tag">{athlete.category}</b></span><span className="attendance-cell"><strong>{athlete.attendance}%</strong><i><b style={{ width: `${athlete.attendance}%` }} /></i></span><span><b className={athlete.status === "Em dia" ? "status-tag paid" : "status-tag pending"}><i />{athlete.status}</b></span></div>;
+}
+
+function EmptyAthletes({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={compact ? "empty-athletes compact" : "empty-athletes"}>
+      <span>＋</span>
+      <div>
+        <strong>Nenhum atleta cadastrado</strong>
+        <small>Use “Novo atleta” para salvar o primeiro cadastro.</small>
+      </div>
+    </div>
+  );
 }
