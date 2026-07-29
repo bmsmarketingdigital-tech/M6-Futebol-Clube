@@ -108,6 +108,22 @@ export function ensureDatabase() {
           present INTEGER NOT NULL DEFAULT 1,
           note TEXT
         )`),
+        d1.prepare(`CREATE TABLE IF NOT EXISTS athlete_evaluations (
+          id TEXT PRIMARY KEY NOT NULL,
+          organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+          evaluation_date TEXT NOT NULL,
+          technical_score INTEGER NOT NULL,
+          physical_score INTEGER NOT NULL,
+          tactical_score INTEGER NOT NULL,
+          behavioral_score INTEGER NOT NULL,
+          strengths TEXT,
+          improvements TEXT,
+          next_goals TEXT,
+          evaluated_by TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )`),
         d1.prepare(`CREATE TABLE IF NOT EXISTS billing_plans (
           id TEXT PRIMARY KEY NOT NULL,
           organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -190,6 +206,12 @@ export function ensureDatabase() {
         ),
         d1.prepare(
           "CREATE UNIQUE INDEX IF NOT EXISTS attendance_records_session_athlete_unique ON attendance_records (session_id, athlete_id)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS athlete_evaluations_organization_idx ON athlete_evaluations (organization_id)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS athlete_evaluations_athlete_date_idx ON athlete_evaluations (athlete_id, evaluation_date)",
         ),
         d1.prepare(
           "CREATE INDEX IF NOT EXISTS billing_plans_organization_idx ON billing_plans (organization_id)",

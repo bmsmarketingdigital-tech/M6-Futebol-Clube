@@ -11,6 +11,7 @@ import {
   type TeamRecord,
 } from "./TeamManagement";
 import { FinanceManagement } from "./FinanceManagement";
+import { EvaluationManagement } from "./EvaluationManagement";
 
 type Section =
   | "Visão geral"
@@ -295,6 +296,8 @@ export default function Home() {
                 void loadFinanceOverview();
               }}
             />
+          ) : section === "Avaliações" ? (
+            <EvaluationManagement athletes={filteredAthletes} notify={notify} />
           ) : (
             <SectionView
               section={section}

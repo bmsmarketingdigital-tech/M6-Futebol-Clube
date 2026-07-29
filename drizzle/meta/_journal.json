@@ -36,6 +36,13 @@
       "when": 1785367820242,
       "tag": "0004_watery_zuras",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1785368302492,
+      "tag": "0005_complex_giant_man",
+      "breakpoints": true
     }
   ]
 }

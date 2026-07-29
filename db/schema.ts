@@ -192,6 +192,37 @@ export const attendanceRecords = sqliteTable(
   ],
 );
 
+export const athleteEvaluations = sqliteTable(
+  "athlete_evaluations",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    athleteId: text("athlete_id")
+      .notNull()
+      .references(() => athletes.id, { onDelete: "cascade" }),
+    evaluationDate: text("evaluation_date").notNull(),
+    technicalScore: integer("technical_score").notNull(),
+    physicalScore: integer("physical_score").notNull(),
+    tacticalScore: integer("tactical_score").notNull(),
+    behavioralScore: integer("behavioral_score").notNull(),
+    strengths: text("strengths"),
+    improvements: text("improvements"),
+    nextGoals: text("next_goals"),
+    evaluatedBy: text("evaluated_by").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    index("athlete_evaluations_organization_idx").on(table.organizationId),
+    index("athlete_evaluations_athlete_date_idx").on(
+      table.athleteId,
+      table.evaluationDate,
+    ),
+  ],
+);
+
 export const billingPlans = sqliteTable(
   "billing_plans",
   {
