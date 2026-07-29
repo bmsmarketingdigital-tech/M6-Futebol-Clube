@@ -191,6 +191,56 @@ export const attendanceRecords = sqliteTable(
   ],
 );
 
+export const billingPlans = sqliteTable(
+  "billing_plans",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    dueDay: integer("due_day").notNull().default(10),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    index("billing_plans_organization_idx").on(table.organizationId),
+  ],
+);
+
+export const athleteBilling = sqliteTable(
+  "athlete_billing",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    athleteId: text("athlete_id")
+      .notNull()
+      .references(() => athletes.id, { onDelete: "cascade" }),
+    planId: text("plan_id")
+      .notNull()
+      .references(() => billingPlans.id),
+    discountType: text("discount_type", {
+      enum: ["none", "fixed", "percent"],
+    })
+      .notNull()
+      .default("none"),
+    discountValue: integer("discount_value").notNull().default(0),
+    customDueDay: integer("custom_due_day"),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("athlete_billing_athlete_unique").on(table.athleteId),
+    index("athlete_billing_organization_idx").on(table.organizationId),
+    index("athlete_billing_plan_idx").on(table.planId),
+  ],
+);
+
 export const payments = sqliteTable(
   "payments",
   {
@@ -205,6 +255,13 @@ export const payments = sqliteTable(
     amountCents: integer("amount_cents").notNull(),
     dueDate: text("due_date").notNull(),
     paidAt: integer("paid_at", { mode: "timestamp" }),
+    paidAmountCents: integer("paid_amount_cents"),
+    paymentMethod: text("payment_method", {
+      enum: ["cash", "pix", "card", "bank", "other"],
+    }),
+    planName: text("plan_name"),
+    notes: text("notes"),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
     status: text("status", { enum: ["open", "paid", "overdue", "cancelled"] })
       .notNull()
       .default("open"),

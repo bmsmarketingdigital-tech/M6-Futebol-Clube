@@ -10,6 +10,7 @@ import {
   TeamModal,
   type TeamRecord,
 } from "./TeamManagement";
+import { FinanceManagement } from "./FinanceManagement";
 
 type Section =
   | "Visão geral"
@@ -51,6 +52,14 @@ export default function Home() {
   const [savingAthlete, setSavingAthlete] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [loadingTeams, setLoadingTeams] = useState(true);
+  const [financeOverview, setFinanceOverview] = useState({
+    receivedCents: 0,
+    pendingCents: 0,
+    overdueCents: 0,
+    expectedCents: 0,
+    paidCount: 0,
+    overdueCount: 0,
+  });
 
   async function loadAthletes() {
     setLoadingAthletes(true);
@@ -103,9 +112,23 @@ export default function Home() {
     }
   }
 
+  async function loadFinanceOverview() {
+    try {
+      const month = new Date().toISOString().slice(0, 7);
+      const response = await fetch(`/api/finance/summary?month=${month}`);
+      const payload = (await response.json()) as {
+        summary?: typeof financeOverview;
+      };
+      if (response.ok && payload.summary) setFinanceOverview(payload.summary);
+    } catch {
+      // O módulo financeiro exibe o erro completo quando for aberto.
+    }
+  }
+
   useEffect(() => {
     void loadAthletes();
     void loadTeams();
+    void loadFinanceOverview();
   }, []);
 
   const filteredAthletes = useMemo(
@@ -185,7 +208,9 @@ export default function Home() {
             >
               <span className="nav-icon">{item.icon}</span>
               {item.label}
-              {item.label === "Financeiro" && <span className="nav-badge">3</span>}
+              {item.label === "Financeiro" && financeOverview.overdueCount > 0 && (
+                <span className="nav-badge">{financeOverview.overdueCount}</span>
+              )}
             </button>
           ))}
           <p className="nav-label second">DESENVOLVIMENTO</p>
@@ -258,7 +283,17 @@ export default function Home() {
                 setTeamModalOpen(true);
               }}
               onOpenAthlete={setSelectedAthlete}
+              finance={financeOverview}
               notify={notify}
+            />
+          ) : section === "Financeiro" ? (
+            <FinanceManagement
+              athletes={filteredAthletes}
+              notify={notify}
+              onChanged={() => {
+                void loadAthletes();
+                void loadFinanceOverview();
+              }}
             />
           ) : (
             <SectionView
@@ -379,6 +414,7 @@ function Dashboard({
   onAttendance,
   onOpenTeam,
   onOpenAthlete,
+  finance,
   notify,
 }: {
   athletes: Athlete[];
@@ -387,6 +423,14 @@ function Dashboard({
   onAttendance: (team: TeamRecord) => void;
   onOpenTeam: (team: TeamRecord) => void;
   onOpenAthlete: (athlete: Athlete) => void;
+  finance: {
+    receivedCents: number;
+    pendingCents: number;
+    overdueCents: number;
+    expectedCents: number;
+    paidCount: number;
+    overdueCount: number;
+  };
   notify: (message: string) => void;
 }) {
   const averageAttendance = athletes.length
@@ -399,6 +443,12 @@ function Dashboard({
     (total, team) => total + team.players,
     0,
   );
+  const formatMoney = (cents: number) =>
+    new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      maximumFractionDigits: 0,
+    }).format(cents / 100);
 
   return (
     <>
@@ -414,8 +464,8 @@ function Dashboard({
       <section className="metrics-grid" aria-label="Indicadores principais">
         <Metric icon="◎" label="ATLETAS ATIVOS" value={String(athletes.length)} trend="cadastros persistentes" tone="green" />
         <Metric icon="✓" label="FREQUÊNCIA MÉDIA" value={`${averageAttendance}%`} trend="calculada pelas chamadas" tone="blue" />
-        <Metric icon="$" label="RECEITA DO MÊS" value="R$ 18.740" trend="87% da meta" tone="orange" progress />
-        <Metric icon="!" label="PENDÊNCIAS" value="7" trend="3 mensalidades vencidas" tone="red" negative />
+        <Metric icon="$" label="RECEITA DO MÊS" value={formatMoney(finance.receivedCents)} trend={`${finance.paidCount} pagamento(s) recebido(s)`} tone="orange" />
+        <Metric icon="!" label="PENDÊNCIAS" value={String(finance.overdueCount)} trend={`${formatMoney(finance.overdueCents)} em atraso`} tone="red" negative />
       </section>
 
       <section className="dashboard-grid">
@@ -439,14 +489,14 @@ function Dashboard({
 
         <div className="card finance-card">
           <CardHeader title="Receita mensal" subtitle="Comparativo últimos 12 meses" action="Detalhes" onAction={() => setSection("Financeiro")} />
-          <div className="chart-head"><div><strong>R$ 18.740</strong><span>+12,8%</span></div><small>Meta: R$ 21.500</small></div>
+          <div className="chart-head"><div><strong>{formatMoney(finance.receivedCents)}</strong><span>mês atual</span></div><small>Previsto: {formatMoney(finance.expectedCents)}</small></div>
           <div className="bar-chart" aria-label="Gráfico de receita mensal">
             {financeBars.map((height, index) => <span key={index} className={index === 11 ? "current" : ""} style={{ height: `${height}%` }} />)}
           </div>
           <div className="chart-labels"><span>AGO</span><span>OUT</span><span>DEZ</span><span>FEV</span><span>ABR</span><span>JUN</span><b>JUL</b></div>
           <div className="finance-summary">
-            <div><span className="legend received" /><p><small>RECEBIDO</small><strong>R$ 16.310</strong></p></div>
-            <div><span className="legend pending" /><p><small>A RECEBER</small><strong>R$ 2.430</strong></p></div>
+            <div><span className="legend received" /><p><small>RECEBIDO</small><strong>{formatMoney(finance.receivedCents)}</strong></p></div>
+            <div><span className="legend pending" /><p><small>A RECEBER</small><strong>{formatMoney(finance.pendingCents + finance.overdueCents)}</strong></p></div>
           </div>
         </div>
       </section>
@@ -463,7 +513,7 @@ function Dashboard({
 
         <div className="card attention-card">
           <CardHeader title="Precisa de atenção" subtitle="Ações importantes para hoje" />
-          <button onClick={() => setSection("Financeiro")}><span className="attention-icon red">!</span><p><strong>3 mensalidades vencidas</strong><small>R$ 780 em aberto</small></p><b>›</b></button>
+          <button onClick={() => setSection("Financeiro")}><span className="attention-icon red">!</span><p><strong>{finance.overdueCount} mensalidade(s) vencida(s)</strong><small>{formatMoney(finance.overdueCents)} em aberto</small></p><b>›</b></button>
           <button onClick={() => setSection("Avaliações")}><span className="attention-icon orange">↗</span><p><strong>5 avaliações pendentes</strong><small>Prazo até 31 de julho</small></p><b>›</b></button>
           <button onClick={() => notify("Comunicado aberto para revisão.")}><span className="attention-icon blue">◌</span><p><strong>Comunicado agendado</strong><small>Festival interno · Amanhã, 9h</small></p><b>›</b></button>
           <div className="all-good"><span>✓</span><p><strong>Documentação em dia</strong><small>Nenhuma pendência cadastral</small></p></div>

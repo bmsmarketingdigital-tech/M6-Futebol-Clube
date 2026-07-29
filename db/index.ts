@@ -107,6 +107,28 @@ export function ensureDatabase() {
           present INTEGER NOT NULL DEFAULT 1,
           note TEXT
         )`),
+        d1.prepare(`CREATE TABLE IF NOT EXISTS billing_plans (
+          id TEXT PRIMARY KEY NOT NULL,
+          organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          amount_cents INTEGER NOT NULL,
+          due_day INTEGER NOT NULL DEFAULT 10,
+          active INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )`),
+        d1.prepare(`CREATE TABLE IF NOT EXISTS athlete_billing (
+          id TEXT PRIMARY KEY NOT NULL,
+          organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+          plan_id TEXT NOT NULL REFERENCES billing_plans(id),
+          discount_type TEXT NOT NULL DEFAULT 'none',
+          discount_value INTEGER NOT NULL DEFAULT 0,
+          custom_due_day INTEGER,
+          active INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )`),
         d1.prepare(`CREATE TABLE IF NOT EXISTS payments (
           id TEXT PRIMARY KEY NOT NULL,
           organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -115,6 +137,11 @@ export function ensureDatabase() {
           amount_cents INTEGER NOT NULL,
           due_date TEXT NOT NULL,
           paid_at INTEGER,
+          paid_amount_cents INTEGER,
+          payment_method TEXT,
+          plan_name TEXT,
+          notes TEXT,
+          updated_at INTEGER NOT NULL,
           status TEXT NOT NULL DEFAULT 'open',
           created_at INTEGER NOT NULL
         )`),
@@ -156,6 +183,18 @@ export function ensureDatabase() {
         ),
         d1.prepare(
           "CREATE UNIQUE INDEX IF NOT EXISTS attendance_records_session_athlete_unique ON attendance_records (session_id, athlete_id)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS billing_plans_organization_idx ON billing_plans (organization_id)",
+        ),
+        d1.prepare(
+          "CREATE UNIQUE INDEX IF NOT EXISTS athlete_billing_athlete_unique ON athlete_billing (athlete_id)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS athlete_billing_organization_idx ON athlete_billing (organization_id)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS athlete_billing_plan_idx ON athlete_billing (plan_id)",
         ),
         d1.prepare(
           "CREATE UNIQUE INDEX IF NOT EXISTS payments_athlete_month_unique ON payments (athlete_id, reference_month)",
@@ -216,6 +255,35 @@ export function ensureDatabase() {
 
         for (const [column, statement] of teamAdditions) {
           if (!existingTeamColumns.has(column)) {
+            await d1.prepare(statement).run();
+          }
+        }
+
+        const paymentColumns = await d1
+          .prepare("PRAGMA table_info(payments)")
+          .all<{ name: string }>();
+        const existingPaymentColumns = new Set(
+          paymentColumns.results.map((column) => column.name),
+        );
+        const paymentAdditions = [
+          [
+            "paid_amount_cents",
+            "ALTER TABLE payments ADD COLUMN paid_amount_cents INTEGER",
+          ],
+          [
+            "payment_method",
+            "ALTER TABLE payments ADD COLUMN payment_method TEXT",
+          ],
+          ["plan_name", "ALTER TABLE payments ADD COLUMN plan_name TEXT"],
+          ["notes", "ALTER TABLE payments ADD COLUMN notes TEXT"],
+          [
+            "updated_at",
+            "ALTER TABLE payments ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0",
+          ],
+        ] as const;
+
+        for (const [column, statement] of paymentAdditions) {
+          if (!existingPaymentColumns.has(column)) {
             await d1.prepare(statement).run();
           }
         }
