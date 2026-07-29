@@ -50,6 +50,13 @@
       "when": 1785368701332,
       "tag": "0006_boring_slapstick",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1785369280024,
+      "tag": "0007_curly_network",
+      "breakpoints": true
     }
   ]
 }

@@ -147,6 +147,30 @@ export function ensureDatabase() {
           duration_minutes INTEGER NOT NULL,
           description TEXT
         )`),
+        d1.prepare(`CREATE TABLE IF NOT EXISTS communications (
+          id TEXT PRIMARY KEY NOT NULL,
+          organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          message TEXT NOT NULL,
+          audience_type TEXT NOT NULL,
+          team_id TEXT REFERENCES teams(id),
+          priority TEXT NOT NULL DEFAULT 'normal',
+          status TEXT NOT NULL DEFAULT 'draft',
+          scheduled_at TEXT,
+          sent_at INTEGER,
+          created_by TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )`),
+        d1.prepare(`CREATE TABLE IF NOT EXISTS communication_recipients (
+          id TEXT PRIMARY KEY NOT NULL,
+          communication_id TEXT NOT NULL REFERENCES communications(id) ON DELETE CASCADE,
+          athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+          guardian_name TEXT NOT NULL,
+          guardian_email TEXT,
+          guardian_phone TEXT,
+          read_at INTEGER
+        )`),
         d1.prepare(`CREATE TABLE IF NOT EXISTS billing_plans (
           id TEXT PRIMARY KEY NOT NULL,
           organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -244,6 +268,15 @@ export function ensureDatabase() {
         ),
         d1.prepare(
           "CREATE INDEX IF NOT EXISTS training_drills_session_position_idx ON training_drills (session_id, position)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS communications_organization_status_idx ON communications (organization_id, status)",
+        ),
+        d1.prepare(
+          "CREATE UNIQUE INDEX IF NOT EXISTS communication_recipients_message_athlete_unique ON communication_recipients (communication_id, athlete_id)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS communication_recipients_message_idx ON communication_recipients (communication_id)",
         ),
         d1.prepare(
           "CREATE INDEX IF NOT EXISTS billing_plans_organization_idx ON billing_plans (organization_id)",

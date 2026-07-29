@@ -275,6 +275,61 @@ export const trainingDrills = sqliteTable(
   ],
 );
 
+export const communications = sqliteTable(
+  "communications",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    message: text("message").notNull(),
+    audienceType: text("audience_type", { enum: ["all", "team"] }).notNull(),
+    teamId: text("team_id").references(() => teams.id),
+    priority: text("priority", { enum: ["normal", "important", "urgent"] })
+      .notNull()
+      .default("normal"),
+    status: text("status", { enum: ["draft", "scheduled", "sent", "cancelled"] })
+      .notNull()
+      .default("draft"),
+    scheduledAt: text("scheduled_at"),
+    sentAt: integer("sent_at", { mode: "timestamp" }),
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    index("communications_organization_status_idx").on(
+      table.organizationId,
+      table.status,
+    ),
+  ],
+);
+
+export const communicationRecipients = sqliteTable(
+  "communication_recipients",
+  {
+    id: text("id").primaryKey(),
+    communicationId: text("communication_id")
+      .notNull()
+      .references(() => communications.id, { onDelete: "cascade" }),
+    athleteId: text("athlete_id")
+      .notNull()
+      .references(() => athletes.id, { onDelete: "cascade" }),
+    guardianName: text("guardian_name").notNull(),
+    guardianEmail: text("guardian_email"),
+    guardianPhone: text("guardian_phone"),
+    readAt: integer("read_at", { mode: "timestamp" }),
+  },
+  (table) => [
+    uniqueIndex("communication_recipients_message_athlete_unique").on(
+      table.communicationId,
+      table.athleteId,
+    ),
+    index("communication_recipients_message_idx").on(table.communicationId),
+  ],
+);
+
 export const billingPlans = sqliteTable(
   "billing_plans",
   {
