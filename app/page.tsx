@@ -12,6 +12,7 @@ import {
 } from "./TeamManagement";
 import { FinanceManagement } from "./FinanceManagement";
 import { EvaluationManagement } from "./EvaluationManagement";
+import { TrainingManagement } from "./TrainingManagement";
 
 type Section =
   | "Visão geral"
@@ -298,6 +299,8 @@ export default function Home() {
             />
           ) : section === "Avaliações" ? (
             <EvaluationManagement athletes={filteredAthletes} notify={notify} />
+          ) : section === "Treinos" ? (
+            <TrainingManagement teams={teams} notify={notify} />
           ) : (
             <SectionView
               section={section}

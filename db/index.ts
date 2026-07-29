@@ -124,6 +124,29 @@ export function ensureDatabase() {
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
         )`),
+        d1.prepare(`CREATE TABLE IF NOT EXISTS training_sessions (
+          id TEXT PRIMARY KEY NOT NULL,
+          organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          team_id TEXT NOT NULL REFERENCES teams(id),
+          title TEXT NOT NULL,
+          objective TEXT NOT NULL,
+          session_date TEXT NOT NULL,
+          duration_minutes INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'planned',
+          notes TEXT,
+          created_by TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )`),
+        d1.prepare(`CREATE TABLE IF NOT EXISTS training_drills (
+          id TEXT PRIMARY KEY NOT NULL,
+          session_id TEXT NOT NULL REFERENCES training_sessions(id) ON DELETE CASCADE,
+          position INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          focus TEXT,
+          duration_minutes INTEGER NOT NULL,
+          description TEXT
+        )`),
         d1.prepare(`CREATE TABLE IF NOT EXISTS billing_plans (
           id TEXT PRIMARY KEY NOT NULL,
           organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -212,6 +235,15 @@ export function ensureDatabase() {
         ),
         d1.prepare(
           "CREATE INDEX IF NOT EXISTS athlete_evaluations_athlete_date_idx ON athlete_evaluations (athlete_id, evaluation_date)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS training_sessions_organization_date_idx ON training_sessions (organization_id, session_date)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS training_sessions_team_idx ON training_sessions (team_id)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS training_drills_session_position_idx ON training_drills (session_id, position)",
         ),
         d1.prepare(
           "CREATE INDEX IF NOT EXISTS billing_plans_organization_idx ON billing_plans (organization_id)",

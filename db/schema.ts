@@ -223,6 +223,58 @@ export const athleteEvaluations = sqliteTable(
   ],
 );
 
+export const trainingSessions = sqliteTable(
+  "training_sessions",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id),
+    title: text("title").notNull(),
+    objective: text("objective").notNull(),
+    sessionDate: text("session_date").notNull(),
+    durationMinutes: integer("duration_minutes").notNull(),
+    status: text("status", { enum: ["planned", "completed", "cancelled"] })
+      .notNull()
+      .default("planned"),
+    notes: text("notes"),
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    index("training_sessions_organization_date_idx").on(
+      table.organizationId,
+      table.sessionDate,
+    ),
+    index("training_sessions_team_idx").on(table.teamId),
+  ],
+);
+
+export const trainingDrills = sqliteTable(
+  "training_drills",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => trainingSessions.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    name: text("name").notNull(),
+    focus: text("focus"),
+    durationMinutes: integer("duration_minutes").notNull(),
+    description: text("description"),
+  },
+  (table) => [
+    index("training_drills_session_position_idx").on(
+      table.sessionId,
+      table.position,
+    ),
+  ],
+);
+
 export const billingPlans = sqliteTable(
   "billing_plans",
   {

@@ -414,6 +414,19 @@ button { cursor: pointer; }
 .evaluation-modal form { padding: 20px 26px 25px; overflow-y: auto; }.evaluation-modal label { display: block; margin-bottom: 12px; color: #4f6259; font-size: 9px; font-weight: 800; }
 .evaluation-modal input, .evaluation-modal select, .evaluation-modal textarea { width: 100%; margin-top: 6px; border: 1px solid #dfe6e2; border-radius: 8px; background: #fbfcfb; color: var(--ink); font-size: 10px; }.evaluation-modal input, .evaluation-modal select { height: 40px; padding: 0 10px; }.evaluation-modal textarea { min-height: 58px; padding: 9px; resize: vertical; }
 .score-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.training-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; margin-bottom: 15px; }.training-metrics .metric-card small { color: var(--muted); }
+.training-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+.training-session-card { padding: 18px; }.training-session-card > header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 19px; }.training-session-card > header small { color: var(--muted); font-size: 8px; }
+.training-status { padding: 5px 8px; border-radius: 10px; font-size: 7px; font-weight: 800; }.training-status.planned { color: #a76520; background: #fff2df; }.training-status.completed { color: var(--green); background: var(--green-soft); }.training-status.cancelled { color: #9b5953; background: #ffedeb; }
+.training-session-card h2 { margin: 0; font-size: 18px; }.training-session-card > p { min-height: 34px; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.session-meta { display: flex; gap: 15px; padding: 10px 0; border-block: 1px solid var(--line); color: #5e7067; font-size: 8px; font-weight: 800; }
+.session-drills { padding: 8px 0; }.session-drills > div { min-height: 43px; display: flex; align-items: center; gap: 9px; }.session-drills > div > b { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 7px; background: var(--green-soft); color: var(--green); font-size: 7px; }.session-drills strong { display: block; font-size: 9px; }.session-drills small { display: block; margin-top: 2px; color: var(--muted); font-size: 7px; }
+.training-session-card footer { display: flex; justify-content: space-between; padding-top: 10px; border-top: 1px solid var(--line); }.training-session-card footer button { border: 0; background: none; color: var(--green); font-size: 8px; font-weight: 800; }.training-session-card footer button:last-child { color: #bd5b53; }
+.training-modal { width: min(800px, 100%); max-height: calc(100vh - 34px); overflow: hidden; display: flex; flex-direction: column; background: white; border-radius: 17px; }
+.training-modal > header { padding: 22px 26px 16px; display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); }.training-modal header h2 { margin: 0; font-size: 21px; }.training-modal header p { margin: 5px 0 0; color: var(--muted); font-size: 9px; }.training-modal header .modal-close { position: static; }
+.training-modal form { padding: 20px 26px 25px; overflow-y: auto; }.training-modal label { display: block; margin-bottom: 12px; color: #4f6259; font-size: 9px; font-weight: 800; }.training-modal input, .training-modal select, .training-modal textarea { width: 100%; margin-top: 6px; border: 1px solid #dfe6e2; border-radius: 8px; background: #fbfcfb; color: var(--ink); font-size: 10px; }.training-modal input, .training-modal select { height: 40px; padding: 0 10px; }.training-modal textarea { min-height: 65px; padding: 9px; }
+.drill-editor { margin-bottom: 13px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }.drill-editor > div { min-height: 45px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; background: #f8faf9; }.drill-editor > div strong { font-size: 9px; }.drill-editor > div button { border: 0; background: none; color: var(--green); font-size: 8px; font-weight: 800; }
+.drill-editor section { min-height: 55px; padding: 7px 10px; display: grid; grid-template-columns: 27px 1.2fr 1fr 70px 25px; gap: 7px; align-items: center; border-top: 1px solid var(--line); }.drill-editor section > b { color: var(--green); font-size: 8px; }.drill-editor section input { height: 34px; margin: 0; }.drill-editor section button { border: 0; background: #fff0ed; color: #bd5b53; border-radius: 6px; height: 28px; }
 
 @keyframes fade { from { opacity: 0; } } @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
 @keyframes pulse { from { opacity: .45; } to { opacity: 1; } }
@@ -425,6 +438,7 @@ button { cursor: pointer; }
   .finance-metrics { grid-template-columns: repeat(2, 1fr); }
   .finance-layout { grid-template-columns: 1fr; }
   .evaluation-list { overflow-x: auto; }.evaluation-list > article { min-width: 950px; }
+  .training-board { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 760px) {
@@ -481,6 +495,8 @@ button { cursor: pointer; }
   .finance-metrics { grid-template-columns: 1fr; }
   .plan-strip { grid-template-columns: 1fr; }
   .evaluation-metrics, .score-grid { grid-template-columns: 1fr; }
+  .training-metrics, .training-board { grid-template-columns: 1fr; }
+  .drill-editor { overflow-x: auto; }.drill-editor section { min-width: 680px; }
 }
 
 @media (max-width: 430px) {
