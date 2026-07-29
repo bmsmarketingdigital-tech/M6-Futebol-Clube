@@ -347,6 +347,8 @@ button { cursor: pointer; }
 .finance-heading-actions > label { color: #6d7c74; font-size: 8px; font-weight: 800; }
 .finance-heading-actions input { display: block; height: 38px; min-width: 145px; margin-top: 5px; padding: 0 9px; border: 1px solid #dfe6e2; border-radius: 9px; background: white; color: var(--ink); font-size: 10px; }
 .finance-heading-actions .filter-button { height: 38px; }
+.integration-badge { display: inline-flex; margin-top: 8px; padding: 5px 8px; border-radius: 10px; background: #fff2df; color: #a76520; font-size: 7px; font-weight: 800; }
+.integration-badge.ready { background: var(--green-soft); color: var(--green); }
 .finance-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 13px; margin-bottom: 15px; }
 .finance-metrics .metric-card small { color: var(--muted); }
 .plan-strip { min-height: 86px; margin-bottom: 15px; padding: 13px 16px; display: grid; grid-template-columns: 130px 1fr; gap: 15px; align-items: center; }
@@ -377,6 +379,7 @@ button { cursor: pointer; }
 .charge-status.cancelled { color: #78847e; background: #eef1ef; }
 .charge-actions { display: flex; justify-content: flex-end; gap: 5px; }
 .charge-actions button { min-height: 29px; padding: 0 8px; border: 1px solid #bfe3d1; border-radius: 7px; background: #eef8f3; color: var(--green); font-size: 7px; font-weight: 800; }
+.charge-actions a { min-height: 29px; padding: 0 8px; display: inline-flex; align-items: center; border: 1px solid #bfe3d1; border-radius: 7px; background: #eef8f3; color: var(--green); font-size: 7px; font-weight: 800; text-decoration: none; white-space: nowrap; }
 .charge-actions button.danger-link { border-color: transparent; background: transparent; color: #bd5b53; }
 .billing-config-card { max-height: 620px; overflow: hidden; }
 .billing-list { max-height: 550px; overflow-y: auto; }

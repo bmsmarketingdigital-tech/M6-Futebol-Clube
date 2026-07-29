@@ -43,6 +43,7 @@ export function ensureDatabase() {
           birth_date TEXT,
           category TEXT NOT NULL,
           guardian_name TEXT NOT NULL,
+          guardian_document TEXT,
           guardian_phone TEXT,
           guardian_email TEXT,
           emergency_name TEXT,
@@ -125,6 +126,7 @@ export function ensureDatabase() {
           discount_type TEXT NOT NULL DEFAULT 'none',
           discount_value INTEGER NOT NULL DEFAULT 0,
           custom_due_day INTEGER,
+          provider_customer_id TEXT,
           active INTEGER NOT NULL DEFAULT 1,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
@@ -141,6 +143,11 @@ export function ensureDatabase() {
           payment_method TEXT,
           plan_name TEXT,
           notes TEXT,
+          external_provider TEXT,
+          external_payment_id TEXT,
+          invoice_url TEXT,
+          bank_slip_url TEXT,
+          external_status TEXT,
           updated_at INTEGER NOT NULL,
           status TEXT NOT NULL DEFAULT 'open',
           created_at INTEGER NOT NULL
@@ -211,6 +218,7 @@ export function ensureDatabase() {
         const additions = [
           ["birth_date", "ALTER TABLE athletes ADD COLUMN birth_date TEXT"],
           ["guardian_email", "ALTER TABLE athletes ADD COLUMN guardian_email TEXT"],
+          ["guardian_document", "ALTER TABLE athletes ADD COLUMN guardian_document TEXT"],
           ["emergency_name", "ALTER TABLE athletes ADD COLUMN emergency_name TEXT"],
           ["emergency_phone", "ALTER TABLE athletes ADD COLUMN emergency_phone TEXT"],
           ["allergies", "ALTER TABLE athletes ADD COLUMN allergies TEXT"],
@@ -276,6 +284,11 @@ export function ensureDatabase() {
           ],
           ["plan_name", "ALTER TABLE payments ADD COLUMN plan_name TEXT"],
           ["notes", "ALTER TABLE payments ADD COLUMN notes TEXT"],
+          ["external_provider", "ALTER TABLE payments ADD COLUMN external_provider TEXT"],
+          ["external_payment_id", "ALTER TABLE payments ADD COLUMN external_payment_id TEXT"],
+          ["invoice_url", "ALTER TABLE payments ADD COLUMN invoice_url TEXT"],
+          ["bank_slip_url", "ALTER TABLE payments ADD COLUMN bank_slip_url TEXT"],
+          ["external_status", "ALTER TABLE payments ADD COLUMN external_status TEXT"],
           [
             "updated_at",
             "ALTER TABLE payments ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0",
@@ -286,6 +299,15 @@ export function ensureDatabase() {
           if (!existingPaymentColumns.has(column)) {
             await d1.prepare(statement).run();
           }
+        }
+
+        const billingColumns = await d1
+          .prepare("PRAGMA table_info(athlete_billing)")
+          .all<{ name: string }>();
+        if (!billingColumns.results.some((column) => column.name === "provider_customer_id")) {
+          await d1
+            .prepare("ALTER TABLE athlete_billing ADD COLUMN provider_customer_id TEXT")
+            .run();
         }
       })
       .catch((error) => {

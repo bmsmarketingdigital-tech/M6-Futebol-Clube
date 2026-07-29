@@ -10,6 +10,7 @@ export type AthleteRecord = {
   age: number;
   birthDate?: string | null;
   guardianName?: string;
+  guardianDocument?: string | null;
   guardianPhone?: string | null;
   guardianEmail?: string | null;
   emergencyName?: string | null;
@@ -91,6 +92,7 @@ export function AthleteProfileModal({
           category: String(form.get("category") || ""),
           birthDate: String(form.get("birthDate") || ""),
           guardianName: String(form.get("guardianName") || ""),
+          guardianDocument: String(form.get("guardianDocument") || ""),
           guardianPhone: String(form.get("guardianPhone") || ""),
           guardianEmail: String(form.get("guardianEmail") || ""),
           emergencyName: String(form.get("emergencyName") || ""),
@@ -243,7 +245,8 @@ export function AthleteProfileModal({
                 <label>Data de nascimento<input name="birthDate" type="date" defaultValue={athlete.birthDate ?? ""} /></label>
                 <label>Categoria<select name="category" defaultValue={athlete.category}><option>Sub-7</option><option>Sub-9</option><option>Sub-11</option><option>Sub-13</option><option>Sub-15</option><option>Sub-17</option></select></label>
                 <div className="profile-section-title wide"><strong>Responsável principal</strong><small>Contato para cobranças, comunicados e emergências.</small></div>
-                <label className="wide">Nome do responsável<input name="guardianName" defaultValue={athlete.guardianName ?? ""} required /></label>
+                <label>Nome do responsável<input name="guardianName" defaultValue={athlete.guardianName ?? ""} required /></label>
+                <label>CPF ou CNPJ do responsável<input name="guardianDocument" inputMode="numeric" defaultValue={athlete.guardianDocument ?? ""} placeholder="Somente números" /></label>
                 <label>Telefone<input name="guardianPhone" type="tel" defaultValue={athlete.guardianPhone ?? ""} placeholder="(11) 99999-9999" /></label>
                 <label>E-mail<input name="guardianEmail" type="email" defaultValue={athlete.guardianEmail ?? ""} placeholder="responsavel@email.com" /></label>
                 <label>Contato de emergência<input name="emergencyName" defaultValue={athlete.emergencyName ?? ""} /></label>
@@ -263,6 +266,7 @@ export function AthleteProfileModal({
                 <input type="hidden" name="birthDate" value={athlete.birthDate ?? ""} />
                 <input type="hidden" name="category" value={athlete.category} />
                 <input type="hidden" name="guardianName" value={athlete.guardianName ?? ""} />
+                <input type="hidden" name="guardianDocument" value={athlete.guardianDocument ?? ""} />
                 <input type="hidden" name="guardianPhone" value={athlete.guardianPhone ?? ""} />
                 <input type="hidden" name="guardianEmail" value={athlete.guardianEmail ?? ""} />
                 <input type="hidden" name="emergencyName" value={athlete.emergencyName ?? ""} />

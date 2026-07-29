@@ -39,6 +39,7 @@ function toDto(row: typeof athletes.$inferSelect) {
     age,
     birthDate: row.birthDate,
     guardianName: row.guardianName,
+    guardianDocument: row.guardianDocument,
     guardianPhone: row.guardianPhone,
     guardianEmail: row.guardianEmail,
     emergencyName: row.emergencyName,

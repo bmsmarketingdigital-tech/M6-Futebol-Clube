@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { athletes } from "../../../../db/schema";
 import { getApiContext } from "../../api-auth";
+import { isValidCpfCnpj, onlyDigits } from "../document-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,7 @@ function toDto(row: typeof athletes.$inferSelect) {
     age,
     birthDate: row.birthDate,
     guardianName: row.guardianName,
+    guardianDocument: row.guardianDocument,
     guardianPhone: row.guardianPhone,
     guardianEmail: row.guardianEmail,
     emergencyName: row.emergencyName,
@@ -69,6 +71,7 @@ export async function PATCH(
       category?: string;
       birthDate?: string | null;
       guardianName?: string;
+      guardianDocument?: string | null;
       guardianPhone?: string | null;
       guardianEmail?: string | null;
       emergencyName?: string | null;
@@ -83,6 +86,7 @@ export async function PATCH(
     const category = payload.category?.trim() ?? "";
     const guardianName = payload.guardianName?.trim() ?? "";
     const birthDate = payload.birthDate?.trim() || null;
+    const guardianDocument = onlyDigits(payload.guardianDocument);
 
     if (name.length < 3 || name.length > 120) {
       return Response.json(
@@ -99,6 +103,12 @@ export async function PATCH(
     if (guardianName.length < 3 || guardianName.length > 120) {
       return Response.json(
         { error: "Informe o nome do responsável." },
+        { status: 400 },
+      );
+    }
+    if (guardianDocument && !isValidCpfCnpj(guardianDocument)) {
+      return Response.json(
+        { error: "Informe um CPF ou CNPJ válido para o responsável." },
         { status: 400 },
       );
     }
@@ -148,6 +158,7 @@ export async function PATCH(
         birthYear,
         birthDate,
         guardianName,
+        guardianDocument: guardianDocument || null,
         guardianPhone: payload.guardianPhone?.trim() || null,
         guardianEmail: payload.guardianEmail?.trim().toLowerCase() || null,
         emergencyName: payload.emergencyName?.trim() || null,

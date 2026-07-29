@@ -42,6 +42,7 @@ export const athletes = sqliteTable(
     birthDate: text("birth_date"),
     category: text("category").notNull(),
     guardianName: text("guardian_name").notNull(),
+    guardianDocument: text("guardian_document"),
     guardianPhone: text("guardian_phone"),
     guardianEmail: text("guardian_email"),
     emergencyName: text("emergency_name"),
@@ -230,6 +231,7 @@ export const athleteBilling = sqliteTable(
       .default("none"),
     discountValue: integer("discount_value").notNull().default(0),
     customDueDay: integer("custom_due_day"),
+    providerCustomerId: text("provider_customer_id"),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
@@ -261,6 +263,11 @@ export const payments = sqliteTable(
     }),
     planName: text("plan_name"),
     notes: text("notes"),
+    externalProvider: text("external_provider"),
+    externalPaymentId: text("external_payment_id"),
+    invoiceUrl: text("invoice_url"),
+    bankSlipUrl: text("bank_slip_url"),
+    externalStatus: text("external_status"),
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
     status: text("status", { enum: ["open", "paid", "overdue", "cancelled"] })
       .notNull()

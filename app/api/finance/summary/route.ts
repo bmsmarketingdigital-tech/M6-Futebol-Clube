@@ -8,6 +8,7 @@ import {
 } from "../../../../db/schema";
 import { getApiContext } from "../../api-auth";
 import { validateMonth } from "../finance-utils";
+import { hasAsaasConfiguration } from "../asaas";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +85,10 @@ export async function GET(request: Request) {
           paymentMethod: payments.paymentMethod,
           planName: payments.planName,
           notes: payments.notes,
+          externalProvider: payments.externalProvider,
+          externalPaymentId: payments.externalPaymentId,
+          invoiceUrl: payments.invoiceUrl,
+          externalStatus: payments.externalStatus,
           status: payments.status,
         })
         .from(payments)
@@ -127,6 +132,11 @@ export async function GET(request: Request) {
         expectedCents: receivedCents + pendingCents + overdueCents,
         paidCount: chargeRows.filter((charge) => charge.status === "paid").length,
         overdueCount: chargeRows.filter((charge) => charge.status === "overdue").length,
+      },
+      paymentIntegration: {
+        provider: "asaas",
+        configured: hasAsaasConfiguration(),
+        environment: "sandbox",
       },
     });
   } catch (error) {

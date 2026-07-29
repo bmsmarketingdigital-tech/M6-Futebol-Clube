@@ -36,6 +36,10 @@ type Charge = {
   paymentMethod: "cash" | "pix" | "card" | "bank" | "other" | null;
   planName: string | null;
   notes: string | null;
+  externalProvider: string | null;
+  externalPaymentId: string | null;
+  invoiceUrl: string | null;
+  externalStatus: string | null;
   status: "open" | "paid" | "overdue" | "cancelled";
 };
 
@@ -52,6 +56,11 @@ type FinancePayload = {
     overdueCount: number;
   };
   error?: string;
+  paymentIntegration?: {
+    provider: string;
+    configured: boolean;
+    environment: string;
+  };
 };
 
 const emptyPayload: FinancePayload = {
@@ -208,6 +217,24 @@ export function FinanceManagement({
     }
   }
 
+  async function sendCharge(charge: Charge) {
+    setWorking(true);
+    try {
+      const response = await fetch(`/api/finance/charges/${charge.id}/send`, {
+        method: "POST",
+      });
+      const payload = await readJson<{ invoiceUrl?: string }>(response);
+      if (!response.ok) throw new Error(payload.error);
+      notify("Cobrança emitida no Asaas Sandbox.");
+      await loadFinance();
+      if (payload.invoiceUrl) window.open(payload.invoiceUrl, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível emitir a cobrança.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
   const configuredCount = data.billing.filter((item) => item.active).length;
 
   return (
@@ -217,6 +244,9 @@ export function FinanceManagement({
           <span className="eyebrow">GESTÃO FINANCEIRA</span>
           <h1>Financeiro</h1>
           <p>Planos, mensalidades, recebimentos e inadimplência em um só lugar.</p>
+          <span className={data.paymentIntegration?.configured ? "integration-badge ready" : "integration-badge"}>
+            {data.paymentIntegration?.configured ? "Asaas Sandbox conectado" : "Asaas Sandbox aguardando chave"}
+          </span>
         </div>
         <div className="finance-heading-actions">
           <label>
@@ -280,6 +310,11 @@ export function FinanceManagement({
                 <span className="charge-actions">
                   {(charge.status === "open" || charge.status === "overdue") && (
                     <>
+                      {charge.invoiceUrl ? (
+                        <a href={charge.invoiceUrl} target="_blank" rel="noreferrer">Abrir cobrança</a>
+                      ) : (
+                        <button disabled={working} onClick={() => void sendCharge(charge)}>Emitir PIX/boleto</button>
+                      )}
                       <button onClick={() => setPaymentCharge(charge)}>Dar baixa</button>
                       <button className="danger-link" disabled={working} onClick={() => void cancelCharge(charge)}>Cancelar</button>
                     </>
