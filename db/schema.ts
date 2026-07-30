@@ -59,6 +59,7 @@ export const athletes = sqliteTable(
     })
       .notNull()
       .default("paid"),
+    qrToken: text("qr_token"),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     createdBy: text("created_by").notNull(),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
@@ -68,6 +69,7 @@ export const athletes = sqliteTable(
     index("athletes_organization_idx").on(table.organizationId),
     index("athletes_name_idx").on(table.organizationId, table.fullName),
     index("athletes_category_idx").on(table.organizationId, table.category),
+    uniqueIndex("athletes_qr_token_unique").on(table.qrToken),
   ],
 );
 
@@ -188,6 +190,50 @@ export const attendanceRecords = sqliteTable(
     uniqueIndex("attendance_records_session_athlete_unique").on(
       table.sessionId,
       table.athleteId,
+    ),
+  ],
+);
+
+export const athleteCheckIns = sqliteTable(
+  "athlete_check_ins",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    athleteId: text("athlete_id")
+      .notNull()
+      .references(() => athletes.id, { onDelete: "cascade" }),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    attendanceSessionId: text("attendance_session_id")
+      .notNull()
+      .references(() => attendanceSessions.id, { onDelete: "cascade" }),
+    scannedAt: integer("scanned_at", { mode: "timestamp" }).notNull(),
+    scannedBy: text("scanned_by").notNull(),
+    guardianPhone: text("guardian_phone"),
+    notificationMessage: text("notification_message").notNull(),
+    notificationStatus: text("notification_status", {
+      enum: ["pending", "sent", "failed", "skipped"],
+    })
+      .notNull()
+      .default("pending"),
+    notificationError: text("notification_error"),
+    notifiedAt: integer("notified_at", { mode: "timestamp" }),
+  },
+  (table) => [
+    index("athlete_check_ins_org_date_idx").on(
+      table.organizationId,
+      table.scannedAt,
+    ),
+    index("athlete_check_ins_athlete_date_idx").on(
+      table.athleteId,
+      table.scannedAt,
+    ),
+    index("athlete_check_ins_notification_idx").on(
+      table.organizationId,
+      table.notificationStatus,
     ),
   ],
 );

@@ -14,12 +14,14 @@ import { FinanceManagement } from "./FinanceManagement";
 import { EvaluationManagement } from "./EvaluationManagement";
 import { TrainingManagement } from "./TrainingManagement";
 import { CommunicationManagement } from "./CommunicationManagement";
+import { CheckInManagement } from "./CheckInManagement";
 
 type Section =
   | "Visão geral"
   | "Atletas"
   | "Turmas"
   | "Presença"
+  | "QR e entrada"
   | "Financeiro"
   | "Treinos"
   | "Avaliações"
@@ -41,6 +43,7 @@ const navItems: { label: Section; icon: string }[] = [
   { label: "Atletas", icon: "◎" },
   { label: "Turmas", icon: "▦" },
   { label: "Presença", icon: "✓" },
+  { label: "QR e entrada", icon: "◎" },
   { label: "Financeiro", icon: "$" },
   { label: "Treinos", icon: "◫" },
   { label: "Avaliações", icon: "↗" },
@@ -215,7 +218,7 @@ export default function Home() {
 
         <nav aria-label="Navegação principal">
           <p className="nav-label">GESTÃO</p>
-          {navItems.slice(0, 5).map((item) => (
+          {navItems.slice(0, 6).map((item) => (
             <button
               key={item.label}
               className={section === item.label ? "nav-item active" : "nav-item"}
@@ -229,7 +232,7 @@ export default function Home() {
             </button>
           ))}
           <p className="nav-label second">DESENVOLVIMENTO</p>
-          {navItems.slice(5).map((item) => (
+          {navItems.slice(6).map((item) => (
             <button
               key={item.label}
               className={section === item.label ? "nav-item active" : "nav-item"}
@@ -316,6 +319,15 @@ export default function Home() {
             <TrainingManagement teams={teams} notify={notify} />
           ) : section === "Comunicação" ? (
             <CommunicationManagement teams={teams} notify={notify} />
+          ) : section === "QR e entrada" ? (
+            <CheckInManagement
+              teams={teams}
+              notify={notify}
+              onAttendanceChanged={() => {
+                void loadAthletes();
+                void loadTeams();
+              }}
+            />
           ) : (
             <SectionView
               section={section}
@@ -570,6 +582,7 @@ function SectionView({
     Atletas: "Perfis, responsáveis, documentos e histórico esportivo.",
     Turmas: "Horários, categorias, professores e capacidade das turmas.",
     Presença: "Acompanhe frequência, ausências e reposições.",
+    "QR e entrada": "Leia o cartão do atleta, registre presença e avise o responsável.",
     Financeiro: "Mensalidades, cobranças, fluxo de caixa e inadimplência.",
     Treinos: "Planejamento de sessões e biblioteca de exercícios.",
     Avaliações: "Evolução técnica, física, tática e comportamental.",

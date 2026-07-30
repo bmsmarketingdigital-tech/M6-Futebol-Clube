@@ -151,6 +151,7 @@ export async function POST(request: Request) {
         guardianPhone,
         attendanceRate: 100,
         financialStatus: "paid",
+        qrToken: crypto.randomUUID(),
         active: true,
         createdBy: context.user.email,
         createdAt: now,

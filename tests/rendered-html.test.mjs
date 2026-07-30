@@ -10,6 +10,7 @@ test("keeps every operational module available from the dashboard", async () => 
     "Atletas",
     "Turmas",
     "Presença",
+    "QR e entrada",
     "Financeiro",
     "Treinos",
     "Avaliações",
@@ -25,6 +26,7 @@ test("keeps every operational module available from the dashboard", async () => 
     "EvaluationManagement",
     "TrainingManagement",
     "CommunicationManagement",
+    "CheckInManagement",
   ]) {
     assert.ok(page.includes(`import { ${component} }`));
     assert.match(page, new RegExp(`<${component}`));
@@ -39,6 +41,7 @@ test("protects persisted APIs and keeps the complete migration history", async (
     "app/api/evaluations/route.ts",
     "app/api/trainings/route.ts",
     "app/api/communications/route.ts",
+    "app/api/check-in/route.ts",
   ];
 
   for (const routePath of routePaths) {
@@ -50,7 +53,7 @@ test("protects persisted APIs and keeps the complete migration history", async (
   const migrations = (await readdir(new URL("drizzle/", root)))
     .filter((file) => /^\d{4}_.+\.sql$/.test(file))
     .sort();
-  assert.equal(migrations.length, 8);
+  assert.equal(migrations.length, 9);
   assert.match(migrations[0], /^0000_/);
-  assert.match(migrations.at(-1) ?? "", /^0007_/);
+  assert.match(migrations.at(-1) ?? "", /^0008_/);
 });

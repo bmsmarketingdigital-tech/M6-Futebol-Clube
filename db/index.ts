@@ -54,6 +54,7 @@ export function ensureDatabase() {
           image_authorized INTEGER NOT NULL DEFAULT 0,
           attendance_rate INTEGER NOT NULL DEFAULT 100,
           financial_status TEXT NOT NULL DEFAULT 'paid',
+          qr_token TEXT,
           active INTEGER NOT NULL DEFAULT 1,
           created_by TEXT NOT NULL,
           created_at INTEGER NOT NULL,
@@ -107,6 +108,20 @@ export function ensureDatabase() {
           athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
           present INTEGER NOT NULL DEFAULT 1,
           note TEXT
+        )`),
+        d1.prepare(`CREATE TABLE IF NOT EXISTS athlete_check_ins (
+          id TEXT PRIMARY KEY NOT NULL,
+          organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+          team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+          attendance_session_id TEXT NOT NULL REFERENCES attendance_sessions(id) ON DELETE CASCADE,
+          scanned_at INTEGER NOT NULL,
+          scanned_by TEXT NOT NULL,
+          guardian_phone TEXT,
+          notification_message TEXT NOT NULL,
+          notification_status TEXT NOT NULL DEFAULT 'pending',
+          notification_error TEXT,
+          notified_at INTEGER
         )`),
         d1.prepare(`CREATE TABLE IF NOT EXISTS athlete_evaluations (
           id TEXT PRIMARY KEY NOT NULL,
@@ -255,6 +270,15 @@ export function ensureDatabase() {
           "CREATE UNIQUE INDEX IF NOT EXISTS attendance_records_session_athlete_unique ON attendance_records (session_id, athlete_id)",
         ),
         d1.prepare(
+          "CREATE INDEX IF NOT EXISTS athlete_check_ins_org_date_idx ON athlete_check_ins (organization_id, scanned_at)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS athlete_check_ins_athlete_date_idx ON athlete_check_ins (athlete_id, scanned_at)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS athlete_check_ins_notification_idx ON athlete_check_ins (organization_id, notification_status)",
+        ),
+        d1.prepare(
           "CREATE INDEX IF NOT EXISTS athlete_evaluations_organization_idx ON athlete_evaluations (organization_id)",
         ),
         d1.prepare(
@@ -315,6 +339,7 @@ export function ensureDatabase() {
             "image_authorized",
             "ALTER TABLE athletes ADD COLUMN image_authorized INTEGER NOT NULL DEFAULT 0",
           ],
+          ["qr_token", "ALTER TABLE athletes ADD COLUMN qr_token TEXT"],
         ] as const;
 
         for (const [column, statement] of additions) {
@@ -322,6 +347,11 @@ export function ensureDatabase() {
             await d1.prepare(statement).run();
           }
         }
+        await d1
+          .prepare(
+            "CREATE UNIQUE INDEX IF NOT EXISTS athletes_qr_token_unique ON athletes (qr_token)",
+          )
+          .run();
 
         const teamColumns = await d1
           .prepare("PRAGMA table_info(teams)")

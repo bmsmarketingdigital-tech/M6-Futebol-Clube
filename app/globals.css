@@ -438,6 +438,58 @@ button { cursor: pointer; }
 .communication-modal form { padding: 20px 26px 25px; overflow-y: auto; }.communication-modal label { display: block; margin-bottom: 12px; color: #4f6259; font-size: 9px; font-weight: 800; }.communication-modal input, .communication-modal select, .communication-modal textarea { width: 100%; margin-top: 6px; border: 1px solid #dfe6e2; border-radius: 8px; background: #fbfcfb; color: var(--ink); font-size: 10px; }.communication-modal input, .communication-modal select { height: 40px; padding: 0 10px; }.communication-modal textarea { min-height: 125px; padding: 10px; resize: vertical; }
 .recipient-list { overflow-y: auto; }.recipient-list > button { width: 100%; min-height: 58px; padding: 8px 20px; display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; border: 0; border-bottom: 1px solid var(--line); background: white; color: var(--ink); text-align: left; }.read-check { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid #dce4df; border-radius: 7px; color: transparent; }.read-check.active { background: var(--green); color: white; border-color: var(--green); }.recipient-list strong { display: block; font-size: 9px; }.recipient-list small { display: block; margin-top: 3px; color: var(--muted); font-size: 7px; }.recipient-list > button > b { color: var(--green); font-size: 7px; }
 
+.checkin-heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.bridge-status { min-height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid #f0d8b9; border-radius: 9px; background: #fff8ed; color: #9a692e; font-size: 8px; font-weight: 800; }
+.bridge-status i { width: 7px; height: 7px; border-radius: 50%; background: #e5a353; box-shadow: 0 0 0 3px #ffead0; }
+.bridge-status.connected { border-color: #cde7d9; background: var(--green-soft); color: var(--green); }
+.bridge-status.connected i { background: var(--green); box-shadow: 0 0 0 3px #cce9dc; }
+.queue-button { min-height: 36px; padding: 0 11px; border: 1px solid #cde4d8; border-radius: 9px; background: white; color: var(--green); font-size: 8px; font-weight: 800; }
+.checkin-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; margin-bottom: 15px; }
+.checkin-panel { overflow: hidden; }
+.checkin-tabs { height: 54px; padding: 0 20px; display: flex; align-items: flex-end; gap: 22px; border-bottom: 1px solid var(--line); }
+.checkin-tabs button { height: 100%; padding: 0 2px; position: relative; border: 0; background: none; color: var(--muted); font-size: 9px; font-weight: 800; }
+.checkin-tabs button.active { color: var(--green); }
+.checkin-tabs button.active::after { content: ""; height: 2px; position: absolute; right: 0; bottom: -1px; left: 0; border-radius: 2px; background: var(--green); }
+.scanner-layout { min-height: 485px; display: grid; grid-template-columns: minmax(390px, 1.3fr) minmax(280px, .7fr); }
+.scanner-stage { min-height: 485px; padding: 25px; position: relative; display: grid; place-items: center; background: #f1f5f3; border-right: 1px solid var(--line); }
+#baseforte-qr-reader { width: min(100%, 560px); overflow: hidden; border: 0 !important; border-radius: 14px; background: #142b23; }
+#baseforte-qr-reader video { border-radius: 14px; }
+#baseforte-qr-reader:not(.active) { display: none; }
+.scanner-placeholder { width: min(100%, 440px); min-height: 330px; padding: 35px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px dashed #bfcfc7; border-radius: 17px; background: white; text-align: center; }
+.scanner-placeholder > span { width: 70px; height: 70px; margin-bottom: 18px; display: grid; place-items: center; border-radius: 20px; background: var(--green-soft); color: var(--green); font-size: 34px; }
+.scanner-placeholder strong { font-size: 15px; }.scanner-placeholder small { margin: 7px 0 20px; color: var(--muted); font-size: 9px; }
+.scanner-stop { position: absolute; right: 35px; bottom: 35px; min-height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: #fff; color: #a5544c; box-shadow: var(--shadow); font-size: 8px; font-weight: 800; }
+.scanner-settings { padding: 28px; }
+.scanner-settings > .eyebrow { display: block; margin-bottom: 18px; }
+.scanner-settings label { display: block; margin-bottom: 13px; color: #52645b; font-size: 8px; font-weight: 800; }
+.scanner-settings select, .scanner-settings input { width: 100%; height: 42px; margin-top: 6px; padding: 0 10px; border: 1px solid #dfe6e2; border-radius: 8px; background: #fbfcfb; color: var(--ink); font-size: 9px; }
+.manual-code { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.manual-code button { width: 100%; height: 38px; border: 0; border-radius: 8px; background: #e8f2ed; color: var(--green); font-size: 8px; font-weight: 800; }
+.scan-success { margin-top: 18px; padding: 14px; display: flex; align-items: center; gap: 11px; border: 1px solid #cde6d9; border-radius: 11px; background: var(--green-soft); }
+.scan-success > span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--green); color: white; font-weight: 900; }
+.scan-success strong, .scan-success small { display: block; }.scan-success strong { font-size: 10px; }.scan-success small { margin: 3px 0 7px; color: var(--muted); font-size: 7px; }
+.scan-success.duplicate { border-color: #f1d8b8; background: #fff8ee; }.scan-success.duplicate > span { background: #d99343; }
+.notification-result { width: fit-content; padding: 4px 7px; display: block; border-radius: 7px; font-size: 7px; font-weight: 800; }
+.notification-result.sent { background: #d9f0e4; color: #14764d; }.notification-result.pending { background: #fff0d8; color: #9b651e; }.notification-result.failed { background: #ffedeb; color: #b6534a; }.notification-result.skipped { background: #edf1ef; color: #68766f; }
+.scanner-warning { margin-top: 14px; padding: 12px; border-radius: 8px; background: #fff1ef; color: #a85249; font-size: 8px; line-height: 1.5; }
+.qr-cards-panel { padding: 22px; background: #f6f8f7; }
+.qr-print-toolbar { margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; }
+.qr-print-toolbar strong, .qr-print-toolbar small { display: block; }.qr-print-toolbar strong { font-size: 12px; }.qr-print-toolbar small { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.qr-print-toolbar button { min-height: 36px; padding: 0 12px; border: 1px solid #cddbd4; border-radius: 8px; background: white; color: var(--green); font-size: 8px; font-weight: 800; }
+.qr-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.athlete-qr-card { padding: 16px; border: 1px solid #dfe6e2; border-radius: 13px; background: white; text-align: center; box-shadow: 0 4px 14px rgba(30, 65, 52, .05); }
+.athlete-qr-card img { width: 150px; height: 150px; margin: 8px auto 10px; display: block; }
+.athlete-qr-card > strong, .athlete-qr-card > small { display: block; }.athlete-qr-card > strong { font-size: 11px; }.athlete-qr-card > small { margin-top: 3px; color: var(--green); font-size: 7px; font-weight: 800; }
+.athlete-qr-card p { margin: 9px 0 0; color: var(--muted); font-size: 7px; }
+.qr-card-brand { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--green); font-size: 9px; }.qr-card-brand span { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 7px; background: var(--green); color: white; font-size: 7px; }
+.checkin-history { overflow-x: auto; }
+.checkin-history-head, .checkin-history > article { min-width: 760px; padding: 0 22px; display: grid; grid-template-columns: 1.25fr 1fr .7fr 1.15fr; align-items: center; gap: 12px; }
+.checkin-history-head { height: 38px; background: #f8faf9; color: #87928c; font-size: 7px; font-weight: 800; }
+.checkin-history > article { min-height: 62px; border-top: 1px solid var(--line); }
+.checkin-history > article strong, .checkin-history > article small { display: block; }.checkin-history > article strong { font-size: 9px; }.checkin-history > article small { margin-top: 3px; color: var(--muted); font-size: 7px; }
+.checkin-history .notification-result { margin-bottom: 3px; }
+.checkin-empty { padding: 45px 20px; color: var(--muted); font-size: 9px; text-align: center; }
+
 @keyframes fade { from { opacity: 0; } } @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
 @keyframes pulse { from { opacity: .45; } to { opacity: 1; } }
 
@@ -450,6 +502,7 @@ button { cursor: pointer; }
   .evaluation-list { overflow-x: auto; }.evaluation-list > article { min-width: 950px; }
   .training-board { grid-template-columns: repeat(2, 1fr); }
   .communication-list { overflow-x: auto; }.communication-list > article { min-width: 780px; }
+  .scanner-layout { grid-template-columns: 1fr; }.scanner-stage { border-right: 0; border-bottom: 1px solid var(--line); }
 }
 
 @media (max-width: 760px) {
@@ -508,6 +561,10 @@ button { cursor: pointer; }
   .evaluation-metrics, .score-grid { grid-template-columns: 1fr; }
   .training-metrics, .training-board { grid-template-columns: 1fr; }
   .communication-metrics { grid-template-columns: 1fr; }
+  .checkin-heading { display: block; }.checkin-heading-actions { margin-top: 14px; justify-content: flex-start; flex-wrap: wrap; }.checkin-heading .primary-button { width: auto; padding: 0 12px; font-size: 8px; }
+  .checkin-metrics { grid-template-columns: 1fr; }
+  .scanner-layout { min-height: 0; }.scanner-stage { min-height: 390px; padding: 16px; }.scanner-settings { padding: 21px; }
+  .checkin-tabs { padding: 0 14px; gap: 16px; overflow-x: auto; }.checkin-tabs button { white-space: nowrap; }
   .drill-editor { overflow-x: auto; }.drill-editor section { min-width: 680px; }
 }
 
@@ -519,4 +576,13 @@ button { cursor: pointer; }
   .chart-head { padding-left: 15px; padding-right: 15px; }
   .bar-chart { margin-left: 15px; margin-right: 15px; }
   .modal { padding: 24px 20px; }
+}
+
+@media print {
+  body * { visibility: hidden !important; }
+  .qr-cards-panel, .qr-cards-panel * { visibility: visible !important; }
+  .qr-cards-panel { position: absolute; inset: 0; padding: 0; background: white; }
+  .qr-print-toolbar { display: none; }
+  .qr-card-grid { grid-template-columns: repeat(3, 1fr); gap: 8mm; }
+  .athlete-qr-card { break-inside: avoid; box-shadow: none; }
 }
