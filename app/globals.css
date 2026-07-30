@@ -1101,6 +1101,66 @@ body { font-size: 15px; color: var(--ink); -webkit-font-smoothing: antialiased; 
 .whatsapp-connector-copy h2 { font-size: 17px; }
 .whatsapp-connector-copy p, .whatsapp-connector-actions > small { font-size: 11px; }
 
+/* Chamada 2026 — legível, compacta e coerente com os demais modais */
+.attendance-panel { width: min(900px, 100%); }
+.attendance-panel-header { min-height: 96px; padding: 21px 32px 16px; }
+.attendance-panel-header h2 { font-size: 28px; }
+.attendance-panel-header p { margin-top: 6px; font-size: 13px; }
+.attendance-toolbar { min-height: 76px; padding: 10px 32px; }
+.attendance-toolbar label { color: #42574e; font-size: 12px; }
+.attendance-toolbar input {
+  width: 170px; height: 42px; margin-top: 5px; padding: 0 12px;
+  border-radius: 10px; font-size: 13px;
+}
+.attendance-toolbar > div { gap: 18px; }
+.attendance-toolbar > div span { font-size: 11px; }
+.attendance-toolbar > div span b { margin-right: 3px; font-size: 18px; }
+.attendance-toolbar em { padding: 6px 10px; border-radius: 12px; font-size: 10px; }
+.attendance-roster { min-height: 205px; max-height: 260px; padding: 6px 26px; }
+.attendance-person {
+  min-height: 66px; padding: 8px 6px;
+  grid-template-columns: 40px 38px minmax(0, 1fr) minmax(210px, 250px); gap: 12px;
+}
+.attendance-person > button { width: 38px; height: 38px; border-radius: 11px; font-size: 16px; }
+.attendance-person > div strong { font-size: 13px; }
+.attendance-person > div small { font-size: 10px; }
+.attendance-person > input { height: 42px; padding: 0 12px; border-radius: 10px; font-size: 12px; }
+.attendance-footer { min-height: 70px; padding: 12px 32px; gap: 11px; }
+.attendance-footer .filter-button { min-height: 42px; padding-inline: 16px; font-size: 12px; }
+
+/* Planejamento compacto; somente exercícios acima do terceiro rolam */
+.training-modal { width: min(980px, 100%); max-height: calc(100vh - 24px); }
+.training-modal > header { min-height: 78px; padding: 14px 28px 10px; }
+.training-modal form { padding: 10px 28px 7px; overflow: hidden; }
+.training-modal label { margin-bottom: 7px; }
+.training-modal input, .training-modal select { height: 38px; margin-top: 4px; }
+.training-modal textarea { min-height: 40px; max-height: 40px; margin-top: 4px; padding: 7px 12px; resize: none; }
+.training-modal .form-row { gap: 14px; }
+.drill-editor { margin-bottom: 7px; border-radius: 12px; }
+.drill-editor > div:first-child { min-height: 40px; padding: 7px 12px; }
+.drill-editor > div:first-child strong { font-size: 11px; }
+.drill-editor > div:first-child button { font-size: 10px; }
+.drill-editor > .drill-editor-list {
+  display: block;
+  min-height: 0;
+  max-height: 138px;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  background: #fff;
+}
+.drill-editor-list section {
+  min-height: 45px; padding: 5px 10px;
+  display: grid; grid-template-columns: 30px 1.2fr 1fr 88px 32px;
+  gap: 9px; align-items: center; border-top: 1px solid var(--line);
+}
+.drill-editor-list section > b { color: var(--green); font-size: 10px; }
+.drill-editor-list section input { height: 34px; margin: 0; font-size: 12px; }
+.drill-editor-list section button { height: 28px; border: 0; border-radius: 8px; background: #fff0ed; color: #bd5b53; }
+.training-modal .primary-button.full { min-height: 38px; margin-top: 3px; }
+
 @keyframes fade { from { opacity: 0; } } @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
 @keyframes pulse { from { opacity: .45; } to { opacity: 1; } }
 
