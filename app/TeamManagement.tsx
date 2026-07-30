@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { AthleteRecord } from "./AthleteProfileModal";
+import type { CategoryRecord } from "./CategoryManagerModal";
 
 export type TeamRecord = {
   id: string;
@@ -21,6 +22,7 @@ export type TeamRecord = {
 export function TeamModal({
   team,
   athletes,
+  categories,
   onClose,
   onSaved,
   onArchived,
@@ -28,6 +30,7 @@ export function TeamModal({
 }: {
   team: TeamRecord | null;
   athletes: AthleteRecord[];
+  categories: CategoryRecord[];
   onClose: () => void;
   onSaved: (team: TeamRecord) => void;
   onArchived: (teamId: string) => void;
@@ -35,7 +38,9 @@ export function TeamModal({
 }) {
   const [saving, setSaving] = useState(false);
   const [archiving, setArchiving] = useState(false);
-  const [category, setCategory] = useState(team?.category ?? "Sub-11");
+  const [category, setCategory] = useState(
+    team?.category ?? categories[0]?.name ?? "",
+  );
   const [selectedAthletes, setSelectedAthletes] = useState<Set<string>>(
     new Set(team?.athleteIds ?? []),
   );
@@ -139,7 +144,20 @@ export function TeamModal({
         </header>
         <form className="team-form" onSubmit={saveTeam}>
           <label>Nome da turma<input name="name" defaultValue={team?.name ?? "Turma principal"} required /></label>
-          <label>Categoria<select name="category" value={category} onChange={(event) => changeCategory(event.target.value)}><option>Sub-7</option><option>Sub-9</option><option>Sub-11</option><option>Sub-13</option><option>Sub-15</option><option>Sub-17</option></select></label>
+          <label>
+            Categoria
+            <select
+              name="category"
+              value={category}
+              onChange={(event) => changeCategory(event.target.value)}
+            >
+              {categories.map((item) => (
+                <option key={item.id} value={item.name}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="wide">Professor responsável<input name="coachName" defaultValue={team?.coachName ?? ""} placeholder="Ex.: Prof. Diego" required /></label>
           <div className="wide">
             <span className="field-label">Dias de treino</span>

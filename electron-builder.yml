@@ -8,13 +8,11 @@ directories:
   output: release
 files:
   - app/**/*
-  - build/**/*
   - db/**/*
   - desktop/**/*
   - drizzle/**/*
   - public/**/*
   - worker/**/*
-  - .openai/hosting.json
   - drizzle.config.ts
   - next.config.ts
   - package.json

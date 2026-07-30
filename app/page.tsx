@@ -15,6 +15,10 @@ import { EvaluationManagement } from "./EvaluationManagement";
 import { TrainingManagement } from "./TrainingManagement";
 import { CommunicationManagement } from "./CommunicationManagement";
 import { CheckInManagement } from "./CheckInManagement";
+import {
+  CategoryManagerModal,
+  type CategoryRecord,
+} from "./CategoryManagerModal";
 
 type Section =
   | "Visão geral"
@@ -58,6 +62,8 @@ export default function Home() {
   const [teams, setTeams] = useState<TeamRecord[]>([]);
   const [search, setSearch] = useState("");
   const [showAthleteModal, setShowAthleteModal] = useState(false);
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
+  const [categories, setCategories] = useState<CategoryRecord[]>([]);
   const [selectedAthlete, setSelectedAthlete] = useState<Athlete | null>(null);
   const [teamModalOpen, setTeamModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamRecord | null>(null);
@@ -127,6 +133,28 @@ export default function Home() {
     }
   }, []);
 
+  const loadCategories = useCallback(async () => {
+    try {
+      const response = await fetch("/api/categories", {
+        headers: { Accept: "application/json" },
+      });
+      const payload = (await response.json()) as {
+        categories?: CategoryRecord[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(payload.error || "Não foi possível carregar as categorias.");
+      }
+      setCategories(payload.categories ?? []);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível carregar as categorias.",
+      );
+    }
+  }, []);
+
   const loadFinanceOverview = useCallback(async () => {
     try {
       const month = new Date().toISOString().slice(0, 7);
@@ -144,10 +172,11 @@ export default function Home() {
     const timeout = window.setTimeout(() => {
       void loadAthletes();
       void loadTeams();
+      void loadCategories();
       void loadFinanceOverview();
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [loadAthletes, loadFinanceOverview, loadTeams]);
+  }, [loadAthletes, loadCategories, loadFinanceOverview, loadTeams]);
 
   const filteredAthletes = useMemo(
     () =>
@@ -279,7 +308,13 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="page-content">
+        <div
+          className={
+            section === "Visão geral"
+              ? "page-content dashboard-page"
+              : "page-content"
+          }
+        >
           {loadError && (
             <div className="load-alert" role="alert">
               <span>!</span>
@@ -361,11 +396,31 @@ export default function Home() {
               <label>Nome completo<input name="name" required placeholder="Ex.: Matheus Oliveira" autoFocus /></label>
               <div className="form-row">
                 <label>Idade<input name="age" type="number" min="4" max="18" required placeholder="10" /></label>
-                <label>Categoria<select name="category" defaultValue="Sub-11"><option>Sub-7</option><option>Sub-9</option><option>Sub-11</option><option>Sub-13</option><option>Sub-15</option><option>Sub-17</option></select></label>
+                <label>
+                  <span className="category-label">
+                    Categoria
+                    <button
+                      type="button"
+                      className="category-settings-button"
+                      onClick={() => setCategoryManagerOpen(true)}
+                      aria-label="Configurar categorias"
+                      title="Configurar categorias"
+                    >
+                      ⚙
+                    </button>
+                  </span>
+                  <select name="category" defaultValue={categories[0]?.name}>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.name}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
               <label>Responsável<input name="guardian" required placeholder="Nome do responsável" /></label>
               <label>Telefone do responsável<input name="guardianPhone" type="tel" placeholder="(11) 99999-9999" /></label>
-              <button className="primary-button full" type="submit" disabled={savingAthlete}>
+              <button className="primary-button full" type="submit" disabled={savingAthlete || categories.length === 0}>
                 {savingAthlete ? "Salvando..." : "Cadastrar e salvar atleta"}
               </button>
             </form>
@@ -377,6 +432,7 @@ export default function Home() {
         <AthleteProfileModal
           key={selectedAthlete.id}
           athlete={selectedAthlete}
+          categories={categories}
           onClose={() => setSelectedAthlete(null)}
           onSaved={(updated) => {
             setAthletes((current) =>
@@ -400,6 +456,7 @@ export default function Home() {
           key={editingTeam?.id ?? "new-team"}
           team={editingTeam}
           athletes={athletes}
+          categories={categories}
           onClose={() => {
             setTeamModalOpen(false);
             setEditingTeam(null);
@@ -421,6 +478,19 @@ export default function Home() {
               current.filter((team) => team.id !== teamId),
             )
           }
+          notify={notify}
+        />
+      )}
+
+      {categoryManagerOpen && (
+        <CategoryManagerModal
+          categories={categories}
+          onClose={() => setCategoryManagerOpen(false)}
+          onChanged={(nextCategories) => {
+            setCategories(nextCategories);
+            void loadAthletes();
+            void loadTeams();
+          }}
           notify={notify}
         />
       )}
@@ -482,12 +552,19 @@ function Dashboard({
       currency: "BRL",
       maximumFractionDigits: 0,
     }).format(cents / 100);
+  const todayLabel = new Intl.DateTimeFormat("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+  })
+    .format(new Date())
+    .toLocaleUpperCase("pt-BR");
 
   return (
-    <>
+    <div className="dashboard-screen">
       <div className="welcome-row">
         <div>
-          <span className="eyebrow">QUARTA-FEIRA, 29 DE JULHO</span>
+          <span className="eyebrow">{todayLabel}</span>
           <h1>Olá, Bruno! <span>👋</span></h1>
           <p>Veja como está a operação da sua escolinha hoje.</p>
         </div>
@@ -505,7 +582,7 @@ function Dashboard({
         <div className="card schedule-card">
           <CardHeader title="Turmas ativas" subtitle={`${teams.length} turmas · ${totalTeamAthletes} matrículas`} action="Ver turmas" onAction={() => setSection("Turmas")} />
           <div className="schedule-list">
-            {teams.slice(0, 4).map((item) => (
+            {teams.slice(0, 3).map((item) => (
               <div className="schedule-item" key={item.id}>
                 <div className="time"><strong>{item.startTime}</strong><small>{item.scheduleDays.join(" · ")}</small></div>
                 <span className={`timeline-dot ${item.color}`} />
@@ -539,7 +616,7 @@ function Dashboard({
           <CardHeader title="Atletas em destaque" subtitle="Frequência e evolução no mês" action="Ver todos" onAction={() => setSection("Atletas")} />
           <div className="athlete-table">
             <div className="table-row table-head"><span>ATLETA</span><span>CATEGORIA</span><span>FREQUÊNCIA</span><span>FINANCEIRO</span></div>
-            {athletes.slice(0, 4).map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} onOpen={onOpenAthlete} />)}
+            {athletes.slice(0, 3).map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} onOpen={onOpenAthlete} />)}
             {athletes.length === 0 && <EmptyAthletes compact />}
           </div>
         </div>
@@ -552,7 +629,7 @@ function Dashboard({
           <div className="all-good"><span>✓</span><p><strong>Documentação em dia</strong><small>Nenhuma pendência cadastral</small></p></div>
         </div>
       </section>
-    </>
+    </div>
   );
 }
 

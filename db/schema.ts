@@ -30,6 +30,31 @@ export const organizationMembers = sqliteTable(
   ],
 );
 
+export const sportsCategories = sqliteTable(
+  "sports_categories",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("sports_categories_org_name_unique").on(
+      table.organizationId,
+      table.name,
+    ),
+    index("sports_categories_org_order_idx").on(
+      table.organizationId,
+      table.sortOrder,
+    ),
+  ],
+);
+
 export const athletes = sqliteTable(
   "athletes",
   {

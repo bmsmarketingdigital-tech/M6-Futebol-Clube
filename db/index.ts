@@ -35,6 +35,15 @@ export function ensureDatabase() {
           role TEXT NOT NULL DEFAULT 'owner',
           created_at INTEGER NOT NULL
         )`),
+        d1.prepare(`CREATE TABLE IF NOT EXISTS sports_categories (
+          id TEXT PRIMARY KEY NOT NULL,
+          organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          active INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )`),
         d1.prepare(`CREATE TABLE IF NOT EXISTS athletes (
           id TEXT PRIMARY KEY NOT NULL,
           organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -235,6 +244,12 @@ export function ensureDatabase() {
         ),
         d1.prepare(
           "CREATE INDEX IF NOT EXISTS organization_members_email_idx ON organization_members (email)",
+        ),
+        d1.prepare(
+          "CREATE UNIQUE INDEX IF NOT EXISTS sports_categories_org_name_unique ON sports_categories (organization_id, name)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS sports_categories_org_order_idx ON sports_categories (organization_id, sort_order)",
         ),
         d1.prepare(
           "CREATE INDEX IF NOT EXISTS athletes_organization_idx ON athletes (organization_id)",

@@ -499,6 +499,209 @@ button { cursor: pointer; }
 .checkin-history .notification-result { margin-bottom: 3px; }
 .checkin-empty { padding: 45px 20px; color: var(--muted); font-size: 9px; text-align: center; }
 
+/* Desktop: escala tipográfica legível e composição compacta */
+body {
+  font-family: var(--font-geist-sans), "Segoe UI Variable", "Segoe UI", sans-serif;
+  font-size: 14px;
+  letter-spacing: -.01em;
+  overflow: hidden;
+}
+.app-shell, .workspace { height: 100vh; min-height: 0; }
+.workspace { display: flex; flex-direction: column; overflow: hidden; }
+.topbar { flex: 0 0 64px; height: 64px; }
+.page-content {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px 26px 32px;
+}
+.search input, .welcome-row p, .section-heading p { font-size: 13px; }
+.sync-status, .metric-card span, .chart-head small, .schedule-info small,
+.attention-card p small, .list-module p small, .table-head,
+.profile-section-title small, .profile-header p, .team-modal-header p,
+.attendance-panel-header p, .communication-copy p, .communication-copy > div small {
+  font-size: 10px;
+}
+.eyebrow, .card-header p, .card-header button, .category-tag,
+.attendance-cell strong, .status-tag, .schedule-info strong,
+.schedule-item .time small, .finance-summary small, .athlete-name > span small,
+.empty-athletes small, .class-top small, .capacity, .class-actions button,
+.module-toolbar, .filter-button, .field-label, .profile-form label,
+.team-form > label, .evaluation-modal label, .training-modal label,
+.communication-modal label, .scanner-settings label {
+  font-size: 11px;
+}
+.card-header h2, .metric-card small, .athlete-name > span strong,
+.attention-card p strong, .list-module p strong, .profile-section-title strong {
+  font-size: 12px;
+}
+
+/* Dashboard fechado em uma única janela, sem rolagem */
+.dashboard-page {
+  height: calc(100vh - 64px);
+  overflow: hidden;
+  padding: 16px 22px;
+}
+.dashboard-screen {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(205px, 1.25fr) minmax(170px, .9fr);
+  gap: 11px;
+}
+.dashboard-screen .welcome-row,
+.dashboard-screen .metrics-grid,
+.dashboard-screen .dashboard-grid,
+.dashboard-screen .lower-grid { min-height: 0; margin: 0; }
+.dashboard-screen .welcome-row { align-items: center; }
+.dashboard-screen .welcome-row h1 { font-size: 25px; }
+.dashboard-screen .welcome-row p { margin-top: 3px; }
+.dashboard-screen .eyebrow { margin-bottom: 6px; }
+.dashboard-screen .metrics-grid { gap: 11px; }
+.dashboard-screen .metric-card { min-height: 78px; padding: 12px 14px; gap: 11px; }
+.dashboard-screen .metric-icon { width: 36px; height: 36px; font-size: 16px; }
+.dashboard-screen .metric-card strong { font-size: 20px; }
+.dashboard-screen .metric-card small { margin-top: 3px; }
+.dashboard-screen .dashboard-grid,
+.dashboard-screen .lower-grid { gap: 11px; }
+.dashboard-screen .card { height: 100%; min-height: 0; overflow: hidden; }
+.dashboard-screen .card-header { min-height: 50px; padding: 12px 17px 9px; }
+.dashboard-screen .schedule-list { padding: 3px 17px 7px; }
+.dashboard-screen .schedule-item { min-height: 46px; }
+.dashboard-screen .agenda-empty { min-height: 120px; }
+.dashboard-screen .chart-head { padding: 10px 17px 0; }
+.dashboard-screen .bar-chart { height: 66px; margin: 9px 17px 3px; }
+.dashboard-screen .chart-labels { margin: 0 17px; font-size: 9px; }
+.dashboard-screen .finance-summary { margin: 8px 17px 0; padding-top: 7px; }
+.dashboard-screen .athlete-table { padding: 0 17px 7px; }
+.dashboard-screen .table-row { min-height: 38px; }
+.dashboard-screen .table-head { min-height: 28px; }
+.dashboard-screen .attention-card { padding-bottom: 4px; }
+.dashboard-screen .attention-card > button { min-height: 38px; }
+.dashboard-screen .all-good { min-height: 36px; margin-top: 4px; }
+
+/* Cadastro de atleta e categorias */
+.modal { width: min(500px, 100%); padding: 26px 28px; overflow: hidden; }
+.modal > p { font-size: 12px; margin-bottom: 17px; }
+.modal form label { font-size: 11px; margin-bottom: 10px; }
+.modal input, .modal select { height: 40px; font-size: 13px; }
+.category-label { display: flex; align-items: center; justify-content: space-between; }
+.category-settings-button {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d8e3dd;
+  border-radius: 8px;
+  background: #f2f8f5;
+  color: var(--green);
+  font-size: 14px;
+  line-height: 1;
+}
+.category-settings-button:hover { border-color: #83c5a5; background: var(--green-soft); }
+.category-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(7, 27, 20, .62);
+  backdrop-filter: blur(7px);
+}
+.category-modal {
+  width: min(560px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: hidden;
+  border-radius: 18px;
+  background: white;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, .3);
+  animation: rise .2s ease;
+}
+.category-modal > header {
+  min-height: 92px;
+  padding: 22px 24px 17px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+}
+.category-modal header h2 { margin: 0; font-size: 21px; letter-spacing: -.45px; }
+.category-modal header p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
+.category-modal header .modal-close { position: static; flex: 0 0 auto; }
+.category-create {
+  padding: 15px 24px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fbf9;
+}
+.category-create label { color: #4f6259; font-size: 11px; font-weight: 800; }
+.category-create input, .category-row input {
+  width: 100%;
+  height: 38px;
+  margin-top: 6px;
+  padding: 0 11px;
+  border: 1px solid #dbe4df;
+  border-radius: 9px;
+  background: white;
+  color: var(--ink);
+  outline: none;
+  font-size: 13px;
+}
+.category-create input:focus, .category-row input:focus {
+  border-color: #69bd98;
+  box-shadow: 0 0 0 3px #e3f4ec;
+}
+.category-list { max-height: 350px; overflow-y: auto; padding: 8px 24px 16px; }
+.category-row {
+  min-height: 53px;
+  display: grid;
+  grid-template-columns: 1fr 62px 58px;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #edf1ef;
+}
+.category-row input { margin: 0; }
+.category-row button {
+  height: 32px;
+  border-radius: 8px;
+  background: white;
+  font-size: 10px;
+  font-weight: 800;
+}
+.category-save { border: 1px solid #c9e1d5; color: var(--green); }
+.category-save:disabled { opacity: .4; cursor: default; }
+.category-delete { border: 1px solid #efd6d2; color: #b4534b; }
+
+/* Prontuário completo sem barra de rolagem na janela padrão */
+.profile-modal { width: min(900px, 100%); max-height: none; }
+.profile-header {
+  min-height: 84px;
+  padding: 16px 22px 13px;
+  grid-template-columns: 50px 1fr auto;
+}
+.profile-avatar { width: 47px; height: 47px; border-radius: 13px; }
+.profile-header h2 { font-size: 21px; }
+.profile-tabs { min-height: 43px; height: 43px; padding: 0 22px; }
+.profile-tabs button { height: 43px; font-size: 11px; }
+.profile-form {
+  padding: 14px 22px 16px;
+  overflow: visible;
+  column-gap: 14px;
+  row-gap: 9px;
+}
+.profile-form label { font-size: 11px; }
+.profile-form input, .profile-form select { height: 36px; margin-top: 4px; font-size: 12px; }
+.profile-form textarea { min-height: 58px; margin-top: 4px; font-size: 12px; }
+.profile-section-title { padding-bottom: 1px; }
+.profile-section-title:not(:first-child) { margin-top: 2px; padding-top: 10px; }
+.profile-actions { margin-top: 1px; padding-top: 11px; }
+.documents-panel { overflow: hidden; padding: 16px 22px 20px; }
+
 @keyframes fade { from { opacity: 0; } } @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
 @keyframes pulse { from { opacity: .45; } to { opacity: 1; } }
 

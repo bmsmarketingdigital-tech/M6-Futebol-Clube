@@ -2,18 +2,10 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { athletes } from "../../../../db/schema";
 import { getApiContext } from "../../api-auth";
+import { isValidCategory } from "../../categories/category-utils";
 import { isValidCpfCnpj, onlyDigits } from "../document-utils";
 
 export const dynamic = "force-dynamic";
-
-const categories = new Set([
-  "Sub-7",
-  "Sub-9",
-  "Sub-11",
-  "Sub-13",
-  "Sub-15",
-  "Sub-17",
-]);
 
 function toDto(row: typeof athletes.$inferSelect) {
   const age = row.birthDate
@@ -94,7 +86,12 @@ export async function PATCH(
         { status: 400 },
       );
     }
-    if (!categories.has(category)) {
+    if (
+      !(await isValidCategory(
+        context.membership.organizationId,
+        category,
+      ))
+    ) {
       return Response.json(
         { error: "Selecione uma categoria válida." },
         { status: 400 },

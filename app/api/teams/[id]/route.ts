@@ -2,6 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../../db";
 import { athletes, teamAthletes, teams } from "../../../../db/schema";
 import { getApiContext } from "../../api-auth";
+import { isValidCategory } from "../../categories/category-utils";
 import {
   normalizeTeamPayload,
   teamToDto,
@@ -28,6 +29,17 @@ export async function PATCH(
       return Response.json({ error: normalized.error }, { status: 400 });
     }
     const value = normalized.value;
+    if (
+      !(await isValidCategory(
+        context.membership.organizationId,
+        value.category,
+      ))
+    ) {
+      return Response.json(
+        { error: "Selecione uma categoria válida." },
+        { status: 400 },
+      );
+    }
     const db = getDb();
 
     if (value.athleteIds.length > 0) {

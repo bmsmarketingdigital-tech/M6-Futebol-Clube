@@ -53,18 +53,13 @@ if not exist "node_modules\" (
     )
 )
 
-echo [2/2] Iniciando o BaseForte...
-echo.
-echo O sistema sera aberto em:
-echo http://localhost:3000
+echo [2/2] Abrindo o aplicativo BaseForte...
 echo.
 echo IMPORTANTE: mantenha esta janela aberta enquanto estiver usando.
 echo Para encerrar, pressione Ctrl+C e confirme com S.
 echo.
 
-start "" /min powershell.exe -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 4; Start-Process 'http://localhost:3000'"
-
-call npm.cmd run dev -- --host 127.0.0.1 --port 3000
+call npm.cmd run desktop
 
 echo.
 echo O BaseForte foi encerrado.

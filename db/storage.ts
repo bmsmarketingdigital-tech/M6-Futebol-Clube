@@ -4,7 +4,7 @@ export function getFilesBucket(): R2Bucket {
   const runtimeEnv = env as typeof env & { FILES?: R2Bucket };
   if (!runtimeEnv.FILES) {
     throw new Error(
-      "Cloudflare R2 binding `FILES` is unavailable. Set the `r2` field in .openai/hosting.json to `FILES`.",
+      "O armazenamento local de arquivos está indisponível. Reinicie o BaseForte e tente novamente.",
     );
   }
   return runtimeEnv.FILES;

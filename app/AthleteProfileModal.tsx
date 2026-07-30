@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import type { CategoryRecord } from "./CategoryManagerModal";
 
 export type AthleteRecord = {
   id: string;
@@ -39,12 +40,14 @@ type Tab = "cadastro" | "saude" | "documentos";
 
 export function AthleteProfileModal({
   athlete,
+  categories,
   onClose,
   onSaved,
   onArchived,
   notify,
 }: {
   athlete: AthleteRecord;
+  categories: CategoryRecord[];
   onClose: () => void;
   onSaved: (athlete: AthleteRecord) => void;
   onArchived: (athleteId: string) => void;
@@ -245,7 +248,16 @@ export function AthleteProfileModal({
                 <div className="profile-section-title"><strong>Dados do atleta</strong><small>Informações utilizadas em turmas, chamadas e relatórios.</small></div>
                 <label className="wide">Nome completo<input name="name" defaultValue={athlete.name} required /></label>
                 <label>Data de nascimento<input name="birthDate" type="date" defaultValue={athlete.birthDate ?? ""} /></label>
-                <label>Categoria<select name="category" defaultValue={athlete.category}><option>Sub-7</option><option>Sub-9</option><option>Sub-11</option><option>Sub-13</option><option>Sub-15</option><option>Sub-17</option></select></label>
+                <label>
+                  Categoria
+                  <select name="category" defaultValue={athlete.category}>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.name}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <div className="profile-section-title wide"><strong>Responsável principal</strong><small>Contato para cobranças, comunicados e emergências.</small></div>
                 <label>Nome do responsável<input name="guardianName" defaultValue={athlete.guardianName ?? ""} required /></label>
                 <label>CPF ou CNPJ do responsável<input name="guardianDocument" inputMode="numeric" defaultValue={athlete.guardianDocument ?? ""} placeholder="Somente números" /></label>

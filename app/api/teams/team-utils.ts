@@ -12,14 +12,6 @@ export type TeamPayload = {
   athleteIds?: string[];
 };
 
-const categories = new Set([
-  "Sub-7",
-  "Sub-9",
-  "Sub-11",
-  "Sub-13",
-  "Sub-15",
-  "Sub-17",
-]);
 const weekdays = new Set([
   "Seg",
   "Ter",
@@ -55,7 +47,7 @@ export function normalizeTeamPayload(payload: TeamPayload) {
   if (name.length < 2 || name.length > 80) {
     return { error: "Informe um nome válido para a turma." } as const;
   }
-  if (!categories.has(category)) {
+  if (category.length < 2 || category.length > 32) {
     return { error: "Selecione uma categoria válida." } as const;
   }
   if (coachName.length < 3 || coachName.length > 100) {
