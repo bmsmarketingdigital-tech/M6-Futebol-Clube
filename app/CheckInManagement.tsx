@@ -47,6 +47,33 @@ type ScanResult = {
 
 type Tab = "scanner" | "cards" | "history";
 
+type WhatsAppStatus = {
+  configured: boolean;
+  status:
+    | "unavailable"
+    | "disconnected"
+    | "starting"
+    | "qr"
+    | "authenticated"
+    | "connected"
+    | "error";
+  qrCodeDataUrl: string;
+  connectedPhone: string;
+  lastError: string;
+  lastMessage: string;
+  updatedAt: string | null;
+};
+
+const unavailableWhatsApp: WhatsAppStatus = {
+  configured: false,
+  status: "unavailable",
+  qrCodeDataUrl: "",
+  connectedPhone: "",
+  lastError: "",
+  lastMessage: "Disponível somente no aplicativo Windows.",
+  updatedAt: null,
+};
+
 function localDate() {
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -86,7 +113,9 @@ export function CheckInManagement({
   const [registering, setRegistering] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [lastResult, setLastResult] = useState<ScanResult | null>(null);
-  const [whatsappConfigured, setWhatsappConfigured] = useState(false);
+  const [whatsapp, setWhatsapp] =
+    useState<WhatsAppStatus>(unavailableWhatsApp);
+  const [controllingWhatsApp, setControllingWhatsApp] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const processingRef = useRef(false);
 
@@ -96,14 +125,14 @@ export function CheckInManagement({
       const response = await fetch("/api/check-in");
       const payload = (await response.json()) as {
         checkIns?: CheckIn[];
-        whatsapp?: { configured?: boolean };
+        whatsapp?: WhatsAppStatus;
         error?: string;
       };
       if (!response.ok) {
         throw new Error(payload.error || "Falha ao carregar entradas.");
       }
       setHistory(payload.checkIns ?? []);
-      setWhatsappConfigured(Boolean(payload.whatsapp?.configured));
+      setWhatsapp(payload.whatsapp ?? unavailableWhatsApp);
     } catch (error) {
       notify(
         error instanceof Error
@@ -119,6 +148,28 @@ export function CheckInManagement({
     const timeout = window.setTimeout(() => void loadHistory(), 0);
     return () => window.clearTimeout(timeout);
   }, [loadHistory]);
+
+  const loadWhatsAppStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/check-in/whatsapp");
+      const payload = (await response.json()) as {
+        whatsapp?: WhatsAppStatus;
+        error?: string;
+      };
+      if (response.ok && payload.whatsapp) setWhatsapp(payload.whatsapp);
+    } catch {
+      // A tela mantém o último estado conhecido durante uma reconexão curta.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!["starting", "qr", "authenticated"].includes(whatsapp.status)) return;
+    const interval = window.setInterval(
+      () => void loadWhatsAppStatus(),
+      1800,
+    );
+    return () => window.clearInterval(interval);
+  }, [loadWhatsAppStatus, whatsapp.status]);
 
   useEffect(() => {
     if (teamId || !teams[0]) return;
@@ -291,6 +342,38 @@ export function CheckInManagement({
     }
   }
 
+  async function controlWhatsApp(action: "connect" | "disconnect") {
+    setControllingWhatsApp(true);
+    try {
+      const response = await fetch("/api/check-in/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const payload = (await response.json()) as {
+        whatsapp?: WhatsAppStatus;
+        error?: string;
+      };
+      if (!response.ok || !payload.whatsapp) {
+        throw new Error(payload.error || "Falha ao controlar o WhatsApp.");
+      }
+      setWhatsapp(payload.whatsapp);
+      notify(
+        action === "connect"
+          ? "Conector iniciado. Aguarde o QR Code."
+          : "WhatsApp desconectado deste computador.",
+      );
+    } catch (error) {
+      notify(
+        error instanceof Error
+          ? error.message
+          : "Falha ao controlar o WhatsApp.",
+      );
+    } finally {
+      setControllingWhatsApp(false);
+    }
+  }
+
   async function submitManual(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -317,13 +400,15 @@ export function CheckInManagement({
           <p>Registre a presença pela câmera e avise o responsável automaticamente.</p>
         </div>
         <div className="checkin-heading-actions">
-          <span className={whatsappConfigured ? "bridge-status connected" : "bridge-status"}>
+          <span className={whatsapp.status === "connected" ? "bridge-status connected" : "bridge-status"}>
             <i />
-            {whatsappConfigured
-              ? "WhatsApp conectado"
-              : "WhatsApp será conectado no aplicativo Windows"}
+            {whatsapp.status === "connected"
+              ? `WhatsApp conectado${whatsapp.connectedPhone ? ` · ${whatsapp.connectedPhone}` : ""}`
+              : whatsapp.configured
+                ? "WhatsApp desconectado"
+                : "Abra pelo aplicativo Windows"}
           </span>
-          {whatsappConfigured && pendingCount > 0 && (
+          {whatsapp.status === "connected" && pendingCount > 0 && (
             <button className="queue-button" onClick={() => void retryNotifications()} disabled={retrying}>
               {retrying ? "Enviando fila..." : `Enviar fila (${pendingCount})`}
             </button>
@@ -347,6 +432,46 @@ export function CheckInManagement({
           <div className="metric-icon orange">↗</div>
           <div><span>NA FILA</span><strong>{pendingCount}</strong><small>aguardando o aplicativo</small></div>
         </article>
+      </section>
+
+      <section className={`card whatsapp-connector-card ${whatsapp.status}`}>
+        <div className="whatsapp-connector-copy">
+          <span className="whatsapp-logo">◌</span>
+          <div>
+            <span className="eyebrow">CONECTOR LOCAL</span>
+            <h2>WhatsApp da escolinha</h2>
+            <p>{whatsapp.lastError || whatsapp.lastMessage}</p>
+          </div>
+        </div>
+        {whatsapp.status === "qr" && whatsapp.qrCodeDataUrl && (
+          <div className="whatsapp-qr">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={whatsapp.qrCodeDataUrl} alt="QR Code para conectar o WhatsApp" />
+            <span><strong>Escaneie no WhatsApp</strong><small>Aparelhos conectados → Conectar aparelho</small></span>
+          </div>
+        )}
+        <div className="whatsapp-connector-actions">
+          {!whatsapp.configured && (
+            <small>Esta função fica disponível ao abrir o BaseForte instalado no PC.</small>
+          )}
+          {whatsapp.configured &&
+            ["disconnected", "error"].includes(whatsapp.status) && (
+              <button className="primary-button" onClick={() => void controlWhatsApp("connect")} disabled={controllingWhatsApp}>
+                {controllingWhatsApp ? "Iniciando..." : "Conectar WhatsApp"}
+              </button>
+            )}
+          {["starting", "authenticated"].includes(whatsapp.status) && (
+            <span className="whatsapp-waiting"><i /> Preparando conexão...</span>
+          )}
+          {whatsapp.status === "connected" && (
+            <>
+              <span className="whatsapp-ready">✓ Pronto para enviar</span>
+              <button className="disconnect-button" onClick={() => void controlWhatsApp("disconnect")} disabled={controllingWhatsApp}>
+                Desconectar
+              </button>
+            </>
+          )}
+        </div>
       </section>
 
       <section className="card checkin-panel">

@@ -7,6 +7,7 @@ const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
 
 const { d1, r2 } = hostingConfig;
+const desktopStatePath = process.env.BASEFORTE_STATE_DIR;
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
@@ -31,6 +32,10 @@ const localBindingConfig = {
         },
       ]
     : [],
+  vars: {
+    WHATSAPP_BRIDGE_URL: process.env.WHATSAPP_BRIDGE_URL ?? "",
+    WHATSAPP_BRIDGE_TOKEN: process.env.WHATSAPP_BRIDGE_TOKEN ?? "",
+  },
 };
 
 export default defineConfig(async () => {
@@ -44,6 +49,7 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    cacheDir: process.env.BASEFORTE_CACHE_DIR,
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,
@@ -51,6 +57,9 @@ export default defineConfig(async () => {
       vinext(),
       sites(),
       cloudflare({
+        persistState: desktopStatePath
+          ? { path: desktopStatePath }
+          : undefined,
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         config: localBindingConfig,
       }),

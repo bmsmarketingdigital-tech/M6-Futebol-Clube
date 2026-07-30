@@ -11,7 +11,7 @@ import {
 import { getApiContext } from "../api-auth";
 import {
   sendWhatsAppMessage,
-  whatsappBridgeConfigured,
+  getWhatsAppBridgeStatus,
 } from "./whatsapp-bridge";
 
 export const dynamic = "force-dynamic";
@@ -76,10 +76,7 @@ export async function GET(request: Request) {
         ...row,
         scannedAt: row.scannedAt.toISOString(),
       })),
-      whatsapp: {
-        configured: whatsappBridgeConfigured(),
-        mode: whatsappBridgeConfigured() ? "connected-bridge" : "desktop-queue",
-      },
+      whatsapp: await getWhatsAppBridgeStatus(),
     });
   } catch (error) {
     console.error("Failed to list check-ins", error);

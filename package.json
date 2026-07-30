@@ -1,6 +1,9 @@
 {
-  "name": "site-creator-vinext-starter",
-  "version": "0.1.0",
+  "name": "baseforte-gestao-esportiva",
+  "version": "1.0.0",
+  "description": "Sistema profissional para gestão de escolinhas de futebol",
+  "author": "Bruno Martin",
+  "main": "desktop/main.cjs",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -11,34 +14,41 @@
     "start": "vinext start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "desktop": "electron .",
+    "desktop:dir": "npm run build && electron-builder --dir --win",
+    "desktop:build": "npm run build && electron-builder --win nsis"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
+    "@cloudflare/vite-plugin": "1.37.1",
+    "@tailwindcss/postcss": "4.2.1",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitejs/plugin-rsc": "0.5.26",
+    "express": "^5.2.1",
     "html5-qrcode": "^2.3.8",
     "next": "16.2.6",
     "qrcode": "^1.5.4",
     "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react-dom": "19.2.6",
+    "react-server-dom-webpack": "19.2.6",
+    "tailwindcss": "4.2.1",
+    "vinext": "0.0.50",
+    "vite": "8.0.13",
+    "whatsapp-web.js": "^1.34.7",
+    "wrangler": "4.92.0"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.37.1",
-    "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/qrcode": "^1.5.6",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "6.0.2",
-    "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
-    "react-server-dom-webpack": "19.2.6",
-    "tailwindcss": "4.2.1",
-    "typescript": "5.9.3",
-    "vinext": "0.0.50",
-    "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "typescript": "5.9.3"
   },
   "type": "module"
 }

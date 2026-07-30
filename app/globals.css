@@ -445,6 +445,15 @@ button { cursor: pointer; }
 .bridge-status.connected i { background: var(--green); box-shadow: 0 0 0 3px #cce9dc; }
 .queue-button { min-height: 36px; padding: 0 11px; border: 1px solid #cde4d8; border-radius: 9px; background: white; color: var(--green); font-size: 8px; font-weight: 800; }
 .checkin-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; margin-bottom: 15px; }
+.whatsapp-connector-card { min-height: 96px; margin-bottom: 15px; padding: 17px 20px; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 20px; border-left: 3px solid #d8e1dc; }
+.whatsapp-connector-card.connected { border-left-color: #25a86b; }.whatsapp-connector-card.qr { border-left-color: #e4a44f; }
+.whatsapp-connector-copy { display: flex; align-items: center; gap: 13px; }.whatsapp-logo { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; background: #e3f5eb; color: #15935c; font-size: 26px; }
+.whatsapp-connector-copy h2 { margin: 3px 0; font-size: 14px; }.whatsapp-connector-copy p { margin: 0; color: var(--muted); font-size: 8px; }
+.whatsapp-qr { display: flex; align-items: center; gap: 11px; }.whatsapp-qr img { width: 82px; height: 82px; padding: 3px; border: 1px solid #dfe6e2; border-radius: 8px; background: white; }
+.whatsapp-qr strong, .whatsapp-qr small { display: block; }.whatsapp-qr strong { font-size: 9px; }.whatsapp-qr small { max-width: 145px; margin-top: 4px; color: var(--muted); font-size: 7px; }
+.whatsapp-connector-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }.whatsapp-connector-actions > small { max-width: 230px; color: var(--muted); font-size: 8px; line-height: 1.45; text-align: right; }
+.whatsapp-waiting, .whatsapp-ready { display: inline-flex; align-items: center; gap: 7px; color: #9a692e; font-size: 8px; font-weight: 800; }.whatsapp-waiting i { width: 7px; height: 7px; border-radius: 50%; background: #e5a353; animation: pulse .8s infinite alternate; }.whatsapp-ready { color: var(--green); }
+.disconnect-button { min-height: 35px; padding: 0 10px; border: 1px solid #eed3cf; border-radius: 8px; background: white; color: #aa554d; font-size: 8px; font-weight: 800; }
 .checkin-panel { overflow: hidden; }
 .checkin-tabs { height: 54px; padding: 0 20px; display: flex; align-items: flex-end; gap: 22px; border-bottom: 1px solid var(--line); }
 .checkin-tabs button { height: 100%; padding: 0 2px; position: relative; border: 0; background: none; color: var(--muted); font-size: 9px; font-weight: 800; }
@@ -563,6 +572,7 @@ button { cursor: pointer; }
   .communication-metrics { grid-template-columns: 1fr; }
   .checkin-heading { display: block; }.checkin-heading-actions { margin-top: 14px; justify-content: flex-start; flex-wrap: wrap; }.checkin-heading .primary-button { width: auto; padding: 0 12px; font-size: 8px; }
   .checkin-metrics { grid-template-columns: 1fr; }
+  .whatsapp-connector-card { grid-template-columns: 1fr; align-items: flex-start; }.whatsapp-connector-actions { justify-content: flex-start; }.whatsapp-connector-actions > small { text-align: left; }
   .scanner-layout { min-height: 0; }.scanner-stage { min-height: 390px; padding: 16px; }.scanner-settings { padding: 21px; }
   .checkin-tabs { padding: 0 14px; gap: 16px; overflow-x: auto; }.checkin-tabs button { white-space: nowrap; }
   .drill-editor { overflow-x: auto; }.drill-editor section { min-width: 680px; }

@@ -1,0 +1,46 @@
+appId: br.com.baseforte.gestao
+productName: BaseForte
+copyright: Copyright © 2026 BaseForte
+asar: false
+npmRebuild: false
+electronDist: node_modules/electron/dist
+directories:
+  output: release
+files:
+  - app/**/*
+  - build/**/*
+  - db/**/*
+  - desktop/**/*
+  - drizzle/**/*
+  - public/**/*
+  - worker/**/*
+  - .openai/hosting.json
+  - drizzle.config.ts
+  - next.config.ts
+  - package.json
+  - package-lock.json
+  - postcss.config.mjs
+  - tsconfig.json
+  - vite.config.ts
+  - node_modules/**/*
+  - "!node_modules/.cache/**/*"
+  - "!node_modules/electron/dist/**/*"
+  - "!release/**/*"
+  - "!dist/**/*"
+  - "!tests/**/*"
+  - "!examples/**/*"
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: BaseForte-Setup-${version}.${ext}
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: BaseForte
+  deleteAppDataOnUninstall: false
