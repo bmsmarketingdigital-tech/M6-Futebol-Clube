@@ -1006,6 +1006,37 @@ body { font-size: 15px; color: var(--ink); -webkit-font-smoothing: antialiased; 
 .record-card { min-height: 108px; padding: 18px; }
 .record-card-copy strong { font-size: 13px; }
 .record-card-copy small, .record-open { font-size: 10px; }
+.record-picker-modal {
+  width: min(520px, 100%);
+  padding: 30px;
+  position: relative;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(6, 34, 24, .28);
+  animation: rise .25s ease;
+}
+.record-picker-modal h2 { margin: 7px 0 0; font-size: 28px; letter-spacing: -.8px; }
+.record-picker-modal > p { margin: 8px 0 24px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.record-picker-modal > label { display: block; color: #42574e; font-size: 12px; font-weight: 800; }
+.record-picker-modal select {
+  width: 100%;
+  height: 48px;
+  margin-top: 8px;
+  padding: 0 13px;
+  border: 1px solid #d8e3dd;
+  border-radius: 11px;
+  background: #fbfcfb;
+  color: var(--ink);
+  font-size: 13px;
+  outline: none;
+}
+.record-picker-modal select:focus { border-color: #69bd98; box-shadow: 0 0 0 3px #e3f4ec; }
+.record-picker-actions { margin-top: 24px; display: flex; justify-content: flex-end; gap: 10px; }
+.record-picker-actions .filter-button, .record-picker-actions .primary-button { min-height: 44px; padding-inline: 18px; }
+.record-picker-actions .primary-button:disabled { opacity: .48; cursor: not-allowed; box-shadow: none; }
+.record-picker-empty { padding: 22px; border: 1px solid #dce8e2; border-radius: 13px; background: #f6faf8; text-align: center; }
+.record-picker-empty strong { display: block; font-size: 14px; }
+.record-picker-empty p { margin: 6px 0 17px; color: var(--muted); font-size: 11px; }
 .class-card { border-radius: 16px; }
 .class-card h3 { font-size: 19px; }
 .class-card > p { font-size: 12px; }

@@ -730,6 +730,8 @@ function SectionView({
 }) {
   const [athleteQuery, setAthleteQuery] = useState("");
   const [athleteCategory, setAthleteCategory] = useState("all");
+  const [recordPickerOpen, setRecordPickerOpen] = useState(false);
+  const [recordAthleteId, setRecordAthleteId] = useState("");
   const visibleAthletes = useMemo(
     () =>
       athletes.filter((athlete) => {
@@ -795,7 +797,11 @@ function SectionView({
           <h1>{section}</h1>
           <p>{descriptions[section]}</p>
         </div>
-        {section !== "Prontuário" && (
+        {section === "Prontuário" ? (
+          <button className="primary-button" onClick={() => setRecordPickerOpen(true)}>
+            ＋ Adicionar prontuário
+          </button>
+        ) : (
           <button className="primary-button" onClick={action}>＋ {actionLabel}</button>
         )}
       </div>
@@ -949,6 +955,63 @@ function SectionView({
         </div>
       ) : (
         <GenericModule section={section} notify={notify} />
+      )}
+      {recordPickerOpen && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setRecordPickerOpen(false)}>
+          <div className="record-picker-modal" role="dialog" aria-modal="true" aria-labelledby="record-picker-title" onMouseDown={(event) => event.stopPropagation()}>
+            <button className="modal-close" type="button" onClick={() => setRecordPickerOpen(false)} aria-label="Fechar">×</button>
+            <span className="eyebrow">PRONTUÁRIO DO ATLETA</span>
+            <h2 id="record-picker-title">Adicionar prontuário</h2>
+            <p>Selecione o atleta para abrir e completar seu prontuário individual.</p>
+            {athletes.length > 0 ? (
+              <>
+                <label>
+                  Atleta
+                  <select value={recordAthleteId} onChange={(event) => setRecordAthleteId(event.target.value)} autoFocus>
+                    <option value="">Selecione um atleta</option>
+                    {athletes.map((athlete) => (
+                      <option key={athlete.id} value={athlete.id}>
+                        {athlete.name} · {athlete.category || "Sem categoria"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="record-picker-actions">
+                  <button className="filter-button" type="button" onClick={() => setRecordPickerOpen(false)}>Cancelar</button>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    disabled={!recordAthleteId}
+                    onClick={() => {
+                      const athlete = athletes.find((item) => item.id === recordAthleteId);
+                      if (!athlete) return;
+                      setRecordPickerOpen(false);
+                      setRecordAthleteId("");
+                      onOpenAthlete(athlete);
+                    }}
+                  >
+                    Abrir prontuário
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="record-picker-empty">
+                <strong>Nenhum atleta cadastrado</strong>
+                <p>Cadastre primeiro o atleta para criar seu prontuário.</p>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => {
+                    setRecordPickerOpen(false);
+                    setShowAthleteModal(true);
+                  }}
+                >
+                  Cadastrar atleta
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </>
   );
