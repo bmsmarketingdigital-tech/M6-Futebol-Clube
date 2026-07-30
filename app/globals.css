@@ -920,6 +920,187 @@ body {
 .athlete-edit-modal footer { padding-top: 5px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .athlete-edit-modal footer .primary-button { min-width: 145px; }
 
+/* BaseForte 2026 — sistema visual profissional e legível */
+:root {
+  --ink: #11241e;
+  --muted: #64736c;
+  --line: #e1e8e4;
+  --green: #087a4f;
+  --green-dark: #05613e;
+  --green-soft: #e8f7f0;
+  --cream: #f3f6f4;
+  --shadow: 0 12px 32px rgba(16, 49, 37, .07);
+  --shadow-strong: 0 28px 80px rgba(5, 30, 21, .24);
+}
+body { font-size: 15px; color: var(--ink); -webkit-font-smoothing: antialiased; }
+.sidebar { width: 252px; padding: 27px 20px 20px; background: linear-gradient(180deg, #092e22 0%, #08271e 100%); }
+.workspace { margin-left: 252px; }
+.brand { padding-bottom: 28px; }
+.brand-mark { width: 44px; height: 44px; border-radius: 13px; font-size: 15px; }
+.brand strong { font-size: 20px; letter-spacing: -.6px; }
+.brand small { margin-top: 3px; font-size: 9px; letter-spacing: 1.8px; }
+.nav-label { margin-top: 4px; font-size: 10px; }
+.nav-item { min-height: 47px; border-radius: 12px; padding: 0 13px; font-size: 14px; }
+.nav-subitem { min-height: 40px; border-radius: 10px; font-size: 13px; }
+.sidebar-profile strong { font-size: 12px; }
+.sidebar-profile small { font-size: 10px; }
+.topbar { flex-basis: 72px; height: 72px; padding: 0 34px; }
+.search { width: min(500px, 46vw); height: 44px; border-radius: 12px; padding: 0 14px; background: #f5f7f6; }
+.search input { font-size: 14px; }
+.search kbd, .sync-status { font-size: 10px; }
+.icon-button { width: 42px; height: 42px; border-radius: 11px; font-size: 15px; }
+.page-content { padding: 29px 34px 38px; }
+.section-heading { margin-bottom: 25px; }
+.section-heading h1, .welcome-row h1 { font-size: 34px; letter-spacing: -1.25px; }
+.section-heading p, .welcome-row p { margin-top: 7px; font-size: 14px; }
+.eyebrow { margin-bottom: 10px; font-size: 11px; letter-spacing: 1.8px; }
+.primary-button {
+  min-height: 44px; padding: 0 19px; border-radius: 11px; font-size: 13px;
+  font-weight: 800; box-shadow: 0 7px 18px rgba(8, 122, 79, .2);
+}
+.archive-button { min-height: 42px; padding: 0 15px; border-radius: 10px; font-size: 12px; }
+.card { border-color: var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+.card-header { min-height: 66px; padding: 17px 21px 13px; }
+.card-header h2 { font-size: 16px; letter-spacing: -.35px; }
+.card-header p, .card-header button { font-size: 11px; }
+.metric-card { min-height: 112px; border-radius: 16px; padding: 20px; }
+.metric-icon { width: 44px; height: 44px; border-radius: 12px; font-size: 19px; }
+.metric-card span { font-size: 10px; }
+.metric-card strong { font-size: 25px; }
+.metric-card small { font-size: 11px; }
+.schedule-info strong, .time strong { font-size: 12px; }
+.schedule-info small, .time small { font-size: 10px; }
+.call-button { min-width: 90px; height: 34px; font-size: 10px; }
+.attention-card p strong, .list-module p strong { font-size: 12px; }
+.attention-card p small, .list-module p small, .all-good small { font-size: 10px; }
+.all-good strong { font-size: 11px; }
+.dashboard-screen .welcome-row h1 { font-size: 28px; }
+.dashboard-screen .metric-card span { font-size: 10px; }
+.dashboard-screen .metric-card strong { font-size: 22px; }
+.dashboard-screen .metric-card small { font-size: 10px; }
+.dashboard-screen .card-header h2 { font-size: 14px; }
+.dashboard-screen .card-header p, .dashboard-screen .card-header button { font-size: 10px; }
+.dashboard-screen .athlete-name > span strong, .dashboard-screen .schedule-info strong { font-size: 11px; }
+.dashboard-screen .athlete-name > span small, .dashboard-screen .schedule-info small,
+.dashboard-screen .attention-card p small { font-size: 9px; }
+
+.module-toolbar { min-height: 68px; height: auto; font-size: 13px; }
+.filter-button { min-height: 38px; border-radius: 10px; font-size: 11px; }
+.athlete-tabs, .athlete-tabs button { height: 55px; }
+.athlete-tabs button { font-size: 13px; }
+.athlete-list-toolbar, .record-toolbar { min-height: 74px; }
+.athlete-list-search, .athlete-category-filter { height: 46px; border-radius: 11px; }
+.athlete-list-search input, .athlete-category-filter select { font-size: 13px; }
+.athlete-category-filter span, .athlete-list-toolbar > strong, .record-toolbar > strong { font-size: 11px; }
+.table-row { min-height: 62px; font-size: 12px; }
+.table-head { min-height: 42px; font-size: 10px; letter-spacing: .9px; }
+.athlete-name > span strong { font-size: 13px; }
+.athlete-name > span small { margin-top: 3px; font-size: 11px; }
+.mini-avatar { width: 36px; height: 36px; font-size: 10px; }
+.category-tag, .attendance-cell strong, .status-tag { font-size: 11px; }
+.status-tag { padding: 6px 10px; }
+.athlete-autocomplete strong { font-size: 12px; }
+.athlete-autocomplete small { font-size: 10px; }
+.record-toolbar-copy strong { font-size: 14px; }
+.record-toolbar-copy span { font-size: 11px; }
+.record-card { min-height: 108px; padding: 18px; }
+.record-card-copy strong { font-size: 13px; }
+.record-card-copy small, .record-open { font-size: 10px; }
+.class-card { border-radius: 16px; }
+.class-card h3 { font-size: 19px; }
+.class-card > p { font-size: 12px; }
+.class-top span { font-size: 11px; }
+.class-top small, .capacity, .class-actions button { font-size: 10px; }
+
+.modal-backdrop { background: rgba(7, 25, 19, .62); backdrop-filter: blur(9px); }
+.modal, .profile-modal, .team-modal, .attendance-panel, .evaluation-modal,
+.training-modal, .communication-modal, .recipient-modal, .athlete-edit-modal, .category-modal {
+  border: 1px solid rgba(255, 255, 255, .65);
+  border-radius: 22px;
+  box-shadow: var(--shadow-strong);
+}
+.modal-close { width: 40px; height: 40px; border-radius: 11px; font-size: 20px; }
+.modal h2, .profile-header h2, .team-modal-header h2, .attendance-panel-header h2,
+.evaluation-modal header h2, .training-modal header h2, .communication-modal header h2,
+.recipient-modal header h2, .athlete-edit-modal > header h2, .category-modal header h2 {
+  font-size: 26px; letter-spacing: -.75px;
+}
+.modal > p, .profile-header p, .team-modal-header p, .attendance-panel-header p,
+.evaluation-modal header p, .training-modal header p, .communication-modal header p,
+.recipient-modal header p, .athlete-edit-modal > header p, .category-modal header p {
+  font-size: 12px; line-height: 1.5;
+}
+.modal form label, .profile-form label, .team-form > label, .field-label,
+.evaluation-modal label, .training-modal label, .communication-modal label,
+.scanner-settings label, .athlete-edit-modal form label {
+  color: #42574e; font-size: 12px; font-weight: 750;
+}
+.modal input, .modal select, .profile-form input, .profile-form select,
+.team-form input, .team-form select, .evaluation-modal input, .evaluation-modal select,
+.training-modal input, .training-modal select, .communication-modal input,
+.communication-modal select, .scanner-settings input, .scanner-settings select,
+.athlete-edit-modal input, .athlete-edit-modal select {
+  height: 46px; border-radius: 11px; padding-inline: 13px; background: #fbfcfb; font-size: 14px;
+}
+.profile-form textarea, .evaluation-modal textarea, .training-modal textarea,
+.communication-modal textarea { border-radius: 11px; font-size: 14px; }
+
+.team-modal { width: min(900px, 100%); }
+.team-modal-header { min-height: 92px; padding: 20px 34px 15px; }
+.attendance-panel-header { min-height: 108px; padding: 26px 34px 20px; }
+.team-form { padding: 16px 34px 18px; gap: 11px 16px; overflow: hidden; }
+.team-form input, .team-form select { height: 42px; }
+.weekday-picker { gap: 9px; }
+.weekday-picker span { width: 52px; height: 38px; border-radius: 10px; font-size: 11px; }
+.roster-picker { min-height: 105px; margin-top: 2px; border-radius: 14px; }
+.roster-picker > div:first-child { min-height: 47px; padding: 10px 16px; }
+.roster-picker > div:first-child strong { font-size: 12px; }
+.roster-picker > div:first-child small { font-size: 11px; }
+.roster-picker > p { font-size: 12px; }
+.roster-options { min-height: 58px; max-height: 158px; padding: 3px 14px; }
+.roster-options label {
+  min-height: 54px;
+  grid-template-columns: 38px minmax(0, 1fr) 34px;
+  gap: 12px;
+}
+.roster-options label > span:nth-of-type(2) { min-width: 0; }
+.roster-options label > span:nth-of-type(2) strong {
+  overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap;
+}
+.roster-options label > span:nth-of-type(2) small { font-size: 10px; }
+.roster-options label > b { width: 30px; height: 30px; border-radius: 9px; font-size: 13px; }
+.team-form .profile-actions { padding-top: 9px; }
+
+.profile-tabs { height: 50px; min-height: 50px; }
+.profile-tabs button { height: 50px; font-size: 12px; }
+.profile-section-title strong { font-size: 13px; }
+.profile-section-title small { font-size: 10px; }
+.athlete-edit-modal { width: min(850px, 100%); }
+.athlete-edit-modal > header { min-height: 98px; padding: 21px 28px 16px; }
+.athlete-edit-modal form { padding: 20px 28px 24px; gap: 13px 17px; }
+.category-create input, .category-row input { font-size: 13px; }
+.category-row strong, .document-row strong, .recipient-list strong { font-size: 12px; }
+.category-row small, .document-row small, .recipient-list small { font-size: 10px; }
+
+.finance-heading-actions > label, .plan-strip > div:first-child > strong,
+.charge-head, .evaluation-score small, .training-session-card > header small,
+.session-meta, .communication-copy > div small, .read-progress small,
+.checkin-history-head { font-size: 10px; }
+.charge-row > span > strong, .billing-list > button span strong,
+.evaluation-person strong, .session-drills strong, .communication-copy p,
+.recipient-list strong, .checkin-history > article strong { font-size: 12px; }
+.charge-row > span > small, .billing-list > button span small,
+.evaluation-person small, .session-drills small, .recipient-list small,
+.checkin-history > article small { font-size: 10px; }
+.charge-status, .training-status, .communication-status, .notification-result,
+.integration-badge, .finance-ready, .finance-loading { font-size: 10px; }
+.charge-actions button, .charge-actions a, .evaluation-actions button,
+.training-session-card footer button, .communication-actions button { font-size: 10px; }
+.training-session-card h2 { font-size: 20px; }
+.training-session-card > p, .communication-copy p { font-size: 11px; }
+.whatsapp-connector-copy h2 { font-size: 17px; }
+.whatsapp-connector-copy p, .whatsapp-connector-actions > small { font-size: 11px; }
+
 @keyframes fade { from { opacity: 0; } } @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
 @keyframes pulse { from { opacity: .45; } to { opacity: 1; } }
 
