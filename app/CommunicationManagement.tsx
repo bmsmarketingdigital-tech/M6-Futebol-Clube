@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { TeamRecord } from "./TeamManagement";
 
 type Recipient = { id: string; athleteId: string; guardianName: string; guardianEmail: string | null; guardianPhone: string | null; readAt: string | null };
@@ -18,18 +18,25 @@ export function CommunicationManagement({ teams, notify }: { teams: TeamRecord[]
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<Communication | "new" | null>(null);
   const [details, setDetails] = useState<Communication | null>(null);
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch("/api/communications");
       const payload = (await response.json()) as { communications?: Communication[]; error?: string };
       if (!response.ok) throw new Error(payload.error);
       setItems(payload.communications ?? []);
-      if (details) setDetails((payload.communications ?? []).find((item) => item.id === details.id) ?? null);
+      setDetails((current) =>
+        current
+          ? (payload.communications ?? []).find((item) => item.id === current.id) ?? null
+          : null,
+      );
     } catch (error) { notify(error instanceof Error ? error.message : "Não foi possível carregar os comunicados."); }
     finally { setLoading(false); }
-  }
-  useEffect(() => { void load(); }, []);
+  }, [notify]);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timeout);
+  }, [load]);
   async function cancel(item: Communication) {
     if (!window.confirm(`Cancelar o comunicado “${item.title}”?`)) return;
     const response = await fetch(`/api/communications/${item.id}`, { method: "DELETE" });

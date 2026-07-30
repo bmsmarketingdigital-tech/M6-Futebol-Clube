@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { AthleteRecord } from "./AthleteProfileModal";
 
 type Plan = {
@@ -121,7 +121,7 @@ export function FinanceManagement({
   const [billingAthlete, setBillingAthlete] = useState<AthleteRecord | null>(null);
   const [paymentCharge, setPaymentCharge] = useState<Charge | null>(null);
 
-  async function loadFinance() {
+  const loadFinance = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch(`/api/finance/summary?month=${month}`);
@@ -135,11 +135,12 @@ export function FinanceManagement({
     } finally {
       setLoading(false);
     }
-  }
+  }, [month, notify]);
 
   useEffect(() => {
-    void loadFinance();
-  }, [month]);
+    const timeout = window.setTimeout(() => void loadFinance(), 0);
+    return () => window.clearTimeout(timeout);
+  }, [loadFinance]);
 
   const billingByAthlete = useMemo(
     () => new Map(data.billing.map((item) => [item.athleteId, item])),

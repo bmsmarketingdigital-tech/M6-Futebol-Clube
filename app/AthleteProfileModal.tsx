@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 
 export type AthleteRecord = {
   id: string;
@@ -57,11 +57,7 @@ export function AthleteProfileModal({
   const [loadingDocuments, setLoadingDocuments] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
-    if (tab === "documentos") void loadDocuments();
-  }, [tab, athlete.id]);
-
-  async function loadDocuments() {
+  const loadDocuments = useCallback(async () => {
     setLoadingDocuments(true);
     try {
       const response = await fetch(`/api/athletes/${athlete.id}/documents`);
@@ -76,7 +72,13 @@ export function AthleteProfileModal({
     } finally {
       setLoadingDocuments(false);
     }
-  }
+  }, [athlete.id, notify]);
+
+  useEffect(() => {
+    if (tab !== "documentos") return;
+    const timeout = window.setTimeout(() => void loadDocuments(), 0);
+    return () => window.clearTimeout(timeout);
+  }, [tab, loadDocuments]);
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

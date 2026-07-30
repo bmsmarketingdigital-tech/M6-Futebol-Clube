@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { AthleteRecord } from "./AthleteProfileModal";
 
 export type TeamRecord = {
@@ -213,11 +213,7 @@ export function AttendanceModal({
   const [saving, setSaving] = useState(false);
   const [alreadySaved, setAlreadySaved] = useState(false);
 
-  useEffect(() => {
-    void loadAttendance();
-  }, [date, team.id]);
-
-  async function loadAttendance() {
+  const loadAttendance = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch(`/api/teams/${team.id}/attendance?date=${encodeURIComponent(date)}`);
@@ -234,7 +230,12 @@ export function AttendanceModal({
     } finally {
       setLoading(false);
     }
-  }
+  }, [date, notify, team.id]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void loadAttendance(), 0);
+    return () => window.clearTimeout(timeout);
+  }, [loadAttendance]);
 
   function updateAthlete(athleteId: string, patch: Partial<AttendanceAthlete>) {
     setRoster((current) =>

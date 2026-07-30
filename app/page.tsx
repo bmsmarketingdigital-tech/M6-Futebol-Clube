@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   AthleteProfileModal,
   type AthleteRecord,
@@ -26,6 +26,15 @@ type Section =
   | "Comunicação";
 
 type Athlete = AthleteRecord;
+
+type FinanceOverview = {
+  receivedCents: number;
+  pendingCents: number;
+  overdueCents: number;
+  expectedCents: number;
+  paidCount: number;
+  overdueCount: number;
+};
 
 const navItems: { label: Section; icon: string }[] = [
   { label: "Visão geral", icon: "⌂" },
@@ -55,7 +64,7 @@ export default function Home() {
   const [savingAthlete, setSavingAthlete] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [loadingTeams, setLoadingTeams] = useState(true);
-  const [financeOverview, setFinanceOverview] = useState({
+  const [financeOverview, setFinanceOverview] = useState<FinanceOverview>({
     receivedCents: 0,
     pendingCents: 0,
     overdueCents: 0,
@@ -64,7 +73,7 @@ export default function Home() {
     overdueCount: 0,
   });
 
-  async function loadAthletes() {
+  const loadAthletes = useCallback(async () => {
     setLoadingAthletes(true);
     setLoadError("");
     try {
@@ -88,9 +97,9 @@ export default function Home() {
     } finally {
       setLoadingAthletes(false);
     }
-  }
+  }, []);
 
-  async function loadTeams() {
+  const loadTeams = useCallback(async () => {
     setLoadingTeams(true);
     try {
       const response = await fetch("/api/teams", {
@@ -113,26 +122,29 @@ export default function Home() {
     } finally {
       setLoadingTeams(false);
     }
-  }
+  }, []);
 
-  async function loadFinanceOverview() {
+  const loadFinanceOverview = useCallback(async () => {
     try {
       const month = new Date().toISOString().slice(0, 7);
       const response = await fetch(`/api/finance/summary?month=${month}`);
       const payload = (await response.json()) as {
-        summary?: typeof financeOverview;
+        summary?: FinanceOverview;
       };
       if (response.ok && payload.summary) setFinanceOverview(payload.summary);
     } catch {
       // O módulo financeiro exibe o erro completo quando for aberto.
     }
-  }
+  }, []);
 
   useEffect(() => {
-    void loadAthletes();
-    void loadTeams();
-    void loadFinanceOverview();
-  }, []);
+    const timeout = window.setTimeout(() => {
+      void loadAthletes();
+      void loadTeams();
+      void loadFinanceOverview();
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [loadAthletes, loadFinanceOverview, loadTeams]);
 
   const filteredAthletes = useMemo(
     () =>
@@ -642,13 +654,13 @@ function GenericModule({ section, notify }: { section: Section; notify: (message
     Avaliações: { stat: "74%", label: "avaliações concluídas", secondary: "5 pendentes", cards: [["Técnica", "82% concluído"], ["Física", "76% concluído"], ["Comportamental", "91% concluído"]] },
     Comunicação: { stat: "94%", label: "taxa de leitura", secondary: "328 destinatários", cards: [["Festival interno", "Agendado para amanhã"], ["Recesso escolar", "Enviado · 96% lido"], ["Documentos pendentes", "Rascunho · 7 famílias"]] },
   };
-  const module = data[section] || data.Presença;
+  const moduleData = data[section] || data.Presença;
   return (
     <div className="module-two-columns">
-      <div className="card overview-module"><span className="eyebrow">RESUMO DO MÊS</span><strong className="giant-stat">{module.stat}</strong><p>{module.label}</p><span className="soft-tag">{module.secondary}</span><div className="overview-progress"><i style={{ width: section === "Financeiro" ? "87%" : "74%" }} /></div></div>
+      <div className="card overview-module"><span className="eyebrow">RESUMO DO MÊS</span><strong className="giant-stat">{moduleData.stat}</strong><p>{moduleData.label}</p><span className="soft-tag">{moduleData.secondary}</span><div className="overview-progress"><i style={{ width: section === "Financeiro" ? "87%" : "74%" }} /></div></div>
       <div className="card list-module">
         <CardHeader title={section === "Financeiro" ? "Situação das cobranças" : `Acompanhamento de ${section.toLowerCase()}`} subtitle="Atualizado agora" />
-        {module.cards.map(([title, value], index) => <button key={title} onClick={() => notify(`${title}: detalhes abertos.`)}><span className={`attention-icon ${index === 1 ? "orange" : "green"}`}>{index + 1}</span><p><strong>{title}</strong><small>{value}</small></p><b>›</b></button>)}
+        {moduleData.cards.map(([title, value], index) => <button key={title} onClick={() => notify(`${title}: detalhes abertos.`)}><span className={`attention-icon ${index === 1 ? "orange" : "green"}`}>{index + 1}</span><p><strong>{title}</strong><small>{value}</small></p><b>›</b></button>)}
       </div>
     </div>
   );

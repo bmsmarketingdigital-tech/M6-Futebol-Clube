@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { TeamRecord } from "./TeamManagement";
 
 type Drill = { id?: string; name: string; focus: string | null; durationMinutes: number; description: string | null };
@@ -14,7 +14,7 @@ export function TrainingManagement({ teams, notify }: { teams: TeamRecord[]; not
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<Training | "new" | null>(null);
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch("/api/trainings");
@@ -23,8 +23,11 @@ export function TrainingManagement({ teams, notify }: { teams: TeamRecord[]; not
       setTrainings(payload.trainings ?? []);
     } catch (error) { notify(error instanceof Error ? error.message : "Não foi possível carregar os treinos."); }
     finally { setLoading(false); }
-  }
-  useEffect(() => { void load(); }, []);
+  }, [notify]);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timeout);
+  }, [load]);
   async function remove(training: Training) {
     if (!window.confirm(`Excluir o treino “${training.title}”?`)) return;
     const response = await fetch(`/api/trainings/${training.id}`, { method: "DELETE" });

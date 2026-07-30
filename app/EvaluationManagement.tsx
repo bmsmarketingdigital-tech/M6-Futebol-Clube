@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { AthleteRecord } from "./AthleteProfileModal";
 
 type Evaluation = {
@@ -31,7 +31,7 @@ export function EvaluationManagement({
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<Evaluation | "new" | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch("/api/evaluations");
@@ -43,9 +43,12 @@ export function EvaluationManagement({
     } finally {
       setLoading(false);
     }
-  }
+  }, [notify]);
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timeout);
+  }, [load]);
 
   const latest = useMemo(() => {
     const map = new Map<string, Evaluation>();
