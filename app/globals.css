@@ -559,6 +559,64 @@ button { cursor: pointer; }
 .finance-empty small { margin-top: 4px; font-size: 8px; }
 .finance-empty.small { min-height: 95px; padding: 15px; }
 .full-archive { width: 100%; margin-top: 9px; }
+.charge-action-modal {
+  width: min(620px, 100%);
+  overflow: hidden;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(6, 34, 24, .3);
+  animation: rise .22s ease;
+}
+.charge-action-modal > header {
+  min-height: 118px;
+  padding: 24px 28px 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.charge-action-modal header h2 { margin: 0; font-size: 27px; letter-spacing: -.75px; }
+.charge-action-modal header p { max-width: 480px; margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.charge-action-modal header .modal-close { position: static; flex: 0 0 auto; }
+.charge-action-summary {
+  padding: 14px 28px;
+  display: grid;
+  grid-template-columns: 1.4fr .8fr .8fr;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  background: #f8faf9;
+}
+.charge-action-summary small { display: block; color: #829087; font-size: 9px; font-weight: 900; letter-spacing: .7px; }
+.charge-action-summary strong { display: block; margin-top: 4px; font-size: 12px; }
+.charge-action-modal form { padding: 20px 28px 24px; }
+.charge-action-modal form label { color: #42574e; font-size: 12px; font-weight: 800; }
+.charge-action-modal textarea {
+  width: 100%;
+  min-height: 82px;
+  margin-top: 7px;
+  padding: 11px 13px;
+  resize: none;
+  border: 1px solid #d9e3de;
+  border-radius: 11px;
+  background: #fbfcfb;
+  color: var(--ink);
+  font: inherit;
+  outline: none;
+}
+.charge-action-modal textarea:focus { border-color: #d78980; box-shadow: 0 0 0 3px #fceae7; }
+.charge-action-buttons { margin-top: 16px; display: flex; justify-content: flex-end; gap: 10px; }
+.danger-confirm-button {
+  min-height: 42px;
+  padding: 0 17px;
+  border: 0;
+  border-radius: 10px;
+  background: #bd554c;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+.danger-confirm-button:disabled { opacity: .45; cursor: not-allowed; }
 .evaluation-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; margin-bottom: 15px; }
 .evaluation-metrics .metric-card small { color: var(--muted); }
 .evaluation-list > article { min-height: 78px; padding: 10px 18px; display: grid; grid-template-columns: 1.3fr repeat(4, .75fr) 45px 90px; gap: 13px; align-items: center; border-bottom: 1px solid var(--line); }
@@ -1192,6 +1250,158 @@ body { font-size: 15px; color: var(--ink); -webkit-font-smoothing: antialiased; 
 .drill-editor-list section button { height: 28px; border: 0; border-radius: 8px; background: #fff0ed; color: #bd5b53; }
 .training-modal .primary-button.full { min-height: 38px; margin-top: 3px; }
 
+/* Escala operacional: a janela fica fixa e cada lista rola após 4 registros */
+.section-page {
+  height: calc(100vh - 72px);
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.section-page > .section-heading { flex: 0 0 auto; }
+.athletes-page .athlete-records,
+.records-page .medical-record-browser,
+.teams-page .class-grid,
+.attendance-page .attendance-team-grid,
+.evaluations-page .evaluation-panel,
+.trainings-page .training-board,
+.communications-page .communication-panel,
+.checkin-page .checkin-panel {
+  min-height: 0;
+}
+.athletes-page .athlete-records { display: flex; flex: 1; flex-direction: column; }
+.athletes-page .athlete-table.expanded {
+  max-height: 290px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.athletes-page .table-head { position: sticky; top: 0; z-index: 2; background: #fff; }
+.records-page .medical-record-browser { flex: 1; align-content: start; }
+.records-page .record-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: 108px;
+  max-height: 120px;
+  padding: 0 5px 2px 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  align-content: start;
+  scrollbar-gutter: stable;
+}
+.records-page .record-card { min-height: 108px; height: 108px; }
+.teams-page .class-grid {
+  flex: 1;
+  max-height: 252px;
+  padding: 0 5px 4px 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  align-content: start;
+  scrollbar-gutter: stable;
+}
+.teams-page .class-card { min-height: 240px; height: 240px; }
+.attendance-page .attendance-team-grid {
+  flex: 1;
+  max-height: 178px;
+  padding-right: 5px;
+  overflow-y: auto;
+  align-content: start;
+  scrollbar-gutter: stable;
+}
+.evaluations-page .evaluation-metrics,
+.trainings-page .training-metrics,
+.communications-page .communication-metrics,
+.checkin-page .checkin-metrics { flex: 0 0 auto; }
+.evaluations-page .evaluation-panel,
+.communications-page .communication-panel,
+.checkin-page .checkin-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.evaluations-page .evaluation-list,
+.communications-page .communication-list,
+.checkin-page .checkin-history {
+  min-height: 0;
+  max-height: 318px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.trainings-page .training-board {
+  flex: 1;
+  max-height: 330px;
+  padding-right: 5px;
+  overflow-y: auto;
+  align-content: start;
+  scrollbar-gutter: stable;
+}
+.finance-page .section-heading { min-height: 80px; margin-bottom: 5px; }
+.finance-page .section-heading h1 { font-size: 29px; }
+.finance-page .section-heading p { margin-top: 3px; font-size: 12px; }
+.finance-page .section-heading .eyebrow { margin-bottom: 5px; font-size: 9px; }
+.finance-page .integration-badge { margin-top: 4px; padding-block: 3px; }
+.finance-page .finance-metrics { flex: 0 0 auto; gap: 8px; margin-bottom: 6px; }
+.finance-page .finance-metrics .metric-card { min-height: 66px; padding: 8px 12px; gap: 9px; }
+.finance-page .finance-metrics .metric-icon { width: 32px; height: 32px; font-size: 14px; }
+.finance-page .finance-metrics .metric-card strong { font-size: 18px; }
+.finance-page .finance-metrics .metric-card small { margin-top: 2px; font-size: 9px; }
+.finance-page .plan-strip {
+  min-height: 50px;
+  height: 50px;
+  margin-bottom: 6px;
+  padding-block: 4px;
+}
+.finance-page .plan-strip-list > button { min-height: 38px; }
+.finance-page .finance-layout {
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1.8fr) minmax(240px, .65fr);
+  align-items: stretch;
+}
+.finance-page .finance-charges,
+.finance-page .billing-config-card {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.finance-page .charge-table {
+  flex: 1;
+  min-height: 0;
+  max-height: 302px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.finance-page .finance-charges .card-header,
+.finance-page .billing-config-card .card-header { min-height: 54px; padding-block: 11px 8px; }
+.finance-page .charge-row {
+  min-width: 0;
+  min-height: 56px;
+  padding: 6px 12px;
+  grid-template-columns: minmax(135px, 1.25fr) 82px 76px 72px minmax(145px, 1fr);
+  gap: 8px;
+}
+.finance-page .charge-head { min-height: 34px; }
+.finance-page .charge-actions { gap: 3px; white-space: nowrap; }
+.finance-page .charge-actions button,
+.finance-page .charge-actions a { min-height: 27px; padding-inline: 5px; font-size: 9px; }
+.finance-page .charge-athlete > span { min-width: 0; }
+.finance-page .charge-athlete > span strong,
+.finance-page .charge-athlete > span small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.finance-page .charge-head { position: sticky; top: 0; z-index: 2; }
+.finance-page .billing-list {
+  flex: 1;
+  min-height: 0;
+  max-height: 236px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
 @keyframes fade { from { opacity: 0; } } @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
 @keyframes pulse { from { opacity: .45; } to { opacity: 1; } }
 
@@ -1206,6 +1416,8 @@ body { font-size: 15px; color: var(--ink); -webkit-font-smoothing: antialiased; 
   .communication-list { overflow-x: auto; }.communication-list > article { min-width: 780px; }
   .scanner-layout { grid-template-columns: 1fr; }.scanner-stage { border-right: 0; border-bottom: 1px solid var(--line); }
   .record-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .records-page .record-grid { max-height: 228px; }
+  .teams-page .class-grid { max-height: 494px; }
 }
 
 @media (max-width: 760px) {
@@ -1219,6 +1431,7 @@ body { font-size: 15px; color: var(--ink); -webkit-font-smoothing: antialiased; 
   .top-actions .primary-button span { font-size: 16px; }
   .sync-status { display: none; }
   .page-content { padding: 22px 15px 36px; }
+  .section-page { height: auto; min-height: calc(100vh - 62px); overflow-y: auto; display: block; }
   .welcome-row, .section-heading { align-items: flex-start; }
   .period-pill { display: none; }
   .metrics-grid, .class-grid, .module-two-columns { grid-template-columns: 1fr; }

@@ -120,6 +120,10 @@ export function FinanceManagement({
   const [planModal, setPlanModal] = useState<Plan | "new" | null>(null);
   const [billingAthlete, setBillingAthlete] = useState<AthleteRecord | null>(null);
   const [paymentCharge, setPaymentCharge] = useState<Charge | null>(null);
+  const [chargeAction, setChargeAction] = useState<{
+    charge: Charge;
+    type: "cancel" | "reverse";
+  } | null>(null);
 
   const loadFinance = useCallback(async () => {
     setLoading(true);
@@ -197,22 +201,32 @@ export function FinanceManagement({
     await loadFinance();
   }
 
-  async function cancelCharge(charge: Charge) {
-    if (!window.confirm(`Cancelar a mensalidade de ${charge.athleteName}?`)) return;
+  async function updateCharge(
+    charge: Charge,
+    action: "cancel" | "reverse" | "restore",
+    notes?: string,
+  ) {
     setWorking(true);
     try {
       const response = await fetch(`/api/finance/charges/${charge.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "cancel" }),
+        body: JSON.stringify({ action, notes }),
       });
       const payload = await readJson<{ updated: boolean }>(response);
       if (!response.ok) throw new Error(payload.error);
-      notify("Cobrança cancelada.");
+      notify(
+        action === "cancel"
+          ? "Lançamento cancelado e mantido no histórico."
+          : action === "reverse"
+            ? "Baixa estornada. A mensalidade voltou para aberto."
+            : "Lançamento reativado.",
+      );
+      setChargeAction(null);
       await loadFinance();
       onChanged();
     } catch (error) {
-      notify(error instanceof Error ? error.message : "Não foi possível cancelar.");
+      notify(error instanceof Error ? error.message : "Não foi possível atualizar o lançamento.");
     } finally {
       setWorking(false);
     }
@@ -314,11 +328,28 @@ export function FinanceManagement({
                       {charge.invoiceUrl ? (
                         <a href={charge.invoiceUrl} target="_blank" rel="noreferrer">Abrir cobrança</a>
                       ) : (
-                        <button disabled={working} onClick={() => void sendCharge(charge)}>Emitir PIX/boleto</button>
+                        <button title="Emitir PIX ou boleto" disabled={working} onClick={() => void sendCharge(charge)}>Cobrar</button>
                       )}
                       <button onClick={() => setPaymentCharge(charge)}>Dar baixa</button>
-                      <button className="danger-link" disabled={working} onClick={() => void cancelCharge(charge)}>Cancelar</button>
+                      <button className="danger-link" disabled={working} onClick={() => setChargeAction({ charge, type: "cancel" })}>Cancelar</button>
                     </>
+                  )}
+                  {charge.status === "paid" && (
+                    <button className="danger-link" disabled={working} onClick={() => setChargeAction({ charge, type: "reverse" })}>
+                      Estornar baixa
+                    </button>
+                  )}
+                  {charge.status === "cancelled" && (
+                    <button
+                      disabled={working}
+                      onClick={() => {
+                        if (window.confirm(`Reativar a mensalidade de ${charge.athleteName}?`)) {
+                          void updateCharge(charge, "restore");
+                        }
+                      }}
+                    >
+                      Reativar
+                    </button>
                   )}
                 </span>
               </div>
@@ -389,7 +420,83 @@ export function FinanceManagement({
           }}
         />
       )}
+      {chargeAction && (
+        <ChargeActionModal
+          charge={chargeAction.charge}
+          type={chargeAction.type}
+          working={working}
+          onClose={() => setChargeAction(null)}
+          onConfirm={(reason) =>
+            void updateCharge(chargeAction.charge, chargeAction.type, reason)
+          }
+        />
+      )}
     </>
+  );
+}
+
+function ChargeActionModal({
+  charge,
+  type,
+  working,
+  onClose,
+  onConfirm,
+}: {
+  charge: Charge;
+  type: "cancel" | "reverse";
+  working: boolean;
+  onClose: () => void;
+  onConfirm: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const reversing = type === "reverse";
+
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <div className="charge-action-modal" role="dialog" aria-modal="true" aria-labelledby="charge-action-title" onMouseDown={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span className="eyebrow">{reversing ? "CORREÇÃO DE PAGAMENTO" : "CORREÇÃO DE LANÇAMENTO"}</span>
+            <h2 id="charge-action-title">{reversing ? "Estornar baixa" : "Cancelar lançamento"}</h2>
+            <p>
+              {reversing
+                ? "O pagamento será removido e a mensalidade voltará para aberto ou vencido."
+                : "A mensalidade será cancelada, mas continuará disponível no histórico."}
+            </p>
+          </div>
+          <button className="modal-close" type="button" onClick={onClose} aria-label="Fechar">×</button>
+        </header>
+        <div className="charge-action-summary">
+          <span><small>ATLETA</small><strong>{charge.athleteName}</strong></span>
+          <span><small>VALOR</small><strong>{money(charge.paidAmountCents ?? charge.amountCents)}</strong></span>
+          <span><small>VENCIMENTO</small><strong>{new Date(`${charge.dueDate}T12:00:00`).toLocaleDateString("pt-BR")}</strong></span>
+        </div>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!reason.trim()) return;
+            onConfirm(reason.trim());
+          }}
+        >
+          <label>
+            Motivo obrigatório
+            <textarea
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder={reversing ? "Ex.: pagamento lançado no atleta errado" : "Ex.: mensalidade gerada por engano"}
+              maxLength={220}
+              autoFocus
+            />
+          </label>
+          <div className="charge-action-buttons">
+            <button className="filter-button" type="button" onClick={onClose}>Voltar</button>
+            <button className="danger-confirm-button" type="submit" disabled={working || !reason.trim()}>
+              {working ? "Processando..." : reversing ? "Confirmar estorno" : "Confirmar cancelamento"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 

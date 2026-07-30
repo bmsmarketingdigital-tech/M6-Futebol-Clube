@@ -48,7 +48,7 @@ export async function PATCH(
     }
     const { id } = await params;
     const payload = (await request.json()) as {
-      action?: "pay" | "cancel";
+      action?: "pay" | "cancel" | "reverse" | "restore";
       paymentMethod?: "cash" | "pix" | "card" | "bank" | "other";
       paidAmount?: number;
       notes?: string;
@@ -68,12 +68,26 @@ export async function PATCH(
     if (!current) {
       return Response.json({ error: "Cobrança não encontrada." }, { status: 404 });
     }
-    if (current.status === "paid" || current.status === "cancelled") {
-      return Response.json({ error: "Esta cobrança já foi finalizada." }, { status: 409 });
-    }
 
     const now = new Date();
+    const reason = payload.notes?.trim().slice(0, 220) || "";
+    const appendAuditNote = (label: string) => {
+      const timestamp = now.toLocaleString("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+      });
+      const event = `[${timestamp}] ${label}${reason ? `: ${reason}` : ""}`;
+      return [current.notes?.trim(), event].filter(Boolean).join("\n").slice(0, 1000);
+    };
+    const reopenedStatus =
+      current.dueDate < now.toISOString().slice(0, 10) ? "overdue" : "open";
+
     if (payload.action === "pay") {
+      if (current.status !== "open" && current.status !== "overdue") {
+        return Response.json(
+          { error: "Somente cobranças em aberto podem receber baixa." },
+          { status: 409 },
+        );
+      }
       const paymentMethod = payload.paymentMethod ?? "pix";
       if (!methods.has(paymentMethod)) {
         return Response.json({ error: "Forma de pagamento inválida." }, { status: 400 });
@@ -92,7 +106,7 @@ export async function PATCH(
           paidAt: now,
           paidAmountCents,
           paymentMethod,
-          notes: payload.notes?.trim().slice(0, 300) || null,
+          notes: reason || null,
           updatedAt: now,
         })
         .where(
@@ -103,17 +117,80 @@ export async function PATCH(
           ),
         );
     } else if (payload.action === "cancel") {
+      if (current.status !== "open" && current.status !== "overdue") {
+        return Response.json(
+          { error: "Estorne a baixa antes de cancelar uma cobrança paga." },
+          { status: 409 },
+        );
+      }
+      if (!reason) {
+        return Response.json(
+          { error: "Informe o motivo do cancelamento." },
+          { status: 400 },
+        );
+      }
       await db
         .update(payments)
         .set({
           status: "cancelled",
-          notes: payload.notes?.trim().slice(0, 300) || current.notes,
+          notes: appendAuditNote("Lançamento cancelado"),
           updatedAt: now,
         })
         .where(
           and(
             eq(payments.id, id),
             eq(payments.organizationId, organizationId),
+          ),
+        );
+    } else if (payload.action === "reverse") {
+      if (current.status !== "paid") {
+        return Response.json(
+          { error: "Somente pagamentos baixados podem ser estornados." },
+          { status: 409 },
+        );
+      }
+      if (!reason) {
+        return Response.json(
+          { error: "Informe o motivo do estorno." },
+          { status: 400 },
+        );
+      }
+      await db
+        .update(payments)
+        .set({
+          status: reopenedStatus,
+          paidAt: null,
+          paidAmountCents: null,
+          paymentMethod: null,
+          notes: appendAuditNote("Baixa estornada"),
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(payments.id, id),
+            eq(payments.organizationId, organizationId),
+            eq(payments.status, "paid"),
+          ),
+        );
+    } else if (payload.action === "restore") {
+      if (current.status !== "cancelled") {
+        return Response.json(
+          { error: "Somente lançamentos cancelados podem ser reativados." },
+          { status: 409 },
+        );
+      }
+      await db
+        .update(payments)
+        .set({
+          status: reopenedStatus,
+          notes: appendAuditNote("Lançamento reativado"),
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(payments.id, id),
+            eq(payments.organizationId, organizationId),
+            eq(payments.status, "cancelled"),
           ),
         );
     } else {

@@ -56,6 +56,18 @@ const navItems: { label: Section; icon: string }[] = [
   { label: "Comunicação", icon: "◌" },
 ];
 
+const sectionPageClasses: Record<Exclude<Section, "Visão geral">, string> = {
+  Atletas: "athletes-page",
+  Prontuário: "records-page",
+  Turmas: "teams-page",
+  Presença: "attendance-page",
+  "QR e entrada": "checkin-page",
+  Financeiro: "finance-page",
+  Treinos: "trainings-page",
+  Avaliações: "evaluations-page",
+  Comunicação: "communications-page",
+};
+
 const financeBars = [52, 68, 58, 76, 64, 84, 73, 92, 78, 96, 88, 100];
 
 export default function Home() {
@@ -358,7 +370,7 @@ export default function Home() {
           className={
             section === "Visão geral"
               ? "page-content dashboard-page"
-              : "page-content"
+              : `page-content section-page ${sectionPageClasses[section]}`
           }
         >
           {loadError && (
