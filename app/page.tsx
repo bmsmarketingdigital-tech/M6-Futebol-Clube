@@ -19,10 +19,12 @@ import {
   CategoryManagerModal,
   type CategoryRecord,
 } from "./CategoryManagerModal";
+import { AthleteEditModal } from "./AthleteEditModal";
 
 type Section =
   | "Visão geral"
   | "Atletas"
+  | "Prontuário"
   | "Turmas"
   | "Presença"
   | "QR e entrada"
@@ -64,7 +66,9 @@ export default function Home() {
   const [showAthleteModal, setShowAthleteModal] = useState(false);
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
-  const [selectedAthlete, setSelectedAthlete] = useState<Athlete | null>(null);
+  const [athletesMenuOpen, setAthletesMenuOpen] = useState(false);
+  const [editingAthlete, setEditingAthlete] = useState<Athlete | null>(null);
+  const [profileAthlete, setProfileAthlete] = useState<Athlete | null>(null);
   const [teamModalOpen, setTeamModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamRecord | null>(null);
   const [attendanceTeam, setAttendanceTeam] = useState<TeamRecord | null>(null);
@@ -252,21 +256,34 @@ export default function Home() {
               <div className="nav-group" key={item.label}>
                 <button
                   className={
-                    section === "Atletas" ? "nav-item expanded" : "nav-item"
+                    section === "Atletas" || section === "Prontuário"
+                      ? "nav-item expanded"
+                      : "nav-item"
                   }
-                  onClick={() => setSection("Atletas")}
-                  aria-expanded={section === "Atletas"}
+                  onClick={() => {
+                    const isAthleteSection =
+                      section === "Atletas" || section === "Prontuário";
+                    setSection("Atletas");
+                    setAthletesMenuOpen((current) =>
+                      isAthleteSection ? !current : true,
+                    );
+                  }}
+                  aria-expanded={athletesMenuOpen}
                 >
                   <span className="nav-icon">{item.icon}</span>
                   Atletas
                   <span className="nav-chevron">
-                    {section === "Atletas" ? "⌃" : "⌄"}
+                    {athletesMenuOpen ? "⌃" : "⌄"}
                   </span>
                 </button>
-                {section === "Atletas" && (
+                {athletesMenuOpen && (
                   <button
-                    className="nav-subitem active"
-                    onClick={() => setSection("Atletas")}
+                    className={
+                      section === "Prontuário"
+                        ? "nav-subitem active"
+                        : "nav-subitem"
+                    }
+                    onClick={() => setSection("Prontuário")}
                   >
                     <span />
                     Prontuário
@@ -364,7 +381,7 @@ export default function Home() {
                 setEditingTeam(team);
                 setTeamModalOpen(true);
               }}
-              onOpenAthlete={setSelectedAthlete}
+              onOpenAthlete={setProfileAthlete}
               finance={financeOverview}
               notify={notify}
             />
@@ -394,6 +411,7 @@ export default function Home() {
             />
           ) : (
             <SectionView
+              key={section}
               section={section}
               athletes={athletes}
               categories={categories}
@@ -408,7 +426,9 @@ export default function Home() {
                 setTeamModalOpen(true);
               }}
               onAttendance={setAttendanceTeam}
-              onOpenAthlete={setSelectedAthlete}
+              onOpenAthlete={
+                section === "Atletas" ? setEditingAthlete : setProfileAthlete
+              }
               notify={notify}
             />
           )}
@@ -458,19 +478,41 @@ export default function Home() {
         </div>
       )}
 
-      {selectedAthlete && (
-        <AthleteProfileModal
-          key={selectedAthlete.id}
-          athlete={selectedAthlete}
+      {editingAthlete && (
+        <AthleteEditModal
+          key={editingAthlete.id}
+          athlete={editingAthlete}
           categories={categories}
-          onClose={() => setSelectedAthlete(null)}
+          onClose={() => setEditingAthlete(null)}
           onSaved={(updated) => {
             setAthletes((current) =>
               current.map((athlete) =>
                 athlete.id === updated.id ? updated : athlete,
               ),
             );
-            setSelectedAthlete(updated);
+          }}
+          onDeleted={(athleteId) => {
+            setAthletes((current) =>
+              current.filter((athlete) => athlete.id !== athleteId),
+            );
+          }}
+          notify={notify}
+        />
+      )}
+
+      {profileAthlete && (
+        <AthleteProfileModal
+          key={profileAthlete.id}
+          athlete={profileAthlete}
+          categories={categories}
+          onClose={() => setProfileAthlete(null)}
+          onSaved={(updated) => {
+            setAthletes((current) =>
+              current.map((athlete) =>
+                athlete.id === updated.id ? updated : athlete,
+              ),
+            );
+            setProfileAthlete(updated);
           }}
           onArchived={(athleteId) => {
             setAthletes((current) =>
@@ -700,10 +742,21 @@ function SectionView({
       }),
     [athleteCategory, athleteQuery, athletes],
   );
+  const autocompleteAthletes = useMemo(() => {
+    const query = athleteQuery.trim().toLocaleLowerCase("pt-BR");
+    if (!query) return [];
+    return athletes
+      .filter((athlete) => {
+        const name = athlete.name.toLocaleLowerCase("pt-BR");
+        return name.includes(query) && name !== query;
+      })
+      .slice(0, 5);
+  }, [athleteQuery, athletes]);
 
   const descriptions: Record<Section, string> = {
     "Visão geral": "",
     Atletas: "Cadastre, localize e mantenha os dados dos atletas organizados.",
+    Prontuário: "Acesse informações médicas, autorizações, documentos e histórico individual.",
     Turmas: "Horários, categorias, professores e capacidade das turmas.",
     Presença: "Acompanhe frequência, ausências e reposições.",
     "QR e entrada": "Leia o cartão do atleta, registre presença e avise o responsável.",
@@ -737,12 +790,14 @@ function SectionView({
       <div className="section-heading">
         <div>
           <span className="eyebrow">
-            {section === "Atletas" ? "ATLETAS" : "BASEFORTE"}
+            {section === "Atletas" ? "CADASTRO" : section === "Prontuário" ? "ATLETAS" : "BASEFORTE"}
           </span>
-          <h1>{section === "Atletas" ? "Prontuário" : section}</h1>
+          <h1>{section}</h1>
           <p>{descriptions[section]}</p>
         </div>
-        <button className="primary-button" onClick={action}>＋ {actionLabel}</button>
+        {section !== "Prontuário" && (
+          <button className="primary-button" onClick={action}>＋ {actionLabel}</button>
+        )}
       </div>
       {section === "Atletas" ? (
         <div className="card module-card athlete-records">
@@ -756,15 +811,27 @@ function SectionView({
             </button>
           </div>
           <div className="athlete-list-toolbar">
-            <label className="athlete-list-search">
-              <span>⌕</span>
-              <input
-                aria-label="Pesquisar atleta por nome"
-                value={athleteQuery}
-                onChange={(event) => setAthleteQuery(event.target.value)}
-                placeholder="Pesquisar por nome..."
-              />
-            </label>
+            <div className="athlete-search-wrap">
+              <label className="athlete-list-search">
+                <span>⌕</span>
+                <input
+                  aria-label="Pesquisar atleta por nome"
+                  value={athleteQuery}
+                  onChange={(event) => setAthleteQuery(event.target.value)}
+                  placeholder="Pesquisar por nome..."
+                />
+              </label>
+              {autocompleteAthletes.length > 0 && (
+                <div className="athlete-autocomplete" role="listbox" aria-label="Sugestões de atletas">
+                  {autocompleteAthletes.map((athlete) => (
+                    <button type="button" role="option" aria-selected="false" key={athlete.id} onClick={() => setAthleteQuery(athlete.name)}>
+                      <span className="athlete-avatar small">{athlete.initials}</span>
+                      <span><strong>{athlete.name}</strong><small>{athlete.category || "Sem categoria"}</small></span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <label className="athlete-category-filter">
               <span>Categoria</span>
               <select
@@ -786,6 +853,67 @@ function SectionView({
             {visibleAthletes.map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} onOpen={onOpenAthlete} />)}
             {visibleAthletes.length === 0 && <EmptyAthletes />}
           </div>
+        </div>
+      ) : section === "Prontuário" ? (
+        <div className="medical-record-browser">
+          <div className="card record-toolbar-card">
+            <div className="record-toolbar-copy">
+              <strong>Prontuários dos atletas</strong>
+              <span>Selecione um atleta para abrir o cadastro completo.</span>
+            </div>
+            <div className="record-toolbar">
+              <div className="athlete-search-wrap">
+                <label className="athlete-list-search">
+                  <span>⌕</span>
+                  <input
+                    aria-label="Pesquisar prontuário por nome"
+                    value={athleteQuery}
+                    onChange={(event) => setAthleteQuery(event.target.value)}
+                    placeholder="Pesquisar atleta..."
+                  />
+                </label>
+                {autocompleteAthletes.length > 0 && (
+                  <div className="athlete-autocomplete" role="listbox" aria-label="Sugestões de prontuários">
+                    {autocompleteAthletes.map((athlete) => (
+                      <button type="button" role="option" aria-selected="false" key={athlete.id} onClick={() => setAthleteQuery(athlete.name)}>
+                        <span className="athlete-avatar small">{athlete.initials}</span>
+                        <span><strong>{athlete.name}</strong><small>{athlete.category || "Sem categoria"}</small></span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <label className="athlete-category-filter">
+                <span>Categoria</span>
+                <select value={athleteCategory} onChange={(event) => setAthleteCategory(event.target.value)}>
+                  <option value="all">Todas</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.name}>{category.name}</option>
+                  ))}
+                </select>
+              </label>
+              <strong>{visibleAthletes.length} resultado(s)</strong>
+            </div>
+          </div>
+          {visibleAthletes.length > 0 ? (
+            <div className="record-grid">
+              {visibleAthletes.map((athlete) => (
+                <button className="record-card card" type="button" key={athlete.id} onClick={() => onOpenAthlete(athlete)}>
+                  <span className="athlete-avatar">{athlete.initials}</span>
+                  <span className="record-card-copy">
+                    <strong>{athlete.name}</strong>
+                    <small>{athlete.category || "Sem categoria"} · {athlete.age ? `${athlete.age} anos` : "Idade não informada"}</small>
+                  </span>
+                  <span className="record-open">Abrir prontuário →</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="card empty-state">
+              <strong>Nenhum prontuário encontrado</strong>
+              <p>Ajuste a busca ou o filtro de categoria.</p>
+            </div>
+          )}
         </div>
       ) : section === "Turmas" ? (
         <div className="class-grid">

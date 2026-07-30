@@ -247,6 +247,7 @@ button { cursor: pointer; }
   border-bottom: 1px solid var(--line);
   background: #fbfcfb;
 }
+.athlete-search-wrap { position: relative; min-width: 0; }
 .athlete-list-search {
   height: 41px;
   padding: 0 12px;
@@ -266,6 +267,47 @@ button { cursor: pointer; }
   color: var(--ink);
   font-size: 12px;
 }
+.athlete-autocomplete {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  z-index: 25;
+  padding: 5px;
+  border: 1px solid #dce6e0;
+  border-radius: 10px;
+  background: white;
+  box-shadow: 0 14px 35px rgba(17, 55, 41, .15);
+}
+.athlete-autocomplete button {
+  width: 100%;
+  min-height: 43px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+}
+.athlete-autocomplete button:hover { background: var(--green-soft); }
+.athlete-autocomplete button > span:last-child { display: grid; gap: 2px; }
+.athlete-autocomplete strong { color: var(--ink); font-size: 10px; }
+.athlete-autocomplete small { color: var(--muted); font-size: 8px; }
+.athlete-avatar {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 900;
+}
+.athlete-avatar.small { width: 30px; height: 30px; border-radius: 9px; font-size: 8px; }
 .athlete-category-filter {
   height: 41px;
   padding: 0 4px 0 11px;
@@ -827,6 +869,57 @@ body {
 .profile-actions { margin-top: 1px; padding-top: 11px; }
 .documents-panel { overflow: hidden; padding: 16px 22px 20px; }
 
+.medical-record-browser { display: grid; gap: 14px; }
+.record-toolbar-card { overflow: visible; }
+.record-toolbar-copy {
+  min-height: 55px; padding: 12px 20px; display: flex; align-items: center;
+  justify-content: space-between; border-bottom: 1px solid var(--line);
+}
+.record-toolbar-copy strong { font-size: 12px; }
+.record-toolbar-copy span { color: var(--muted); font-size: 9px; }
+.record-toolbar {
+  min-height: 67px; padding: 11px 20px; display: grid;
+  grid-template-columns: minmax(260px, 430px) 185px 1fr;
+  align-items: center; gap: 11px; background: #fbfcfb;
+}
+.record-toolbar > strong { justify-self: end; color: var(--muted); font-size: 10px; }
+.record-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.record-card {
+  min-height: 88px; padding: 15px; display: grid; grid-template-columns: 38px 1fr;
+  align-items: center; gap: 11px; border: 1px solid var(--line); text-align: left;
+}
+.record-card:hover { border-color: #9ccdb6; box-shadow: 0 10px 25px rgba(16,72,51,.1); transform: translateY(-1px); }
+.record-card-copy { min-width: 0; display: grid; gap: 4px; }
+.record-card-copy strong { overflow: hidden; color: var(--ink); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.record-card-copy small { color: var(--muted); font-size: 8px; }
+.record-open { grid-column: 1 / -1; color: var(--green); font-size: 9px; font-weight: 800; }
+.empty-state { min-height: 150px; padding: 30px; display: grid; place-content: center; text-align: center; }
+.empty-state strong { font-size: 12px; }
+.empty-state p { margin: 5px 0 0; color: var(--muted); font-size: 9px; }
+
+.athlete-edit-modal {
+  width: min(760px, 100%); overflow: hidden; border-radius: 16px; background: white;
+  box-shadow: 0 25px 70px rgba(0,0,0,.25); animation: rise .25s ease;
+}
+.athlete-edit-modal > header {
+  position: relative; min-height: 83px; padding: 17px 22px 13px; border-bottom: 1px solid var(--line);
+}
+.athlete-edit-modal > header h2 { margin: 3px 0 2px; font-size: 20px; letter-spacing: -.4px; }
+.athlete-edit-modal > header p { margin: 0; color: var(--muted); font-size: 9px; }
+.athlete-edit-modal form {
+  padding: 15px 22px 18px; display: grid; grid-template-columns: 1fr 1fr;
+  column-gap: 14px; row-gap: 9px;
+}
+.athlete-edit-modal form label { display: grid; gap: 4px; color: #4f6259; font-size: 9px; font-weight: 800; }
+.athlete-edit-modal form label.wide, .athlete-edit-modal form footer.wide { grid-column: 1 / -1; }
+.athlete-edit-modal input, .athlete-edit-modal select {
+  width: 100%; height: 36px; padding: 0 11px; border: 1px solid #dfe6e2;
+  border-radius: 8px; outline: 0; background: #fbfcfb; color: var(--ink); font-size: 11px;
+}
+.athlete-edit-modal input:focus, .athlete-edit-modal select:focus { border-color: #69bd98; box-shadow: 0 0 0 3px #e3f4ec; }
+.athlete-edit-modal footer { padding-top: 5px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.athlete-edit-modal footer .primary-button { min-width: 145px; }
+
 @keyframes fade { from { opacity: 0; } } @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
 @keyframes pulse { from { opacity: .45; } to { opacity: 1; } }
 
@@ -840,6 +933,7 @@ body {
   .training-board { grid-template-columns: repeat(2, 1fr); }
   .communication-list { overflow-x: auto; }.communication-list > article { min-width: 780px; }
   .scanner-layout { grid-template-columns: 1fr; }.scanner-stage { border-right: 0; border-bottom: 1px solid var(--line); }
+  .record-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 760px) {
@@ -868,6 +962,13 @@ body {
   .module-toolbar { align-items: flex-start; height: auto; padding: 16px; gap: 12px; flex-direction: column; }
   .athlete-list-toolbar { grid-template-columns: 1fr; }
   .athlete-list-toolbar > strong { justify-self: start; }
+  .record-toolbar { grid-template-columns: 1fr; }
+  .record-toolbar > strong { justify-self: start; }
+  .record-toolbar-copy { align-items: flex-start; flex-direction: column; justify-content: center; gap: 4px; }
+  .record-grid { grid-template-columns: 1fr; }
+  .athlete-edit-modal { max-height: calc(100vh - 16px); overflow-y: auto; border-radius: 14px; }
+  .athlete-edit-modal form { grid-template-columns: 1fr; padding: 15px 18px 18px; }
+  .athlete-edit-modal form label.wide, .athlete-edit-modal form footer.wide { grid-column: 1; }
   .profile-modal { max-height: calc(100vh - 16px); border-radius: 14px; }
   .profile-header { padding: 19px 18px 15px; grid-template-columns: 45px 1fr auto; }
   .profile-avatar { width: 43px; height: 43px; border-radius: 12px; }
