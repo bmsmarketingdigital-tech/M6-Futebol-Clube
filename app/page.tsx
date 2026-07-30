@@ -247,19 +247,51 @@ export default function Home() {
 
         <nav aria-label="Navegação principal">
           <p className="nav-label">GESTÃO</p>
-          {navItems.slice(0, 6).map((item) => (
-            <button
-              key={item.label}
-              className={section === item.label ? "nav-item active" : "nav-item"}
-              onClick={() => setSection(item.label)}
-            >
-              <span className="nav-icon">{item.icon}</span>
-              {item.label}
-              {item.label === "Financeiro" && financeOverview.overdueCount > 0 && (
-                <span className="nav-badge">{financeOverview.overdueCount}</span>
-              )}
-            </button>
-          ))}
+          {navItems.slice(0, 6).map((item) =>
+            item.label === "Atletas" ? (
+              <div className="nav-group" key={item.label}>
+                <button
+                  className={
+                    section === "Atletas" ? "nav-item expanded" : "nav-item"
+                  }
+                  onClick={() => setSection("Atletas")}
+                  aria-expanded={section === "Atletas"}
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  Atletas
+                  <span className="nav-chevron">
+                    {section === "Atletas" ? "⌃" : "⌄"}
+                  </span>
+                </button>
+                {section === "Atletas" && (
+                  <button
+                    className="nav-subitem active"
+                    onClick={() => setSection("Atletas")}
+                  >
+                    <span />
+                    Prontuário
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button
+                key={item.label}
+                className={
+                  section === item.label ? "nav-item active" : "nav-item"
+                }
+                onClick={() => setSection(item.label)}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                {item.label}
+                {item.label === "Financeiro" &&
+                  financeOverview.overdueCount > 0 && (
+                    <span className="nav-badge">
+                      {financeOverview.overdueCount}
+                    </span>
+                  )}
+              </button>
+            ),
+          )}
           <p className="nav-label second">DESENVOLVIMENTO</p>
           {navItems.slice(6).map((item) => (
             <button
@@ -302,9 +334,6 @@ export default function Home() {
             </span>
             <button className="icon-button" aria-label="Ajuda">?</button>
             <button className="icon-button notification" aria-label="Notificações">♢</button>
-            <button className="primary-button" onClick={() => setShowAthleteModal(true)}>
-              <span>＋</span> Novo atleta
-            </button>
           </div>
         </header>
 
@@ -366,7 +395,8 @@ export default function Home() {
           ) : (
             <SectionView
               section={section}
-              athletes={filteredAthletes}
+              athletes={athletes}
+              categories={categories}
               teams={teams}
               setShowAthleteModal={setShowAthleteModal}
               onNewTeam={() => {
@@ -396,7 +426,7 @@ export default function Home() {
               <label>Nome completo<input name="name" required placeholder="Ex.: Matheus Oliveira" autoFocus /></label>
               <div className="form-row">
                 <label>Idade<input name="age" type="number" min="4" max="18" required placeholder="10" /></label>
-                <label>
+                <label className="category-field">
                   <span className="category-label">
                     Categoria
                     <button
@@ -636,6 +666,7 @@ function Dashboard({
 function SectionView({
   section,
   athletes,
+  categories,
   teams,
   setShowAthleteModal,
   onNewTeam,
@@ -646,6 +677,7 @@ function SectionView({
 }: {
   section: Section;
   athletes: Athlete[];
+  categories: CategoryRecord[];
   teams: TeamRecord[];
   setShowAthleteModal: (show: boolean) => void;
   onNewTeam: () => void;
@@ -654,9 +686,24 @@ function SectionView({
   onOpenAthlete: (athlete: Athlete) => void;
   notify: (message: string) => void;
 }) {
+  const [athleteQuery, setAthleteQuery] = useState("");
+  const [athleteCategory, setAthleteCategory] = useState("all");
+  const visibleAthletes = useMemo(
+    () =>
+      athletes.filter((athlete) => {
+        const matchesName = athlete.name
+          .toLocaleLowerCase("pt-BR")
+          .includes(athleteQuery.trim().toLocaleLowerCase("pt-BR"));
+        const matchesCategory =
+          athleteCategory === "all" || athlete.category === athleteCategory;
+        return matchesName && matchesCategory;
+      }),
+    [athleteCategory, athleteQuery, athletes],
+  );
+
   const descriptions: Record<Section, string> = {
     "Visão geral": "",
-    Atletas: "Perfis, responsáveis, documentos e histórico esportivo.",
+    Atletas: "Cadastre, localize e mantenha os dados dos atletas organizados.",
     Turmas: "Horários, categorias, professores e capacidade das turmas.",
     Presença: "Acompanhe frequência, ausências e reposições.",
     "QR e entrada": "Leia o cartão do atleta, registre presença e avise o responsável.",
@@ -681,21 +728,63 @@ function SectionView({
       ? "Fazer chamada"
       : section === "Turmas"
         ? "Nova turma"
-        : "Novo registro";
+        : section === "Atletas"
+          ? "Novo atleta"
+          : "Novo registro";
 
   return (
     <>
       <div className="section-heading">
-        <div><span className="eyebrow">BASEFORTE</span><h1>{section}</h1><p>{descriptions[section]}</p></div>
+        <div>
+          <span className="eyebrow">
+            {section === "Atletas" ? "ATLETAS" : "BASEFORTE"}
+          </span>
+          <h1>{section === "Atletas" ? "Prontuário" : section}</h1>
+          <p>{descriptions[section]}</p>
+        </div>
         <button className="primary-button" onClick={action}>＋ {actionLabel}</button>
       </div>
       {section === "Atletas" ? (
-        <div className="card module-card">
-          <div className="module-toolbar"><strong>{athletes.length} atletas encontrados</strong><div><button className="filter-button">Todas as categorias⌄</button><button className="filter-button">Exportar</button></div></div>
+        <div className="card module-card athlete-records">
+          <div
+            className="athlete-tabs"
+            role="tablist"
+            aria-label="Listas de atletas"
+          >
+            <button className="active" role="tab" aria-selected="true">
+              Todos <span>{athletes.length}</span>
+            </button>
+          </div>
+          <div className="athlete-list-toolbar">
+            <label className="athlete-list-search">
+              <span>⌕</span>
+              <input
+                aria-label="Pesquisar atleta por nome"
+                value={athleteQuery}
+                onChange={(event) => setAthleteQuery(event.target.value)}
+                placeholder="Pesquisar por nome..."
+              />
+            </label>
+            <label className="athlete-category-filter">
+              <span>Categoria</span>
+              <select
+                value={athleteCategory}
+                onChange={(event) => setAthleteCategory(event.target.value)}
+              >
+                <option value="all">Todas</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.name}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <strong>{visibleAthletes.length} resultado(s)</strong>
+          </div>
           <div className="athlete-table expanded">
             <div className="table-row table-head"><span>ATLETA</span><span>CATEGORIA</span><span>FREQUÊNCIA</span><span>FINANCEIRO</span></div>
-            {athletes.map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} onOpen={onOpenAthlete} />)}
-            {athletes.length === 0 && <EmptyAthletes />}
+            {visibleAthletes.map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} onOpen={onOpenAthlete} />)}
+            {visibleAthletes.length === 0 && <EmptyAthletes />}
           </div>
         </div>
       ) : section === "Turmas" ? (

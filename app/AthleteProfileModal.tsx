@@ -131,7 +131,7 @@ export function AthleteProfileModal({
   async function archiveAthlete() {
     if (
       !window.confirm(
-        `Arquivar ${athlete.name}? O histórico será preservado e o atleta sairá das listas ativas.`,
+        `Excluir ${athlete.name} da lista de atletas? O histórico será preservado.`,
       )
     ) {
       return;
@@ -147,7 +147,7 @@ export function AthleteProfileModal({
         throw new Error(payload.error || "Não foi possível arquivar o atleta.");
       }
       onArchived(athlete.id);
-      notify(`${athlete.name} foi arquivado. O histórico foi preservado.`);
+      notify(`${athlete.name} foi excluído da lista. O histórico foi preservado.`);
       onClose();
     } catch (error) {
       notify(
@@ -289,7 +289,7 @@ export function AthleteProfileModal({
             )}
             <footer className="profile-actions wide">
               <button type="button" className="archive-button" onClick={archiveAthlete} disabled={archiving}>
-                {archiving ? "Arquivando..." : "Arquivar atleta"}
+                {archiving ? "Excluindo..." : "Excluir atleta"}
               </button>
               <button type="submit" className="primary-button" disabled={saving}>
                 {saving ? "Salvando..." : "Salvar alterações"}
