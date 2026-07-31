@@ -187,6 +187,12 @@ export const attendanceSessions = sqliteTable(
       .references(() => teams.id, { onDelete: "cascade" }),
     sessionDate: text("session_date").notNull(),
     recordedBy: text("recorded_by").notNull(),
+    status: text("status", { enum: ["completed", "canceled"] })
+      .notNull()
+      .default("completed"),
+    canceledAt: integer("canceled_at", { mode: "timestamp" }),
+    canceledBy: text("canceled_by"),
+    cancelReason: text("cancel_reason"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
   (table) => [
@@ -195,6 +201,29 @@ export const attendanceSessions = sqliteTable(
       table.sessionDate,
     ),
     index("attendance_sessions_organization_idx").on(table.organizationId),
+  ],
+);
+
+export const classReminders = sqliteTable(
+  "class_reminders",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    sessionDate: text("session_date").notNull(),
+    sentAt: integer("sent_at", { mode: "timestamp" }).notNull(),
+    recipientCount: integer("recipient_count").notNull().default(0),
+  },
+  (table) => [
+    uniqueIndex("class_reminders_team_date_unique").on(
+      table.teamId,
+      table.sessionDate,
+    ),
+    index("class_reminders_organization_idx").on(table.organizationId),
   ],
 );
 

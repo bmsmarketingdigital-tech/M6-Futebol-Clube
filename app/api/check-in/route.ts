@@ -203,6 +203,14 @@ export async function POST(request: Request) {
         ),
       )
       .limit(1);
+    if (session && session.status === "canceled") {
+      return Response.json(
+        {
+          error: `O treino da turma ${enrollment.teamName} nesta data foi cancelado.`,
+        },
+        { status: 409 },
+      );
+    }
     if (!session) {
       [session] = await db
         .insert(attendanceSessions)

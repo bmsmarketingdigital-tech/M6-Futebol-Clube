@@ -230,6 +230,10 @@ export function AttendanceModal({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [alreadySaved, setAlreadySaved] = useState(false);
+  const [canceled, setCanceled] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelInput, setCancelInput] = useState("Chuva");
+  const [canceling, setCanceling] = useState(false);
 
   const loadAttendance = useCallback(async () => {
     setLoading(true);
@@ -238,11 +242,15 @@ export function AttendanceModal({
       const payload = (await response.json()) as {
         athletes?: AttendanceAthlete[];
         saved?: boolean;
+        canceled?: boolean;
+        cancelReason?: string | null;
         error?: string;
       };
       if (!response.ok) throw new Error(payload.error || "Falha ao carregar chamada.");
       setRoster(payload.athletes ?? []);
       setAlreadySaved(Boolean(payload.saved));
+      setCanceled(Boolean(payload.canceled));
+      setCancelReason(payload.cancelReason ?? "");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Falha ao carregar chamada.");
     } finally {
@@ -294,6 +302,39 @@ export function AttendanceModal({
     }
   }
 
+  async function toggleCancel(nextCanceled: boolean) {
+    setCanceling(true);
+    try {
+      const response = await fetch(`/api/teams/${team.id}/attendance/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date,
+          canceled: nextCanceled,
+          reason: nextCanceled ? cancelInput : undefined,
+        }),
+      });
+      const payload = (await response.json()) as {
+        canceled?: boolean;
+        reason?: string;
+        notified?: number;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(payload.error || "Falha ao atualizar o cancelamento.");
+      setCanceled(Boolean(payload.canceled));
+      setCancelReason(payload.reason ?? "");
+      if (nextCanceled) {
+        notify(`Aula cancelada. ${payload.notified ?? 0} responsáveis avisados.`);
+      } else {
+        notify("Aula reaberta.");
+      }
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Falha ao atualizar o cancelamento.");
+    } finally {
+      setCanceling(false);
+    }
+  }
+
   const presentCount = roster.filter((athlete) => athlete.present).length;
 
   return (
@@ -306,11 +347,25 @@ export function AttendanceModal({
         <div className="attendance-toolbar">
           <label>Data da aula<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
           <div><span><b>{presentCount}</b> presentes</span><span><b>{roster.length - presentCount}</b> ausentes</span>{alreadySaved && <em>Chamada já registrada</em>}</div>
+          {!canceled && !alreadySaved && (
+            <div className="attendance-cancel-row">
+              <input value={cancelInput} onChange={(event) => setCancelInput(event.target.value)} placeholder="Motivo (ex: Chuva)" maxLength={240} />
+              <button className="filter-button" onClick={() => toggleCancel(true)} disabled={canceling}>{canceling ? "Cancelando..." : "Cancelar aula"}</button>
+            </div>
+          )}
         </div>
         <div className="attendance-roster">
           {loading && <div className="document-empty">Carregando atletas...</div>}
-          {!loading && roster.length === 0 && <div className="document-empty"><span>◎</span><strong>Turma sem atletas</strong><small>Edite a turma e adicione atletas antes da chamada.</small></div>}
-          {!loading && roster.map((athlete) => (
+          {!loading && canceled && (
+            <div className="document-empty">
+              <span>☔</span>
+              <strong>Aula cancelada</strong>
+              <small>Motivo: {cancelReason || "Não informado"}</small>
+              <button className="filter-button" onClick={() => toggleCancel(false)} disabled={canceling}>{canceling ? "Reabrindo..." : "Reabrir aula"}</button>
+            </div>
+          )}
+          {!loading && !canceled && roster.length === 0 && <div className="document-empty"><span>◎</span><strong>Turma sem atletas</strong><small>Edite a turma e adicione atletas antes da chamada.</small></div>}
+          {!loading && !canceled && roster.map((athlete) => (
             <article key={athlete.id} className={athlete.present ? "attendance-person present" : "attendance-person absent"}>
               <button onClick={() => updateAthlete(athlete.id, { present: !athlete.present })} aria-label={`${athlete.present ? "Marcar ausência de" : "Marcar presença de"} ${athlete.name}`}><span>{athlete.present ? "✓" : "×"}</span></button>
               <span className="mini-avatar green">{athlete.initials}</span>
@@ -321,7 +376,9 @@ export function AttendanceModal({
         </div>
         <footer className="attendance-footer">
           <button className="filter-button" onClick={onClose}>Cancelar</button>
-          <button className="primary-button" onClick={saveAttendance} disabled={saving || roster.length === 0}>{saving ? "Salvando..." : alreadySaved ? "Atualizar chamada" : "Salvar chamada"}</button>
+          {!canceled && (
+            <button className="primary-button" onClick={saveAttendance} disabled={saving || roster.length === 0}>{saving ? "Salvando..." : alreadySaved ? "Atualizar chamada" : "Salvar chamada"}</button>
+          )}
         </footer>
       </section>
     </div>

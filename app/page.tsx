@@ -187,6 +187,23 @@ export default function Home() {
     }
   }, []);
 
+  const checkReminders = useCallback(async () => {
+    try {
+      const response = await fetch("/api/reminders", { method: "POST" });
+      const payload = (await response.json()) as {
+        remindersSent?: number;
+        teams?: string[];
+      };
+      if (response.ok && (payload.remindersSent ?? 0) > 0) {
+        notify(
+          `Lembretes de treino enviados para: ${(payload.teams ?? []).join(", ")}.`,
+        );
+      }
+    } catch {
+      // Os lembretes são reenviados na próxima verificação.
+    }
+  }, []);
+
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       void loadAthletes();
@@ -196,6 +213,15 @@ export default function Home() {
     }, 0);
     return () => window.clearTimeout(timeout);
   }, [loadAthletes, loadCategories, loadFinanceOverview, loadTeams]);
+
+  useEffect(() => {
+    void checkReminders();
+    const interval = window.setInterval(
+      () => void checkReminders(),
+      30 * 60 * 1000,
+    );
+    return () => window.clearInterval(interval);
+  }, [checkReminders]);
 
   const filteredAthletes = useMemo(
     () =>

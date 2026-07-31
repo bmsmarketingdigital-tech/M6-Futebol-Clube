@@ -80,7 +80,11 @@ export async function GET(
     );
     const db = getDb();
     const [session] = await db
-      .select({ id: attendanceSessions.id })
+      .select({
+        id: attendanceSessions.id,
+        status: attendanceSessions.status,
+        cancelReason: attendanceSessions.cancelReason,
+      })
       .from(attendanceSessions)
       .where(
         and(
@@ -103,6 +107,7 @@ export async function GET(
     const savedByAthlete = new Map(
       savedRecords.map((record) => [record.athleteId, record]),
     );
+    const canceled = session?.status === "canceled";
 
     return Response.json({
       team: {
@@ -112,7 +117,9 @@ export async function GET(
         startTime: authorized.team.startTime,
       },
       date,
-      saved: Boolean(session),
+      saved: savedRecords.length > 0,
+      canceled,
+      cancelReason: canceled ? session?.cancelReason ?? null : null,
       athletes: roster.map((athlete) => {
         const saved = savedByAthlete.get(athlete.id);
         return {
@@ -191,6 +198,16 @@ export async function POST(
         ),
       )
       .limit(1);
+
+    if (session && session.status === "canceled") {
+      return Response.json(
+        {
+          error:
+            "Esta data está marcada como aula cancelada. Reabra a aula antes de fazer a chamada.",
+        },
+        { status: 409 },
+      );
+    }
 
     if (!session) {
       [session] = await db

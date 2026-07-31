@@ -109,7 +109,19 @@ export function ensureDatabase() {
           team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
           session_date TEXT NOT NULL,
           recorded_by TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'completed',
+          canceled_at INTEGER,
+          canceled_by TEXT,
+          cancel_reason TEXT,
           created_at INTEGER NOT NULL
+        )`),
+        d1.prepare(`CREATE TABLE IF NOT EXISTS class_reminders (
+          id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+          organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+          session_date TEXT NOT NULL,
+          sent_at INTEGER NOT NULL,
+          recipient_count INTEGER NOT NULL DEFAULT 0
         )`),
         d1.prepare(`CREATE TABLE IF NOT EXISTS attendance_records (
           id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -283,6 +295,12 @@ export function ensureDatabase() {
           "CREATE INDEX IF NOT EXISTS attendance_sessions_organization_idx ON attendance_sessions (organization_id)",
         ),
         d1.prepare(
+          "CREATE UNIQUE INDEX IF NOT EXISTS class_reminders_team_date_unique ON class_reminders (team_id, session_date)",
+        ),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS class_reminders_organization_idx ON class_reminders (organization_id)",
+        ),
+        d1.prepare(
           "CREATE UNIQUE INDEX IF NOT EXISTS attendance_records_session_athlete_unique ON attendance_records (session_id, athlete_id)",
         ),
         d1.prepare(
@@ -450,6 +468,28 @@ export function ensureDatabase() {
           await d1
             .prepare("ALTER TABLE billing_plans ADD COLUMN category TEXT")
             .run();
+        }
+
+        const attendanceSessionColumns = await d1
+          .prepare("PRAGMA table_info(attendance_sessions)")
+          .all<{ name: string }>();
+        const existingAttendanceSessionColumns = new Set(
+          attendanceSessionColumns.results.map((column) => column.name),
+        );
+        const attendanceSessionAdditions = [
+          [
+            "status",
+            "ALTER TABLE attendance_sessions ADD COLUMN status TEXT NOT NULL DEFAULT 'completed'",
+          ],
+          ["canceled_at", "ALTER TABLE attendance_sessions ADD COLUMN canceled_at INTEGER"],
+          ["canceled_by", "ALTER TABLE attendance_sessions ADD COLUMN canceled_by TEXT"],
+          ["cancel_reason", "ALTER TABLE attendance_sessions ADD COLUMN cancel_reason TEXT"],
+        ] as const;
+
+        for (const [column, statement] of attendanceSessionAdditions) {
+          if (!existingAttendanceSessionColumns.has(column)) {
+            await d1.prepare(statement).run();
+          }
         }
       })
       .catch((error) => {
