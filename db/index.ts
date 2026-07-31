@@ -201,6 +201,7 @@ export function ensureDatabase() {
           name TEXT NOT NULL,
           amount_cents INTEGER NOT NULL,
           due_day INTEGER NOT NULL DEFAULT 10,
+          category TEXT,
           active INTEGER NOT NULL DEFAULT 1,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
@@ -439,6 +440,15 @@ export function ensureDatabase() {
         if (!billingColumns.results.some((column) => column.name === "provider_customer_id")) {
           await d1
             .prepare("ALTER TABLE athlete_billing ADD COLUMN provider_customer_id TEXT")
+            .run();
+        }
+
+        const billingPlanColumns = await d1
+          .prepare("PRAGMA table_info(billing_plans)")
+          .all<{ name: string }>();
+        if (!billingPlanColumns.results.some((column) => column.name === "category")) {
+          await d1
+            .prepare("ALTER TABLE billing_plans ADD COLUMN category TEXT")
             .run();
         }
       })

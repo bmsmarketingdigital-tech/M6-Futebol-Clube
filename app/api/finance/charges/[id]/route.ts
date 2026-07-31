@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../../../db";
 import { athletes, payments } from "../../../../../db/schema";
 import { getApiContext } from "../../../api-auth";
@@ -6,6 +6,17 @@ import { getApiContext } from "../../../api-auth";
 export const dynamic = "force-dynamic";
 
 const methods = new Set(["cash", "pix", "card", "bank", "other"]);
+const methodLabels: Record<string, string> = {
+  cash: "Dinheiro",
+  pix: "PIX",
+  card: "Cartão",
+  bank: "Transferência",
+  other: "Outro",
+};
+
+function formatCents(cents: number) {
+  return `R$ ${(cents / 100).toFixed(2).replace(".", ",")}`;
+}
 
 async function refreshAthleteStatus(
   organizationId: string,
@@ -19,7 +30,7 @@ async function refreshAthleteStatus(
       and(
         eq(payments.organizationId, organizationId),
         eq(payments.athleteId, athleteId),
-        inArray(payments.status, ["open", "overdue"]),
+        inArray(payments.status, ["open", "overdue", "partial"]),
       ),
     )
     .limit(1);
@@ -82,7 +93,11 @@ export async function PATCH(
       current.dueDate < now.toISOString().slice(0, 10) ? "overdue" : "open";
 
     if (payload.action === "pay") {
-      if (current.status !== "open" && current.status !== "overdue") {
+      if (
+        current.status !== "open" &&
+        current.status !== "overdue" &&
+        current.status !== "partial"
+      ) {
         return Response.json(
           { error: "Somente cobranças em aberto podem receber baixa." },
           { status: 409 },
@@ -92,34 +107,48 @@ export async function PATCH(
       if (!methods.has(paymentMethod)) {
         return Response.json({ error: "Forma de pagamento inválida." }, { status: 400 });
       }
-      const paidAmountCents =
+      const alreadyPaidCents = current.paidAmountCents ?? 0;
+      const remainingCents = current.amountCents - alreadyPaidCents;
+      const incomingCents =
         payload.paidAmount == null
-          ? current.amountCents
+          ? remainingCents
           : Math.round(Number(payload.paidAmount) * 100);
-      if (!Number.isInteger(paidAmountCents) || paidAmountCents < 0) {
+      if (!Number.isInteger(incomingCents) || incomingCents <= 0) {
         return Response.json({ error: "Valor recebido inválido." }, { status: 400 });
       }
+      if (incomingCents > remainingCents) {
+        return Response.json(
+          {
+            error: `Valor maior que o saldo devido (${formatCents(remainingCents)}).`,
+          },
+          { status: 400 },
+        );
+      }
+      const totalPaidCents = alreadyPaidCents + incomingCents;
+      const newStatus = totalPaidCents >= current.amountCents ? "paid" : "partial";
       await db
         .update(payments)
         .set({
-          status: "paid",
+          status: newStatus,
           paidAt: now,
-          paidAmountCents,
+          paidAmountCents: totalPaidCents,
           paymentMethod,
-          notes: reason || null,
+          notes: appendAuditNote(
+            `Baixa de ${formatCents(incomingCents)} via ${methodLabels[paymentMethod]}`,
+          ),
           updatedAt: now,
         })
         .where(
           and(
             eq(payments.id, id),
             eq(payments.organizationId, organizationId),
-            ne(payments.status, "paid"),
+            inArray(payments.status, ["open", "overdue", "partial"]),
           ),
         );
     } else if (payload.action === "cancel") {
       if (current.status !== "open" && current.status !== "overdue") {
         return Response.json(
-          { error: "Estorne a baixa antes de cancelar uma cobrança paga." },
+          { error: "Estorne a baixa antes de cancelar uma cobrança com pagamento registrado." },
           { status: 409 },
         );
       }
@@ -143,7 +172,7 @@ export async function PATCH(
           ),
         );
     } else if (payload.action === "reverse") {
-      if (current.status !== "paid") {
+      if (current.status !== "paid" && current.status !== "partial") {
         return Response.json(
           { error: "Somente pagamentos baixados podem ser estornados." },
           { status: 409 },
@@ -169,7 +198,7 @@ export async function PATCH(
           and(
             eq(payments.id, id),
             eq(payments.organizationId, organizationId),
-            eq(payments.status, "paid"),
+            inArray(payments.status, ["paid", "partial"]),
           ),
         );
     } else if (payload.action === "restore") {

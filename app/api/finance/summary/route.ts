@@ -36,7 +36,7 @@ export async function GET(request: Request) {
         ),
       );
 
-    const [planRows, billingRows, chargeRows] = await Promise.all([
+    const [planRows, archivedPlanRows, billingRows, chargeRows] = await Promise.all([
       db
         .select()
         .from(billingPlans)
@@ -44,6 +44,16 @@ export async function GET(request: Request) {
           and(
             eq(billingPlans.organizationId, organizationId),
             eq(billingPlans.active, true),
+          ),
+        )
+        .orderBy(asc(billingPlans.name)),
+      db
+        .select()
+        .from(billingPlans)
+        .where(
+          and(
+            eq(billingPlans.organizationId, organizationId),
+            eq(billingPlans.active, false),
           ),
         )
         .orderBy(asc(billingPlans.name)),
@@ -102,27 +112,30 @@ export async function GET(request: Request) {
         .orderBy(desc(payments.dueDate), asc(athletes.fullName)),
     ]);
 
-    const receivedCents = chargeRows.reduce(
-      (sum, charge) =>
-        charge.status === "paid"
-          ? sum + (charge.paidAmountCents ?? charge.amountCents)
-          : sum,
-      0,
-    );
-    const pendingCents = chargeRows.reduce(
-      (sum, charge) =>
-        charge.status === "open" ? sum + charge.amountCents : sum,
-      0,
-    );
-    const overdueCents = chargeRows.reduce(
-      (sum, charge) =>
-        charge.status === "overdue" ? sum + charge.amountCents : sum,
-      0,
-    );
+    const receivedCents = chargeRows.reduce((sum, charge) => {
+      if (charge.status === "paid") return sum + (charge.paidAmountCents ?? charge.amountCents);
+      if (charge.status === "partial") return sum + (charge.paidAmountCents ?? 0);
+      return sum;
+    }, 0);
+    const pendingCents = chargeRows.reduce((sum, charge) => {
+      if (charge.status === "open") return sum + charge.amountCents;
+      if (charge.status === "partial" && charge.dueDate >= today) {
+        return sum + (charge.amountCents - (charge.paidAmountCents ?? 0));
+      }
+      return sum;
+    }, 0);
+    const overdueCents = chargeRows.reduce((sum, charge) => {
+      if (charge.status === "overdue") return sum + charge.amountCents;
+      if (charge.status === "partial" && charge.dueDate < today) {
+        return sum + (charge.amountCents - (charge.paidAmountCents ?? 0));
+      }
+      return sum;
+    }, 0);
 
     return Response.json({
       month,
       plans: planRows,
+      archivedPlans: archivedPlanRows,
       billing: billingRows,
       charges: chargeRows,
       summary: {
@@ -130,8 +143,14 @@ export async function GET(request: Request) {
         pendingCents,
         overdueCents,
         expectedCents: receivedCents + pendingCents + overdueCents,
-        paidCount: chargeRows.filter((charge) => charge.status === "paid").length,
-        overdueCount: chargeRows.filter((charge) => charge.status === "overdue").length,
+        paidCount: chargeRows.filter(
+          (charge) => charge.status === "paid" || charge.status === "partial",
+        ).length,
+        overdueCount: chargeRows.filter(
+          (charge) =>
+            charge.status === "overdue" ||
+            (charge.status === "partial" && charge.dueDate < today),
+        ).length,
       },
       paymentIntegration: {
         provider: "asaas",

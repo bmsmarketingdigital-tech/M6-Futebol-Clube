@@ -411,6 +411,7 @@ export const billingPlans = sqliteTable(
     name: text("name").notNull(),
     amountCents: integer("amount_cents").notNull(),
     dueDay: integer("due_day").notNull().default(10),
+    category: text("category"),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
@@ -478,7 +479,9 @@ export const payments = sqliteTable(
     bankSlipUrl: text("bank_slip_url"),
     externalStatus: text("external_status"),
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
-    status: text("status", { enum: ["open", "paid", "overdue", "cancelled"] })
+    status: text("status", {
+      enum: ["open", "paid", "partial", "overdue", "cancelled"],
+    })
       .notNull()
       .default("open"),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),

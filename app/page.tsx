@@ -29,6 +29,7 @@ type Section =
   | "Presença"
   | "QR e entrada"
   | "Financeiro"
+  | "Planos"
   | "Treinos"
   | "Avaliações"
   | "Comunicação";
@@ -63,6 +64,7 @@ const sectionPageClasses: Record<Exclude<Section, "Visão geral">, string> = {
   Presença: "attendance-page",
   "QR e entrada": "checkin-page",
   Financeiro: "finance-page",
+  Planos: "finance-page",
   Treinos: "trainings-page",
   Avaliações: "evaluations-page",
   Comunicação: "communications-page",
@@ -79,6 +81,7 @@ export default function Home() {
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
   const [athletesMenuOpen, setAthletesMenuOpen] = useState(false);
+  const [financeMenuOpen, setFinanceMenuOpen] = useState(false);
   const [editingAthlete, setEditingAthlete] = useState<Athlete | null>(null);
   const [profileAthlete, setProfileAthlete] = useState<Athlete | null>(null);
   const [teamModalOpen, setTeamModalOpen] = useState(false);
@@ -302,6 +305,47 @@ export default function Home() {
                   </button>
                 )}
               </div>
+            ) : item.label === "Financeiro" ? (
+              <div className="nav-group" key={item.label}>
+                <button
+                  className={
+                    section === "Financeiro" || section === "Planos"
+                      ? "nav-item expanded"
+                      : "nav-item"
+                  }
+                  onClick={() => {
+                    const isFinanceSection =
+                      section === "Financeiro" || section === "Planos";
+                    setSection("Financeiro");
+                    setFinanceMenuOpen((current) =>
+                      isFinanceSection ? !current : true,
+                    );
+                  }}
+                  aria-expanded={financeMenuOpen}
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  Financeiro
+                  {financeOverview.overdueCount > 0 && (
+                    <span className="nav-badge">
+                      {financeOverview.overdueCount}
+                    </span>
+                  )}
+                  <span className="nav-chevron">
+                    {financeMenuOpen ? "⌃" : "⌄"}
+                  </span>
+                </button>
+                {financeMenuOpen && (
+                  <button
+                    className={
+                      section === "Planos" ? "nav-subitem active" : "nav-subitem"
+                    }
+                    onClick={() => setSection("Planos")}
+                  >
+                    <span />
+                    Planos
+                  </button>
+                )}
+              </div>
             ) : (
               <button
                 key={item.label}
@@ -312,12 +356,6 @@ export default function Home() {
               >
                 <span className="nav-icon">{item.icon}</span>
                 {item.label}
-                {item.label === "Financeiro" &&
-                  financeOverview.overdueCount > 0 && (
-                    <span className="nav-badge">
-                      {financeOverview.overdueCount}
-                    </span>
-                  )}
               </button>
             ),
           )}
@@ -397,14 +435,16 @@ export default function Home() {
               finance={financeOverview}
               notify={notify}
             />
-          ) : section === "Financeiro" ? (
+          ) : section === "Financeiro" || section === "Planos" ? (
             <FinanceManagement
-              athletes={filteredAthletes}
+              view={section === "Planos" ? "plans" : "overview"}
+              athletes={athletes}
               notify={notify}
               onChanged={() => {
                 void loadAthletes();
                 void loadFinanceOverview();
               }}
+              onOpenPlans={() => setSection("Planos")}
             />
           ) : section === "Avaliações" ? (
             <EvaluationManagement athletes={filteredAthletes} notify={notify} />
@@ -717,6 +757,18 @@ function Dashboard({
   );
 }
 
+const weekdayOrder: Record<string, number> = {
+  Dom: 0, Seg: 1, Ter: 2, Qua: 3, Qui: 4, Sex: 5, Sáb: 6,
+};
+
+function teamScheduleRank(team: TeamRecord) {
+  const earliestDay = team.scheduleDays.reduce(
+    (min, day) => Math.min(min, weekdayOrder[day] ?? 7),
+    7,
+  );
+  return earliestDay * 2400 + Number(team.startTime.replace(":", ""));
+}
+
 function SectionView({
   section,
   athletes,
@@ -742,6 +794,10 @@ function SectionView({
 }) {
   const [athleteQuery, setAthleteQuery] = useState("");
   const [athleteCategory, setAthleteCategory] = useState("all");
+  const [teamQuery, setTeamQuery] = useState("");
+  const [teamCategory, setTeamCategory] = useState("all");
+  const [teamDay, setTeamDay] = useState("all");
+  const [teamSort, setTeamSort] = useState<"schedule" | "name" | "category">("schedule");
   const [recordPickerOpen, setRecordPickerOpen] = useState(false);
   const [recordAthleteId, setRecordAthleteId] = useState("");
   const visibleAthletes = useMemo(
@@ -767,6 +823,27 @@ function SectionView({
       .slice(0, 5);
   }, [athleteQuery, athletes]);
 
+  const visibleTeams = useMemo(
+    () =>
+      teams
+        .filter((team) => {
+          const query = teamQuery.trim().toLocaleLowerCase("pt-BR");
+          const matchesQuery =
+            !query ||
+            team.name.toLocaleLowerCase("pt-BR").includes(query) ||
+            team.coachName.toLocaleLowerCase("pt-BR").includes(query);
+          const matchesCategory = teamCategory === "all" || team.category === teamCategory;
+          const matchesDay = teamDay === "all" || team.scheduleDays.includes(teamDay);
+          return matchesQuery && matchesCategory && matchesDay;
+        })
+        .sort((a, b) => {
+          if (teamSort === "name") return a.name.localeCompare(b.name, "pt-BR");
+          if (teamSort === "category") return a.category.localeCompare(b.category, "pt-BR") || teamScheduleRank(a) - teamScheduleRank(b);
+          return teamScheduleRank(a) - teamScheduleRank(b);
+        }),
+    [teams, teamQuery, teamCategory, teamDay, teamSort],
+  );
+
   const descriptions: Record<Section, string> = {
     "Visão geral": "",
     Atletas: "Cadastre, localize e mantenha os dados dos atletas organizados.",
@@ -775,6 +852,7 @@ function SectionView({
     Presença: "Acompanhe frequência, ausências e reposições.",
     "QR e entrada": "Leia o cartão do atleta, registre presença e avise o responsável.",
     Financeiro: "Mensalidades, cobranças, fluxo de caixa e inadimplência.",
+    Planos: "Planos de mensalidade, faturamento e vínculo de cobrança por atleta.",
     Treinos: "Planejamento de sessões e biblioteca de exercícios.",
     Avaliações: "Evolução técnica, física, tática e comportamental.",
     Comunicação: "Avisos segmentados para responsáveis, atletas e equipe.",
@@ -934,19 +1012,70 @@ function SectionView({
           )}
         </div>
       ) : section === "Turmas" ? (
-        <div className="class-grid">
-          {teams.map((team) => (
-            <div className="card class-card" key={team.id}>
-              <span className={`class-stripe ${team.color}`} />
-              <div className="class-top"><span>{team.category}</span><small>{team.place}</small></div>
-              <h3>{team.name}</h3>
-              <p>{team.coachName} · {team.scheduleDays.join(" e ")} · {team.startTime}</p>
-              <div className="capacity"><span><b>{team.players}</b> / {team.capacity} atletas</span><span>{Math.round((team.players / team.capacity) * 100)}%</span></div>
-              <div className="capacity-bar"><i style={{ width: `${Math.min(100, (team.players / team.capacity) * 100)}%` }} /></div>
-              <div className="class-actions"><button onClick={() => onOpenTeam(team)}>Editar turma</button><button onClick={() => onAttendance(team)} disabled={team.players === 0}>Fazer chamada →</button></div>
+        <div className="teams-browser">
+          <div className="card team-toolbar-card">
+            <div className="team-toolbar">
+              <label className="athlete-list-search">
+                <span>⌕</span>
+                <input
+                  aria-label="Pesquisar turma por nome ou professor"
+                  value={teamQuery}
+                  onChange={(event) => setTeamQuery(event.target.value)}
+                  placeholder="Pesquisar turma ou professor..."
+                />
+              </label>
+              <label className="athlete-category-filter">
+                <span>Categoria</span>
+                <select value={teamCategory} onChange={(event) => setTeamCategory(event.target.value)}>
+                  <option value="all">Todas</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.name}>{category.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="athlete-category-filter">
+                <span>Dia</span>
+                <select value={teamDay} onChange={(event) => setTeamDay(event.target.value)}>
+                  <option value="all">Todos</option>
+                  <option value="Seg">Segunda</option>
+                  <option value="Ter">Terça</option>
+                  <option value="Qua">Quarta</option>
+                  <option value="Qui">Quinta</option>
+                  <option value="Sex">Sexta</option>
+                  <option value="Sáb">Sábado</option>
+                  <option value="Dom">Domingo</option>
+                </select>
+              </label>
+              <label className="athlete-category-filter">
+                <span>Ordenar</span>
+                <select value={teamSort} onChange={(event) => setTeamSort(event.target.value as typeof teamSort)}>
+                  <option value="schedule">Horário</option>
+                  <option value="category">Categoria</option>
+                  <option value="name">Nome</option>
+                </select>
+              </label>
+              <strong>{visibleTeams.length} resultado(s)</strong>
             </div>
-          ))}
-          {teams.length === 0 && <div className="card class-empty"><span>▦</span><strong>Nenhuma turma cadastrada</strong><small>Crie a primeira turma e selecione os atletas participantes.</small><button className="primary-button" onClick={onNewTeam}>Criar primeira turma</button></div>}
+          </div>
+          <div className="class-grid">
+            {visibleTeams.map((team) => {
+              const capacityPct = Math.round((team.players / team.capacity) * 100);
+              const overCapacity = team.players > team.capacity;
+              return (
+                <div className="card class-card" key={team.id}>
+                  <span className={`class-stripe ${team.color}`} />
+                  <div className="class-top"><span>{team.category}</span><small>{team.place}</small></div>
+                  <h3>{team.name}</h3>
+                  <p>{team.coachName} · {team.scheduleDays.join(" e ")} · {team.startTime}</p>
+                  <div className={`capacity${overCapacity ? " over" : ""}`}><span><b>{team.players}</b> / {team.capacity} atletas</span><span>{capacityPct}%</span></div>
+                  <div className={`capacity-bar${overCapacity ? " over" : ""}`}><i style={{ width: `${Math.min(100, capacityPct)}%` }} /></div>
+                  <div className="class-actions"><button onClick={() => onOpenTeam(team)}>Editar turma</button><button onClick={() => onAttendance(team)} disabled={team.players === 0}>Fazer chamada →</button></div>
+                </div>
+              );
+            })}
+            {teams.length === 0 && <div className="card class-empty"><span>▦</span><strong>Nenhuma turma cadastrada</strong><small>Crie a primeira turma e selecione os atletas participantes.</small><button className="primary-button" onClick={onNewTeam}>Criar primeira turma</button></div>}
+            {teams.length > 0 && visibleTeams.length === 0 && <div className="card class-empty"><span>⌕</span><strong>Nenhuma turma encontrada</strong><small>Ajuste a busca ou o filtro de categoria.</small></div>}
+          </div>
         </div>
       ) : section === "Presença" ? (
         <div className="attendance-team-grid">

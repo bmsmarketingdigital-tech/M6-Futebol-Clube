@@ -27,10 +27,12 @@ export function parsePlanPayload(payload: {
   name?: string;
   amount?: number;
   dueDay?: number;
+  category?: string | null;
 }) {
   const name = payload.name?.trim() ?? "";
   const amountCents = Math.round(Number(payload.amount) * 100);
   const dueDay = Number(payload.dueDay);
+  const category = payload.category?.trim() || null;
 
   if (name.length < 2 || name.length > 80) {
     return { error: "Informe um nome válido para o plano." } as const;
@@ -41,5 +43,8 @@ export function parsePlanPayload(payload: {
   if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 28) {
     return { error: "O vencimento deve estar entre os dias 1 e 28." } as const;
   }
-  return { value: { name, amountCents, dueDay } } as const;
+  if (category && category.length > 40) {
+    return { error: "Nome de categoria inválido." } as const;
+  }
+  return { value: { name, amountCents, dueDay, category } } as const;
 }

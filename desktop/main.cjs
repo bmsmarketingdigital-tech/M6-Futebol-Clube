@@ -89,6 +89,22 @@ function startWebServer({ appRoot, dataDir, bridgeToken, log }) {
   }
   const serverLog = path.join(dataDir, "logs", "server.log");
   const output = fs.openSync(serverLog, "a");
+  const serverEnv = {
+    ...process.env,
+    ELECTRON_RUN_AS_NODE: "1",
+    NODE_ENV: "development",
+    BASEFORTE_DESKTOP: "1",
+    WRANGLER_LOG_PATH: path.join(dataDir, "logs", "wrangler"),
+    MINIFLARE_REGISTRY_PATH: path.join(dataDir, "registry"),
+    WHATSAPP_BRIDGE_URL: `http://127.0.0.1:${BRIDGE_PORT}`,
+    WHATSAPP_BRIDGE_TOKEN: bridgeToken,
+  };
+  delete serverEnv.BASEFORTE_CACHE_DIR;
+  if (app.isPackaged) {
+    serverEnv.BASEFORTE_STATE_DIR = path.join(dataDir, "state");
+  } else {
+    delete serverEnv.BASEFORTE_STATE_DIR;
+  }
   webServer = spawn(
     process.execPath,
     [
@@ -101,18 +117,7 @@ function startWebServer({ appRoot, dataDir, bridgeToken, log }) {
     ],
     {
       cwd: appRoot,
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: "1",
-        NODE_ENV: "development",
-        BASEFORTE_DESKTOP: "1",
-        BASEFORTE_STATE_DIR: path.join(dataDir, "state"),
-        BASEFORTE_CACHE_DIR: path.join(dataDir, "cache", "vite"),
-        WRANGLER_LOG_PATH: path.join(dataDir, "logs", "wrangler"),
-        MINIFLARE_REGISTRY_PATH: path.join(dataDir, "registry"),
-        WHATSAPP_BRIDGE_URL: `http://127.0.0.1:${BRIDGE_PORT}`,
-        WHATSAPP_BRIDGE_TOKEN: bridgeToken,
-      },
+      env: serverEnv,
       stdio: ["ignore", output, output],
       windowsHide: true,
     },
@@ -187,7 +192,6 @@ function createWindow(log) {
 async function boot() {
   const dataDir = ensureDirectory(programDataDir());
   ensureDirectory(path.join(dataDir, "state"));
-  ensureDirectory(path.join(dataDir, "cache", "vite"));
   const log = createLogger(dataDir);
   const bridgeToken = loadBridgeToken(dataDir);
   const appRoot = app.getAppPath();
