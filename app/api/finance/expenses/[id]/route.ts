@@ -57,7 +57,7 @@ export async function PATCH(
       if (!methods.has(paymentMethod)) {
         return Response.json({ error: "Forma de pagamento inválida." }, { status: 400 });
       }
-      await db
+      const [paid] = await db
         .update(expenses)
         .set({
           status: "paid",
@@ -66,7 +66,17 @@ export async function PATCH(
           notes: audit("Despesa paga"),
           updatedAt: now,
         })
-        .where(and(eq(expenses.id, id), eq(expenses.organizationId, organizationId)));
+        .where(
+          and(
+            eq(expenses.id, id),
+            eq(expenses.organizationId, organizationId),
+            inArray(expenses.status, ["open", "overdue"]),
+          ),
+        )
+        .returning({ id: expenses.id });
+      if (!paid) {
+        return Response.json({ error: "A despesa foi alterada por outra operação." }, { status: 409 });
+      }
     } else if (payload.action === "reverse") {
       if (current.status !== "paid") {
         return Response.json(
@@ -77,7 +87,7 @@ export async function PATCH(
       if (!reason) {
         return Response.json({ error: "Informe o motivo do estorno." }, { status: 400 });
       }
-      await db
+      const [reversed] = await db
         .update(expenses)
         .set({
           status:
@@ -87,7 +97,17 @@ export async function PATCH(
           notes: audit("Baixa da despesa estornada"),
           updatedAt: now,
         })
-        .where(and(eq(expenses.id, id), eq(expenses.organizationId, organizationId)));
+        .where(
+          and(
+            eq(expenses.id, id),
+            eq(expenses.organizationId, organizationId),
+            eq(expenses.status, "paid"),
+          ),
+        )
+        .returning({ id: expenses.id });
+      if (!reversed) {
+        return Response.json({ error: "A despesa foi alterada por outra operação." }, { status: 409 });
+      }
     } else if (payload.action === "cancel") {
       if (current.status === "paid") {
         return Response.json(
@@ -102,10 +122,12 @@ export async function PATCH(
         payload.scope === "remaining" &&
         Boolean(current.installmentGroupId) &&
         current.installmentCount > 1;
-      await db
+      const cancelled = await db
         .update(expenses)
         .set({
           status: "cancelled",
+          paidAt: null,
+          paymentMethod: null,
           notes: audit(
             cancelRemaining
               ? `Parcelas ${current.installmentNumber} a ${current.installmentCount} canceladas`
@@ -122,7 +144,11 @@ export async function PATCH(
                 inArray(expenses.status, ["open", "overdue"]),
               )
             : and(eq(expenses.id, id), eq(expenses.organizationId, organizationId)),
-        );
+        )
+        .returning({ id: expenses.id });
+      if (cancelled.length === 0) {
+        return Response.json({ error: "A despesa foi alterada por outra operação." }, { status: 409 });
+      }
     } else if (payload.action === "restore") {
       if (current.status !== "cancelled") {
         return Response.json(
@@ -130,7 +156,7 @@ export async function PATCH(
           { status: 409 },
         );
       }
-      await db
+      const [restored] = await db
         .update(expenses)
         .set({
           status:
@@ -138,7 +164,17 @@ export async function PATCH(
           notes: audit("Despesa reativada"),
           updatedAt: now,
         })
-        .where(and(eq(expenses.id, id), eq(expenses.organizationId, organizationId)));
+        .where(
+          and(
+            eq(expenses.id, id),
+            eq(expenses.organizationId, organizationId),
+            eq(expenses.status, "cancelled"),
+          ),
+        )
+        .returning({ id: expenses.id });
+      if (!restored) {
+        return Response.json({ error: "A despesa foi alterada por outra operação." }, { status: 409 });
+      }
     } else {
       return Response.json({ error: "Ação inválida." }, { status: 400 });
     }
