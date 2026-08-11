@@ -36,7 +36,7 @@ export async function GET(request: Request) {
   const rows = await getDb()
     .select(selection)
     .from(athleteEvaluations)
-    .innerJoin(athletes, eq(athletes.id, athleteEvaluations.athleteId))
+    .innerJoin(athletes, and(eq(athletes.id, athleteEvaluations.athleteId), eq(athletes.organizationId, athleteEvaluations.organizationId)))
     .where(and(...conditions))
     .orderBy(desc(athleteEvaluations.evaluationDate))
     .limit(500);
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   try {
     const context = await getApiContext(request);
     if (!context) return Response.json({ error: "Acesso não autorizado." }, { status: 401 });
-    const normalized = normalizeEvaluation((await request.json()) as EvaluationPayload);
+    const normalized = normalizeEvaluation((await request.json()) as EvaluationPayload, { requireAthlete: true });
     if ("error" in normalized) return Response.json({ error: normalized.error }, { status: 400 });
     const db = getDb();
     const organizationId = context.membership.organizationId;

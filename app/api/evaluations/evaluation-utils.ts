@@ -10,14 +10,14 @@ export type EvaluationPayload = {
   nextGoals?: string;
 };
 
-export function normalizeEvaluation(payload: EvaluationPayload) {
+export function normalizeEvaluation(payload: EvaluationPayload, options: { requireAthlete?: boolean } = {}) {
   const scores = [
     Number(payload.technicalScore),
     Number(payload.physicalScore),
     Number(payload.tacticalScore),
     Number(payload.behavioralScore),
   ];
-  if (!payload.athleteId) return { error: "Selecione um atleta." } as const;
+  if (options.requireAthlete !== false && !payload.athleteId) return { error: "Selecione um atleta." } as const;
   if (!payload.evaluationDate || !/^\d{4}-\d{2}-\d{2}$/.test(payload.evaluationDate)) {
     return { error: "Informe uma data válida." } as const;
   }
@@ -26,7 +26,7 @@ export function normalizeEvaluation(payload: EvaluationPayload) {
   }
   return {
     value: {
-      athleteId: payload.athleteId,
+      ...(payload.athleteId ? { athleteId: payload.athleteId } : {}),
       evaluationDate: payload.evaluationDate,
       technicalScore: scores[0],
       physicalScore: scores[1],

@@ -2,7 +2,6 @@ import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
 import {
   athletes,
-  communicationRecipients,
   teamAthletes,
   teams,
 } from "../../../db/schema";
@@ -23,7 +22,15 @@ export function normalizeCommunication(payload: CommunicationPayload) {
   return { value: { title, message, audienceType, teamId: audienceType === "team" ? payload.teamId! : null, priority: payload.priority ?? "normal", status, scheduledAt: status === "scheduled" ? payload.scheduledAt! : null } } as const;
 }
 
-export async function snapshotRecipients(organizationId: string, communicationId: string, audienceType: "all" | "team", teamId: string | null) {
+export type CommunicationRecipientSnapshot = {
+  id: string;
+  athleteId: string;
+  guardianName: string;
+  guardianEmail: string | null;
+  guardianPhone: string | null;
+};
+
+export async function buildRecipientSnapshot(organizationId: string, audienceType: "all" | "team", teamId: string | null): Promise<CommunicationRecipientSnapshot[]> {
   const db = getDb();
   let athleteIds: string[] | null = null;
   if (audienceType === "team" && teamId) {
@@ -33,10 +40,9 @@ export async function snapshotRecipients(organizationId: string, communicationId
   }
   const conditions = [eq(athletes.organizationId, organizationId), eq(athletes.active, true)];
   if (athleteIds) {
-    if (!athleteIds.length) return 0;
+    if (!athleteIds.length) return [];
     conditions.push(inArray(athletes.id, athleteIds));
   }
-  const rows = await db.select({ id: athletes.id, guardianName: athletes.guardianName, guardianEmail: athletes.guardianEmail, guardianPhone: athletes.guardianPhone }).from(athletes).where(and(...conditions));
-  if (rows.length) await db.insert(communicationRecipients).values(rows.map((row) => ({ id: crypto.randomUUID(), communicationId, athleteId: row.id, guardianName: row.guardianName, guardianEmail: row.guardianEmail, guardianPhone: row.guardianPhone })));
-  return rows.length;
+  const rows = await db.select({ athleteId: athletes.id, guardianName: athletes.guardianName, guardianEmail: athletes.guardianEmail, guardianPhone: athletes.guardianPhone }).from(athletes).where(and(...conditions));
+  return rows.map((row) => ({ id: crypto.randomUUID(), ...row }));
 }
