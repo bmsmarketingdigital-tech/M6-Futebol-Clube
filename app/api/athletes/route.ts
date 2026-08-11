@@ -1,5 +1,5 @@
 import { and, desc, eq } from "drizzle-orm";
-import { getDb } from "../../../db";
+import { getD1, getDb } from "../../../db";
 import { athletes, teamAthletes, teams } from "../../../db/schema";
 import { getApiContext } from "../api-auth";
 import { isValidCategory } from "../categories/category-utils";
@@ -149,7 +149,7 @@ export async function POST(request: Request) {
     const now = new Date();
     const db = getDb();
     const compatibleTeams = await db
-      .select({ id: teams.id, name: teams.name })
+      .select()
       .from(teams)
       .where(
         and(
@@ -175,35 +175,79 @@ export async function POST(request: Request) {
       );
     }
 
-    const [created] = await db
-      .insert(athletes)
-      .values({
-        id: crypto.randomUUID(),
-        organizationId: context.membership.organizationId,
-        fullName: name,
-        birthYear: now.getFullYear() - age,
-        category,
-        guardianName,
-        guardianPhone,
-        attendanceRate: 100,
-        financialStatus: "paid",
-        qrToken: crypto.randomUUID(),
-        active: true,
-        createdBy: context.user.email,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-
+    const organizationId = context.membership.organizationId;
+    const athleteId = crypto.randomUUID();
+    const qrToken = crypto.randomUUID();
+    const timestamp = Math.floor(now.getTime() / 1000);
+    const d1 = getD1();
+    const athleteColumns = `(id, organization_id, full_name, birth_year, category,
+      guardian_name, guardian_phone, attendance_rate, financial_status, qr_token,
+      active, created_by, created_at, updated_at)`;
+    const athleteBindings = [
+      athleteId, organizationId, name, now.getFullYear() - age, category,
+      guardianName, guardianPhone, qrToken, context.user.email, timestamp, timestamp,
+    ];
+    const statements = [];
+    let marker: string | null = null;
     if (enrolledTeamId) {
-      await db.insert(teamAthletes).values({
-        organizationId: context.membership.organizationId,
-        teamId: enrolledTeamId,
-        athleteId: created.id,
-        active: true,
-        enrolledAt: now,
-      });
+      const selectedTeam = compatibleTeams.find((team) => team.id === enrolledTeamId)!;
+      const currentEnrollments = await db
+        .select({ athleteId: teamAthletes.athleteId })
+        .from(teamAthletes)
+        .where(
+          and(
+            eq(teamAthletes.teamId, enrolledTeamId),
+            eq(teamAthletes.organizationId, organizationId),
+            eq(teamAthletes.active, true),
+          ),
+        );
+      if (currentEnrollments.length >= selectedTeam.capacity) {
+        return Response.json({ error: "A turma selecionada atingiu a capacidade." }, { status: 409 });
+      }
+      marker = `__team_enroll__${crypto.randomUUID()}`;
+      statements.push(
+        d1.prepare(`UPDATE teams SET name = ? WHERE id = ? AND organization_id = ?
+          AND active = 1 AND name = ? AND category = ? AND capacity = ?
+          AND (SELECT COUNT(*) FROM team_athletes ta WHERE ta.team_id = ?
+               AND ta.organization_id = ? AND ta.active = 1) = ?`).bind(
+          marker, enrolledTeamId, organizationId, selectedTeam.name,
+          selectedTeam.category, selectedTeam.capacity, enrolledTeamId,
+          organizationId, currentEnrollments.length,
+        ),
+      );
+      statements.push(
+        d1.prepare(`INSERT INTO athletes ${athleteColumns}
+          SELECT ?, ?, ?, ?, ?, ?, ?, 100, 'paid', ?, 1, ?, ?, ?
+          WHERE EXISTS (SELECT 1 FROM teams WHERE id = ? AND organization_id = ? AND name = ?)`)
+          .bind(...athleteBindings, enrolledTeamId, organizationId, marker),
+        d1.prepare(`INSERT INTO team_athletes
+          (organization_id, team_id, athlete_id, active, enrolled_at)
+          SELECT ?, ?, ?, 1, ? WHERE EXISTS
+            (SELECT 1 FROM teams WHERE id = ? AND organization_id = ? AND name = ?)`)
+          .bind(organizationId, enrolledTeamId, athleteId, timestamp, enrolledTeamId, organizationId, marker),
+        d1.prepare("UPDATE teams SET name = ? WHERE id = ? AND organization_id = ? AND name = ?")
+          .bind(selectedTeam.name, enrolledTeamId, organizationId, marker),
+      );
+    } else {
+      statements.push(
+        d1.prepare(`INSERT INTO athletes ${athleteColumns}
+          VALUES (?, ?, ?, ?, ?, ?, ?, 100, 'paid', ?, 1, ?, ?, ?)`)
+          .bind(...athleteBindings),
+      );
     }
+    const results = await d1.batch(statements);
+    if (marker && (results[0].meta.changes ?? 0) !== 1) {
+      return Response.json(
+        { error: "A turma foi alterada por outra operação." },
+        { status: 409 },
+      );
+    }
+    const [created] = await db
+      .select()
+      .from(athletes)
+      .where(and(eq(athletes.id, athleteId), eq(athletes.organizationId, organizationId)))
+      .limit(1);
+    if (!created) throw new Error("O atleta criado não pôde ser carregado.");
 
     let enrollmentNotification = { created: false, processed: 0 };
     try {

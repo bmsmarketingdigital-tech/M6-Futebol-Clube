@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { getDb } from "../../../db";
+import { getD1, getDb } from "../../../db";
 import { athletes, teamAthletes, teams } from "../../../db/schema";
 import { getApiContext } from "../api-auth";
 import { isValidCategory } from "../categories/category-utils";
@@ -35,6 +35,14 @@ export async function GET(request: Request) {
               athleteId: teamAthletes.athleteId,
             })
             .from(teamAthletes)
+            .innerJoin(
+              athletes,
+              and(
+                eq(athletes.id, teamAthletes.athleteId),
+                eq(athletes.organizationId, teamAthletes.organizationId),
+                eq(athletes.active, true),
+              ),
+            )
             .where(
               and(
                 eq(
@@ -118,35 +126,48 @@ export async function POST(request: Request) {
 
     const teamId = crypto.randomUUID();
     const now = new Date();
-    const [created] = await db
-      .insert(teams)
-      .values({
-        id: teamId,
-        organizationId: context.membership.organizationId,
-        name: value.name,
-        category: value.category,
-        coachName: value.coachName,
-        scheduleDays: JSON.stringify(value.scheduleDays),
-        startTime: value.startTime,
-        endTime: value.endTime,
-        place: value.place,
-        capacity: value.capacity,
-        active: true,
-        createdAt: now,
-      })
-      .returning();
-
-    if (value.athleteIds.length > 0) {
-      await db.insert(teamAthletes).values(
-        value.athleteIds.map((athleteId) => ({
-          organizationId: context.membership.organizationId,
+    const organizationId = context.membership.organizationId;
+    const createdAt = Math.floor(now.getTime() / 1000);
+    const d1 = getD1();
+    const statements = [
+      d1
+        .prepare(
+          `INSERT INTO teams
+            (id, organization_id, name, category, coach_name, schedule_days,
+             start_time, end_time, place, capacity, active, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+        )
+        .bind(
           teamId,
-          athleteId,
-          active: true,
-          enrolledAt: now,
-        })),
-      );
-    }
+          organizationId,
+          value.name,
+          value.category,
+          value.coachName,
+          JSON.stringify(value.scheduleDays),
+          value.startTime,
+          value.endTime,
+          value.place,
+          value.capacity,
+          createdAt,
+        ),
+      ...value.athleteIds.map((athleteId) =>
+        d1
+          .prepare(
+            `INSERT INTO team_athletes
+              (organization_id, team_id, athlete_id, active, enrolled_at)
+             VALUES (?, ?, ?, 1, ?)`,
+          )
+          .bind(organizationId, teamId, athleteId, createdAt),
+      ),
+    ];
+    await d1.batch(statements);
+
+    const [created] = await db
+      .select()
+      .from(teams)
+      .where(and(eq(teams.id, teamId), eq(teams.organizationId, organizationId)))
+      .limit(1);
+    if (!created) throw new Error("A turma criada não pôde ser carregada.");
 
     return Response.json(
       { team: teamToDto(created, value.athleteIds) },

@@ -35,14 +35,15 @@ export function normalizeTeamPayload(payload: TeamPayload) {
   const endTime = payload.endTime?.trim() ?? "";
   const place = payload.place?.trim() ?? "";
   const capacity = Number(payload.capacity);
-  const athleteIds = Array.from(
-    new Set(
-      (payload.athleteIds ?? [])
-        .filter((id) => typeof id === "string")
-        .map((id) => id.trim())
-        .filter(Boolean),
-    ),
-  ).slice(0, 100);
+  const rawAthleteIds = payload.athleteIds ?? [];
+  if (
+    !Array.isArray(rawAthleteIds) ||
+    rawAthleteIds.some((id) => typeof id !== "string" || !id.trim())
+  ) {
+    return { error: "A lista de atletas contém um identificador inválido." } as const;
+  }
+  // Repetições representam a mesma seleção e não consomem capacidade extra.
+  const athleteIds = Array.from(new Set(rawAthleteIds.map((id) => id.trim())));
 
   if (name.length < 2 || name.length > 80) {
     return { error: "Informe um nome válido para a turma." } as const;
