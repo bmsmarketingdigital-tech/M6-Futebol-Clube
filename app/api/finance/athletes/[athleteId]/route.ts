@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { getDb } from "../../../../../db";
+import { getD1, getDb } from "../../../../../db";
 import { athleteBilling, athletes, billingPlans } from "../../../../../db/schema";
 import { getApiContext } from "../../../api-auth";
 import { parseMoneyToCents } from "../../finance-utils";
@@ -59,32 +59,35 @@ export async function PATCH(
     }
 
     const now = new Date();
-    const [billing] = await db
-      .insert(athleteBilling)
-      .values({
-        id: crypto.randomUUID(),
-        organizationId,
-        athleteId,
-        planId: payload.planId,
-        discountType,
-        discountValue,
-        customDueDay,
-        active: payload.active ?? true,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: athleteBilling.athleteId,
-        set: {
-          planId: payload.planId,
-          discountType,
-          discountValue,
-          customDueDay,
-          active: payload.active ?? true,
-          updatedAt: now,
-        },
-      })
-      .returning();
+    const timestamp = Math.floor(now.getTime() / 1000);
+    const billingId = crypto.randomUUID();
+    const result = await getD1().batch([
+      getD1().prepare(`INSERT INTO athlete_billing
+        (id, organization_id, athlete_id, plan_id, discount_type, discount_value,
+         custom_due_day, active, created_at, updated_at)
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE EXISTS (
+          SELECT 1 FROM athletes a JOIN billing_plans p ON p.organization_id = a.organization_id
+          WHERE a.id = ? AND a.organization_id = ? AND a.active = 1
+            AND p.id = ? AND p.organization_id = ? AND p.active = 1
+        )
+        ON CONFLICT(athlete_id) DO UPDATE SET
+          organization_id = excluded.organization_id, plan_id = excluded.plan_id,
+          discount_type = excluded.discount_type, discount_value = excluded.discount_value,
+          custom_due_day = excluded.custom_due_day, active = excluded.active,
+          updated_at = excluded.updated_at`).bind(
+        billingId, organizationId, athleteId, payload.planId, discountType,
+        discountValue, customDueDay, payload.active ?? true ? 1 : 0,
+        timestamp, timestamp, athleteId, organizationId, payload.planId, organizationId,
+      ),
+    ]);
+    if ((result[0].meta.changes ?? 0) === 0) {
+      return Response.json({ error: "Atleta ou plano não encontrado, inativo ou incompatível." }, { status: 404 });
+    }
+    const [billing] = await db.select().from(athleteBilling).where(
+      and(eq(athleteBilling.athleteId, athleteId), eq(athleteBilling.organizationId, organizationId)),
+    ).limit(1);
+    if (!billing) throw new Error("A configuração criada não pôde ser carregada.");
 
     return Response.json({ billing });
   } catch (error) {
