@@ -7,6 +7,17 @@ export const organizations = sqliteTable("organizations", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
 
+export const localUsers = sqliteTable("local_users", {
+  id: text("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  email: text("email").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  passwordSalt: text("password_salt").notNull(),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 export const organizationMembers = sqliteTable(
   "organization_members",
   {
@@ -14,7 +25,9 @@ export const organizationMembers = sqliteTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    email: text("email").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => localUsers.id, { onDelete: "cascade" }),
     displayName: text("display_name").notNull(),
     role: text("role", { enum: ["owner", "admin", "coach", "finance"] })
       .notNull()
@@ -22,11 +35,11 @@ export const organizationMembers = sqliteTable(
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
   (table) => [
-    uniqueIndex("organization_members_org_email_unique").on(
+    uniqueIndex("organization_members_org_user_unique").on(
       table.organizationId,
-      table.email,
+      table.userId,
     ),
-    index("organization_members_email_idx").on(table.email),
+    index("organization_members_user_idx").on(table.userId),
   ],
 );
 

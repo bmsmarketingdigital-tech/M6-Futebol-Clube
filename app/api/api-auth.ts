@@ -5,12 +5,14 @@ import { getLocalSessionUser } from "./local-auth";
 export async function getApiContext(request: Request) {
   let user = await getChatGPTUser();
   let role: "admin" | "operator" = "admin";
+  let localOrganizationId = "";
 
   if (!user) {
     const hostname = new URL(request.url).hostname;
     if (hostname === "localhost" || hostname === "127.0.0.1") {
       user = await getLocalSessionUser(request);
       role = user?.role ?? "admin";
+      localOrganizationId = user?.organizationId ?? "";
     }
   }
 
@@ -19,7 +21,9 @@ export async function getApiContext(request: Request) {
     return null;
   }
 
-  const membership = await getOrCreateOrganization(user);
+  const membership = localOrganizationId
+    ? { organizationId: localOrganizationId, role: role === "admin" ? "admin" : "coach" }
+    : await getOrCreateOrganization(user);
   if (!membership) return null;
 
   return { user, membership, role };

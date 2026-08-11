@@ -1,4 +1,4 @@
-import { createLocalSession, verifyLocalCredentials } from "../../local-auth";
+import { createLocalSession, listUserOrganizations, verifyLocalCredentials } from "../../local-auth";
 
 export async function POST(request: Request) {
   try {
@@ -11,13 +11,22 @@ export async function POST(request: Request) {
       username?: string;
       password?: string;
       rememberMe?: boolean;
+      organizationId?: string;
     };
     const user = await verifyLocalCredentials(body.username ?? "", body.password ?? "");
     if (!user) {
       return Response.json({ error: "Usuário ou senha incorretos." }, { status: 401 });
     }
 
-    const session = await createLocalSession(user.id, Boolean(body.rememberMe));
+    const organizations = await listUserOrganizations(user.id);
+    if (!organizations.length) return Response.json({ error: "Usuário sem organização autorizada." }, { status: 403 });
+    if (!body.organizationId && organizations.length > 1) {
+      return Response.json({ requiresOrganization: true, organizations, identity: { username: user.username } }, { status: 409 });
+    }
+    const organizationId = body.organizationId || organizations[0].id;
+    const selected = organizations.find((item) => item.id === organizationId);
+    if (!selected) return Response.json({ error: "Organização não autorizada." }, { status: 403 });
+    const session = await createLocalSession(user.id, organizationId, Boolean(body.rememberMe));
     return Response.json(
       {
         authenticated: true,
@@ -27,7 +36,8 @@ export async function POST(request: Request) {
           username: user.username,
           displayName: user.displayName,
           fullName: user.displayName,
-          role: user.role,
+          role: selected.role,
+          organizationId,
         },
       },
       { headers: { "Set-Cookie": session.cookie } },

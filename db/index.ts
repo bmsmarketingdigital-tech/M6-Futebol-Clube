@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./schema";
 import { HISTORY_PROTECTION_TRIGGER_SQL } from "./history-protection-triggers";
@@ -33,7 +33,7 @@ export function ensureDatabase() {
         d1.prepare(`CREATE TABLE IF NOT EXISTS organization_members (
           id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
           organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-          email TEXT NOT NULL,
+          user_id TEXT NOT NULL REFERENCES local_users(id) ON DELETE CASCADE,
           display_name TEXT NOT NULL,
           role TEXT NOT NULL DEFAULT 'owner',
           created_at INTEGER NOT NULL
@@ -52,6 +52,7 @@ export function ensureDatabase() {
         d1.prepare(`CREATE TABLE IF NOT EXISTS local_auth_sessions (
           token_hash TEXT PRIMARY KEY NOT NULL,
           user_id TEXT NOT NULL REFERENCES local_users(id) ON DELETE CASCADE,
+          organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
           expires_at INTEGER NOT NULL,
           created_at INTEGER NOT NULL
         )`),
@@ -385,12 +386,6 @@ export function ensureDatabase() {
           updated_at INTEGER NOT NULL
         )`),
         d1.prepare(
-          "CREATE UNIQUE INDEX IF NOT EXISTS organization_members_org_email_unique ON organization_members (organization_id, email)",
-        ),
-        d1.prepare(
-          "CREATE INDEX IF NOT EXISTS organization_members_email_idx ON organization_members (email)",
-        ),
-        d1.prepare(
           "CREATE UNIQUE INDEX IF NOT EXISTS sports_categories_org_name_unique ON sports_categories (organization_id, name)",
         ),
         d1.prepare(
@@ -527,6 +522,58 @@ export function ensureDatabase() {
         ),
       ])
       .then(async () => {
+        const memberColumns = await d1
+          .prepare("PRAGMA table_info(organization_members)")
+          .all<{ name: string }>();
+        if (!memberColumns.results.some((column) => column.name === "user_id")) {
+          await d1.batch([
+            d1.prepare("DROP INDEX IF EXISTS organization_members_org_email_unique"),
+            d1.prepare("DROP INDEX IF EXISTS organization_members_email_idx"),
+            d1.prepare("DELETE FROM local_auth_sessions"),
+            d1.prepare("DROP TABLE local_auth_sessions"),
+            d1.prepare(`CREATE TABLE organization_members_v2 (
+              id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+              organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+              user_id TEXT NOT NULL REFERENCES local_users(id) ON DELETE CASCADE,
+              display_name TEXT NOT NULL,
+              role TEXT NOT NULL DEFAULT 'owner',
+              created_at INTEGER NOT NULL
+            )`),
+            d1.prepare(`INSERT INTO organization_members_v2
+              (id, organization_id, user_id, display_name, role, created_at)
+              SELECT m.id, m.organization_id, u.id, m.display_name, m.role, m.created_at
+              FROM organization_members m
+              INNER JOIN local_users u ON lower(u.email) = lower(m.email)`),
+            d1.prepare("DROP TABLE organization_members"),
+            d1.prepare("ALTER TABLE organization_members_v2 RENAME TO organization_members"),
+            d1.prepare(`CREATE TABLE local_auth_sessions (
+              token_hash TEXT PRIMARY KEY NOT NULL,
+              user_id TEXT NOT NULL REFERENCES local_users(id) ON DELETE CASCADE,
+              organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+              expires_at INTEGER NOT NULL,
+              created_at INTEGER NOT NULL
+            )`),
+          ]);
+        }
+        await d1.batch([
+          d1.prepare("CREATE UNIQUE INDEX IF NOT EXISTS organization_members_org_user_unique ON organization_members (organization_id, user_id)"),
+          d1.prepare("CREATE INDEX IF NOT EXISTS organization_members_user_idx ON organization_members (user_id)"),
+          d1.prepare("CREATE INDEX IF NOT EXISTS local_auth_sessions_user_idx ON local_auth_sessions (user_id)"),
+          d1.prepare("CREATE INDEX IF NOT EXISTS local_auth_sessions_organization_idx ON local_auth_sessions (organization_id)"),
+          d1.prepare(`CREATE TRIGGER IF NOT EXISTS organization_members_keep_last_admin_delete
+            BEFORE DELETE ON organization_members
+            WHEN OLD.role IN ('owner', 'admin') AND
+              (SELECT COUNT(*) FROM organization_members
+               WHERE organization_id = OLD.organization_id AND role IN ('owner', 'admin')) <= 1
+            BEGIN SELECT RAISE(ABORT, 'A organização precisa manter pelo menos um administrador.'); END`),
+          d1.prepare(`CREATE TRIGGER IF NOT EXISTS organization_members_keep_last_admin_update
+            BEFORE UPDATE OF role, organization_id, user_id ON organization_members
+            WHEN OLD.role IN ('owner', 'admin') AND
+              (NEW.organization_id <> OLD.organization_id OR NEW.role NOT IN ('owner', 'admin')) AND
+              (SELECT COUNT(*) FROM organization_members
+               WHERE organization_id = OLD.organization_id AND role IN ('owner', 'admin')) <= 1
+            BEGIN SELECT RAISE(ABORT, 'A organização precisa manter pelo menos um administrador.'); END`),
+        ]);
         await d1.batch(
           [
             ...PAYMENT_TRANSACTION_TRIGGER_SQL,
@@ -796,62 +843,21 @@ export function ensureDatabase() {
 }
 
 export async function getOrCreateOrganization(user: {
+  id?: string;
   email: string;
   displayName: string;
 }) {
   await ensureDatabase();
   const db = getDb();
-
-  const [membership] = await db
+  const [identity] = await db.select({ id: schema.localUsers.id }).from(schema.localUsers)
+    .where(eq(schema.localUsers.email, user.email)).limit(1);
+  if (!identity) return null;
+  const memberships = await db
     .select({
       organizationId: schema.organizationMembers.organizationId,
       role: schema.organizationMembers.role,
     })
     .from(schema.organizationMembers)
-    .where(eq(schema.organizationMembers.email, user.email))
-    .limit(1);
-
-  if (membership) return membership;
-
-  const organizationId = crypto.randomUUID();
-  const slugBase =
-    user.displayName
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 30) || "escola-m6";
-  const now = new Date();
-
-  await db.insert(schema.organizations).values({
-    id: organizationId,
-    name: "Escola de Futebol M6 Futebol Clube",
-    slug: `${slugBase}-${organizationId.slice(0, 6)}`,
-    createdAt: now,
-  });
-
-  await db.insert(schema.organizationMembers).values({
-    organizationId,
-    email: user.email,
-    displayName: user.displayName,
-    role: "owner",
-    createdAt: now,
-  });
-
-  const [created] = await db
-    .select({
-      organizationId: schema.organizationMembers.organizationId,
-      role: schema.organizationMembers.role,
-    })
-    .from(schema.organizationMembers)
-    .where(
-      and(
-        eq(schema.organizationMembers.organizationId, organizationId),
-        eq(schema.organizationMembers.email, user.email),
-      ),
-    )
-    .limit(1);
-
-  return created;
+    .where(eq(schema.organizationMembers.userId, identity.id));
+  return memberships.length === 1 ? memberships[0] : null;
 }

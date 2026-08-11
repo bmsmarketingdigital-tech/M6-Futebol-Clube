@@ -1,0 +1,63 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import { DatabaseSync } from "node:sqlite";
+
+const localAuth = readFileSync("app/api/local-auth.ts", "utf8");
+const usersRoute = readFileSync("app/api/users/route.ts", "utf8");
+const userRoute = readFileSync("app/api/users/[id]/route.ts", "utf8");
+const apiAuth = readFileSync("app/api/api-auth.ts", "utf8");
+const resetRoute = readFileSync("app/api/auth/reset/route.ts", "utf8");
+const loginRoute = readFileSync("app/api/auth/login/route.ts", "utf8");
+const logoutRoute = readFileSync("app/api/auth/logout/route.ts", "utf8");
+
+function fixture() {
+  const db = new DatabaseSync(":memory:");
+  db.exec(`PRAGMA foreign_keys=ON;
+    CREATE TABLE organizations(id TEXT PRIMARY KEY,name TEXT);
+    CREATE TABLE local_users(id TEXT PRIMARY KEY,username TEXT UNIQUE,email TEXT UNIQUE,display_name TEXT,password_hash TEXT,password_salt TEXT,created_at INTEGER,updated_at INTEGER);
+    CREATE TABLE organization_members(id INTEGER PRIMARY KEY,organization_id TEXT REFERENCES organizations(id),user_id TEXT REFERENCES local_users(id),display_name TEXT,role TEXT,created_at INTEGER,UNIQUE(organization_id,user_id));
+    CREATE TABLE local_auth_sessions(token_hash TEXT PRIMARY KEY,user_id TEXT REFERENCES local_users(id),organization_id TEXT REFERENCES organizations(id),expires_at INTEGER,created_at INTEGER);
+    CREATE TRIGGER keep_last_admin_delete BEFORE DELETE ON organization_members WHEN OLD.role IN ('owner','admin') AND (SELECT COUNT(*) FROM organization_members WHERE organization_id=OLD.organization_id AND role IN ('owner','admin'))<=1 BEGIN SELECT RAISE(ABORT,'last admin'); END;
+    CREATE TRIGGER keep_last_admin_update BEFORE UPDATE OF role,organization_id,user_id ON organization_members WHEN OLD.role IN ('owner','admin') AND (NEW.organization_id<>OLD.organization_id OR NEW.role NOT IN ('owner','admin')) AND (SELECT COUNT(*) FROM organization_members WHERE organization_id=OLD.organization_id AND role IN ('owner','admin'))<=1 BEGIN SELECT RAISE(ABORT,'last admin'); END;
+    INSERT INTO organizations VALUES('A','Org A'),('B','Org B');
+    INSERT INTO local_users VALUES('adminA','admina','a@x','Admin A','h','s',1,1),('adminB','adminb','b@x','Admin B','h','s',1,1),('userA','usera','ua@x','User A','h','s',1,1),('userB','userb','ub@x','User B','h','s',1,1),('shared','shared','s@x','Shared','h','s',1,1),('adminA2','admina2','a2@x','Admin A2','h','s',1,1);
+    INSERT INTO organization_members VALUES(1,'A','adminA','Admin A','owner',1),(2,'B','adminB','Admin B','owner',1),(3,'A','userA','User A','coach',1),(4,'B','userB','User B','coach',1),(5,'A','shared','Shared A','admin',1),(6,'B','shared','Shared B','coach',1);
+  `); return db;
+}
+const visible=(db,org)=>db.prepare("SELECT u.id FROM organization_members m JOIN local_users u ON u.id=m.user_id WHERE m.organization_id=? ORDER BY u.id").all(org).map(r=>r.id);
+
+test("1 Admin A lista User A",()=>{const db=fixture();assert.ok(visible(db,"A").includes("userA"));});
+test("2 Admin A não lista User B",()=>{const db=fixture();assert.ok(!visible(db,"A").includes("userB"));});
+test("3 Admin B não lista User A",()=>{const db=fixture();assert.ok(!visible(db,"B").includes("userA"));});
+test("4 consulta individual cross-tenant não encontra alvo",()=>{const db=fixture();assert.equal(db.prepare("SELECT 1 FROM organization_members WHERE organization_id=? AND user_id=?").get("A","userB"),undefined);});
+test("5 PATCH cross-tenant é impedido pela prova de membership",()=>assert.match(localAuth,/WHERE m\.organization_id=\? AND m\.user_id=\?/));
+test("6 DELETE cross-tenant é escopado",()=>assert.match(localAuth,/DELETE FROM organization_members WHERE organization_id=\? AND user_id=\?/));
+test("7 PATCH bloqueado preserva identidade global",()=>{const db=fixture();const before=db.prepare("SELECT * FROM local_users WHERE id='userB'").get();assert.equal(db.prepare("UPDATE local_users SET display_name='X' WHERE id=? AND EXISTS(SELECT 1 FROM organization_members WHERE organization_id=? AND user_id=local_users.id)").run("userB","A").changes,0);assert.deepEqual(db.prepare("SELECT * FROM local_users WHERE id='userB'").get(),before);});
+test("8 PATCH bloqueado preserva membership",()=>{const db=fixture();assert.equal(db.prepare("UPDATE organization_members SET role='admin' WHERE organization_id='A' AND user_id='userB'").run().changes,0);});
+test("9 DELETE bloqueado preserva local_user",()=>{const db=fixture();db.prepare("DELETE FROM organization_members WHERE organization_id='A' AND user_id='userB'").run();assert.ok(db.prepare("SELECT 1 FROM local_users WHERE id='userB'").get());});
+test("10 DELETE bloqueado preserva membership da Org B",()=>{const db=fixture();db.prepare("DELETE FROM organization_members WHERE organization_id='A' AND user_id='userB'").run();assert.ok(db.prepare("SELECT 1 FROM organization_members WHERE organization_id='B' AND user_id='userB'").get());});
+test("11 Shared User aparece na Org A",()=>{const db=fixture();assert.ok(visible(db,"A").includes("shared"));});
+test("12 Shared User aparece na Org B",()=>{const db=fixture();assert.ok(visible(db,"B").includes("shared"));});
+test("13 role tenant-specific da Org A não altera Org B",()=>{const db=fixture();db.prepare("UPDATE organization_members SET role='coach' WHERE organization_id='A' AND user_id='shared'").run();assert.equal(db.prepare("SELECT role FROM organization_members WHERE organization_id='B' AND user_id='shared'").get().role,"coach");});
+test("14 remover Shared da Org A preserva Org B",()=>{const db=fixture();db.prepare("DELETE FROM organization_members WHERE organization_id='A' AND user_id='shared'").run();assert.ok(db.prepare("SELECT 1 FROM organization_members WHERE organization_id='B' AND user_id='shared'").get());});
+test("15 último vínculo não apaga identidade global",()=>{const db=fixture();db.prepare("DELETE FROM organization_members WHERE organization_id='A' AND user_id='userA'").run();assert.ok(db.prepare("SELECT 1 FROM local_users WHERE id='userA'").get());});
+test("16 resolução não usa LIMIT 1 arbitrário para sessão local",()=>{assert.doesNotMatch(apiAuth,/localOrganizationId[\s\S]*LIMIT 1/);assert.match(localAuth,/organization_id=s\.organization_id/);});
+test("17 sessão da Org A resolve Org A",()=>{const db=fixture();db.prepare("INSERT INTO local_auth_sessions VALUES('a','shared','A',999,1)").run();assert.equal(db.prepare("SELECT organization_id FROM local_auth_sessions WHERE token_hash='a'").get().organization_id,"A");});
+test("18 sessão da Org B resolve Org B",()=>{const db=fixture();db.prepare("INSERT INTO local_auth_sessions VALUES('b','shared','B',999,1)").run();assert.equal(db.prepare("SELECT organization_id FROM local_auth_sessions WHERE token_hash='b'").get().organization_id,"B");});
+test("19 Admin A não altera role da Org B",()=>{const db=fixture();db.prepare("UPDATE organization_members SET role='admin' WHERE organization_id='A' AND user_id='userB'").run();assert.equal(db.prepare("SELECT role FROM organization_members WHERE organization_id='B' AND user_id='userB'").get().role,"coach");});
+test("20 credencial global compartilhada é bloqueada",()=>assert.match(localAuth,/Credenciais globais de usuário compartilhado não podem ser alteradas/));
+test("21 último admin da organização não pode ser removido",()=>{const db=fixture();assert.throws(()=>db.prepare("DELETE FROM organization_members WHERE organization_id='B' AND user_id='adminB'").run(),/last admin/);});
+test("22 admin adicional permite remoção",()=>{const db=fixture();db.prepare("INSERT INTO organization_members VALUES(7,'A','adminA2','Admin A2','admin',1)").run();assert.equal(db.prepare("DELETE FROM organization_members WHERE organization_id='A' AND user_id='adminA'").run().changes,1);});
+test("23 contagem de admins é por organization_id",()=>{const db=fixture();assert.throws(()=>db.prepare("DELETE FROM organization_members WHERE organization_id='B' AND user_id='adminB'").run(),/last admin/);});
+test("24 duas remoções nunca deixam zero admins",()=>{const db=fixture();db.prepare("UPDATE organization_members SET role='coach' WHERE organization_id='A' AND user_id='shared'").run();db.prepare("INSERT INTO organization_members VALUES(7,'A','adminA2','Admin A2','admin',1)").run();db.prepare("DELETE FROM organization_members WHERE organization_id='A' AND user_id='adminA'").run();assert.throws(()=>db.prepare("DELETE FROM organization_members WHERE organization_id='A' AND user_id='adminA2'").run(),/last admin/);assert.equal(db.prepare("SELECT COUNT(*) n FROM organization_members WHERE organization_id='A' AND role IN ('owner','admin')").get().n,1);});
+test("25 PATCH composto usa batch atômico",()=>assert.match(localAuth,/await getD1\(\)\.batch\(statements\)/));
+test("26 criação composta usa batch atômico",()=>assert.match(localAuth,/createManagedLocalUser[\s\S]*await getD1\(\)\.batch/));
+test("rotas obtêm tenant pelo contexto autenticado",()=>{assert.match(usersRoute,/context\.membership\.organizationId/);assert.match(userRoute,/context\.membership\.organizationId/);});
+test("schema não relaciona membership por e-mail",()=>{assert.doesNotMatch(localAuth,/organization_members[^\n]*email/);});
+test("reset de senha exige administrador autenticado",()=>{assert.match(resetRoute,/getApiContext/);assert.match(resetRoute,/context\.role!=="admin"/);});
+test("reset de senha é tenant-scoped e bloqueia usuário compartilhado",()=>{assert.match(resetRoute,/context\.membership\.organizationId/);assert.match(localAuth,/senha de um usuário compartilhado não pode ser redefinida/);});
+test("login multi-organização exige seleção explícita",()=>{assert.match(loginRoute,/organizations\.length > 1/);assert.match(loginRoute,/requiresOrganization: true/);});
+test("backend valida a organização selecionada antes da sessão",()=>{assert.match(loginRoute,/organizations\.find/);assert.match(localAuth,/Organização não autorizada para este usuário/);});
+test("logout remove somente a sessão autenticada",()=>{assert.match(logoutRoute,/destroyLocalSession/);assert.match(localAuth,/DELETE FROM local_auth_sessions WHERE token_hash=\?/);});
+test("restart resolve tenant e role pela sessão persistida",()=>{assert.match(localAuth,/INNER JOIN organization_members m ON m\.user_id=s\.user_id AND m\.organization_id=s\.organization_id/);});

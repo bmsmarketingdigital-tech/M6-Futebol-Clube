@@ -1,5 +1,5 @@
 import { createLocalAccount, createLocalSession, localAccountExists } from "../../local-auth";
-import { ensureDatabase, getD1, getOrCreateOrganization } from "../../../../db";
+import { ensureDatabase, getD1 } from "../../../../db";
 
 export async function POST(request: Request) {
   const hostname = new URL(request.url).hostname;
@@ -21,28 +21,15 @@ export async function POST(request: Request) {
 
   const user = await createLocalAccount({ displayName, username, password });
   await ensureDatabase();
-  const existingMembership = await getD1()
-    .prepare("SELECT organization_id FROM organization_members ORDER BY id LIMIT 1")
-    .first<{ organization_id: string }>();
-  const sameEmail = await getD1()
-    .prepare("SELECT id FROM organization_members WHERE lower(email) = lower(?) LIMIT 1")
-    .bind(user.email)
-    .first<{ id: number }>();
-  if (existingMembership && !sameEmail) {
-    await getD1()
-      .prepare(
-        `INSERT INTO organization_members
-         (organization_id, email, display_name, role, created_at)
-         VALUES (?, ?, ?, 'owner', ?)`,
-      )
-      .bind(existingMembership.organization_id, user.email, user.displayName, Date.now())
-      .run();
-  } else if (!existingMembership) {
-    await getOrCreateOrganization({ email: user.email, displayName: user.displayName });
-  }
-  const session = await createLocalSession(user.id, Boolean(body.rememberMe));
+  const organizationId = crypto.randomUUID();
+  const now = Date.now();
+  await getD1().batch([
+    getD1().prepare("INSERT INTO organizations(id,name,slug,created_at) VALUES(?,?,?,?)").bind(organizationId,"Escola de Futebol M6 Futebol Clube",`m6-${organizationId.slice(0,6)}`,now),
+    getD1().prepare("INSERT INTO organization_members(organization_id,user_id,display_name,role,created_at) VALUES(?,?,?,'owner',?)").bind(organizationId,user.id,user.displayName,now),
+  ]);
+  const session = await createLocalSession(user.id, organizationId, Boolean(body.rememberMe));
   return Response.json(
-    { authenticated: true, user: { id: user.id, email: user.email, username: user.username, displayName: user.displayName, fullName: user.displayName, role: user.role } },
+    { authenticated: true, user: { id: user.id, email: user.email, username: user.username, displayName: user.displayName, fullName: user.displayName, role: "admin", organizationId } },
     { headers: { "Set-Cookie": session.cookie } },
   );
 }

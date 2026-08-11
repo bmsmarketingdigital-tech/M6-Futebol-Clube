@@ -10,6 +10,7 @@ export type SessionUser = {
   displayName: string;
   fullName: string | null;
   role: "admin" | "operator";
+  organizationId: string;
 };
 
 type AccessState =
@@ -33,6 +34,7 @@ export function AccessGate({
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [recoveryError, setRecoveryError] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
+  const [organizations, setOrganizations] = useState<{ id: string; name: string }[]>([]);
   const [savedUsername, setSavedUsername] = useState(() =>
     typeof window === "undefined"
       ? ""
@@ -92,14 +94,20 @@ export function AccessGate({
           username,
           password: String(form.get("password") || ""),
           rememberMe: form.get("rememberMe") === "on",
+          organizationId: String(form.get("organizationId") || "") || undefined,
         }),
       });
       const responseText = await response.text();
-      let payload: { user?: SessionUser; error?: string } = {};
+      let payload: { user?: SessionUser; error?: string; requiresOrganization?: boolean; organizations?: { id: string; name: string }[] } = {};
       try {
         payload = responseText ? (JSON.parse(responseText) as typeof payload) : {};
       } catch {
         throw new Error(`O servidor retornou uma resposta inválida (${response.status}).`);
+      }
+      if (payload.requiresOrganization && payload.organizations?.length) {
+        setOrganizations(payload.organizations);
+        setError("Selecione a organização que deseja acessar.");
+        return;
       }
       if (!response.ok || !payload.user) throw new Error(payload.error || "Não foi possível entrar.");
       if (form.get("rememberMe") === "on") {
@@ -242,6 +250,7 @@ export function AccessGate({
                 </button>
               </span>
             </label>
+            {organizations.length > 0 && <label>Organização<select name="organizationId" required defaultValue=""><option value="">Selecione a organização</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>}
             <label className="login-remember">
               <input
                 name="rememberMe"
@@ -258,7 +267,6 @@ export function AccessGate({
             <button type="submit" disabled={submitting}>
               {submitting ? "Verificando..." : setup ? "Criar acesso e entrar" : "Entrar no sistema"}
             </button>
-            {!setup && <button type="button" className="login-recovery-link" onClick={() => { setRecoveryError(""); setRecoveryOpen(true); }}>Esqueci minha senha</button>}
             <footer>Dados protegidos neste computador</footer>
           </form>
           {recoveryOpen && <div className="login-recovery-backdrop"><form className="login-recovery-card" onSubmit={recoverPassword}><button type="button" className="login-recovery-close" onClick={() => setRecoveryOpen(false)}><X size={18} strokeWidth={1.75} /></button><span className="eyebrow">RECUPERAÇÃO DE ACESSO</span><h3>Redefinir senha</h3><p>Essa alteração vale somente para este computador.</p><label>Usuário<input name="recoveryUsername" defaultValue={savedUsername} required /></label><label>Nova senha<input name="recoveryPassword" type="password" minLength={8} required /></label><label>Confirmar nova senha<input name="recoveryConfirmation" type="password" minLength={8} required /></label>{recoveryError && <div className="login-error">{recoveryError}</div>}<button type="submit">Salvar nova senha</button></form></div>}
