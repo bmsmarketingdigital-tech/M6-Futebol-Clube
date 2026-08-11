@@ -2458,6 +2458,35 @@ body {
 
 /* Todos os modais compartilham a mesma hierarquia moderna e legível. */
 .modal-backdrop { padding: 28px; }
+
+/* Combo creation modal */
+.combo-modal {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 28px 30px 24px;
+  border-radius: 20px;
+  background: var(--surface, #fff);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .28);
+}
+.combo-modal-header { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; margin-bottom:24px; }
+.combo-modal-header h2 { margin:5px 0 6px; font-size:26px; color:var(--text-primary); }
+.combo-modal-header p { margin:0; color:var(--text-secondary); font-size:14px; }
+.combo-modal-close { width:34px; height:34px; border:0; border-radius:50%; background:var(--surface-muted,#f1f5f9); color:var(--text-secondary); font-size:24px; line-height:1; cursor:pointer; }
+.combo-modal > label, .combo-form-grid label { display:flex; flex-direction:column; gap:7px; color:var(--text-secondary); font-size:13px; font-weight:600; }
+.combo-modal input, .combo-modal select { width:100%; min-height:44px; padding:0 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text-primary); outline:none; }
+.combo-modal input:focus, .combo-modal select:focus { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
+.combo-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin-top:18px; }
+.combo-modal-actions { display:flex; justify-content:flex-end; gap:12px; margin-top:28px; padding-top:20px; border-top:1px solid var(--border); }
+.combo-modal-actions > button:first-child { min-height:40px; padding:0 18px; border:1px solid var(--border); border-radius:10px; background:transparent; color:var(--text-secondary); cursor:pointer; }
+.combo-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px; margin-top:20px; }
+.combo-card { padding:20px; }
+.combo-card-head { display:flex; justify-content:space-between; gap:12px; }
+.combo-card h3 { margin:5px 0 0; color:var(--text-primary); }
+.combo-price { display:block; margin:14px 0 4px; font-size:24px; color:var(--text-primary); }
+.combo-card-actions { display:flex; gap:8px; margin-top:18px; }
+.combo-card-actions button { display:inline-flex; align-items:center; gap:6px; min-height:34px; padding:0 10px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--text-secondary); cursor:pointer; }
+@media (max-width: 640px) { .combo-form-grid { grid-template-columns:1fr; } .combo-modal { padding:22px 18px 18px; } }
 .modal, .profile-modal, .team-modal, .attendance-panel, .evaluation-modal,
 .training-modal, .communication-modal, .recipient-modal, .athlete-edit-modal,
 .category-modal, .record-picker-modal, .charge-action-modal {
