@@ -2486,6 +2486,7 @@ body {
 .combo-price { display:block; margin:14px 0 4px; font-size:24px; color:var(--text-primary); }
 .combo-card-actions { display:flex; gap:8px; margin-top:18px; }
 .combo-card-actions button { display:inline-flex; align-items:center; gap:6px; min-height:34px; padding:0 10px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--text-secondary); cursor:pointer; }
+.combo-apply-summary { display:flex; flex-direction:column; gap:6px; margin-top:20px; padding:16px; border:1px solid var(--border); border-radius:12px; background:var(--surface-muted,#f8fafc); color:var(--text-secondary); }
 @media (max-width: 640px) { .combo-form-grid { grid-template-columns:1fr; } .combo-modal { padding:22px 18px 18px; } }
 .modal, .profile-modal, .team-modal, .attendance-panel, .evaluation-modal,
 .training-modal, .communication-modal, .recipient-modal, .athlete-edit-modal,

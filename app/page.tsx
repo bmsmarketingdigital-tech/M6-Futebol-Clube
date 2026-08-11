@@ -673,7 +673,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
               userName={user.displayName}
             />
           ) : section === "Combos" ? (
-            <CombosManagement notify={notify} />
+            <CombosManagement athletes={athletes} notify={notify} />
           ) : section === "Financeiro" || section === "Mensalidades" || section === "Planos" || section === "Controle de gastos" ? (
             <FinanceManagement
               view={section === "Planos" ? "plans" : section === "Controle de gastos" ? "expenses" : "overview"}
