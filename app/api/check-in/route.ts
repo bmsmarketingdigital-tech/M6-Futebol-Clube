@@ -60,8 +60,20 @@ export async function GET(request: Request) {
         notificationError: athleteCheckIns.notificationError,
       })
       .from(athleteCheckIns)
-      .innerJoin(athletes, eq(athleteCheckIns.athleteId, athletes.id))
-      .innerJoin(teams, eq(athleteCheckIns.teamId, teams.id))
+      .innerJoin(
+        athletes,
+        and(
+          eq(athleteCheckIns.athleteId, athletes.id),
+          eq(athletes.organizationId, athleteCheckIns.organizationId),
+        ),
+      )
+      .innerJoin(
+        teams,
+        and(
+          eq(athleteCheckIns.teamId, teams.id),
+          eq(teams.organizationId, athleteCheckIns.organizationId),
+        ),
+      )
       .where(
         eq(
           athleteCheckIns.organizationId,
@@ -147,7 +159,13 @@ export async function POST(request: Request) {
     const [enrollment] = await db
       .select({ teamName: teams.name })
       .from(teamAthletes)
-      .innerJoin(teams, eq(teamAthletes.teamId, teams.id))
+      .innerJoin(
+        teams,
+        and(
+          eq(teamAthletes.teamId, teams.id),
+          eq(teams.organizationId, teamAthletes.organizationId),
+        ),
+      )
       .where(
         and(
           eq(teamAthletes.organizationId, organizationId),
@@ -199,6 +217,7 @@ export async function POST(request: Request) {
       .where(
         and(
           eq(attendanceSessions.teamId, teamId),
+          eq(attendanceSessions.organizationId, organizationId),
           eq(attendanceSessions.sessionDate, date),
         ),
       )
