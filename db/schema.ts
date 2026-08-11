@@ -298,6 +298,12 @@ export const athleteCheckIns = sqliteTable(
       table.athleteId,
       table.scannedAt,
     ),
+    uniqueIndex("athlete_check_ins_logical_unique").on(
+      table.organizationId,
+      table.athleteId,
+      table.teamId,
+      table.attendanceSessionId,
+    ),
     index("athlete_check_ins_notification_idx").on(
       table.organizationId,
       table.notificationStatus,

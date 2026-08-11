@@ -266,9 +266,11 @@ export async function POST(request: Request) {
       `na Escola de Futebol M6 Futebol Clube foi registrada em ${formatArrival(scannedAt)} ` +
       `para a turma ${enrollment.teamName}.`;
     const initialStatus = athlete.guardianPhone ? "pending" : "skipped";
-    const [checkIn] = await db
-      .insert(athleteCheckIns)
-      .values({
+    let checkIn;
+    try {
+      [checkIn] = await db
+        .insert(athleteCheckIns)
+        .values({
         id: crypto.randomUUID(),
         organizationId,
         athleteId: athlete.id,
@@ -282,8 +284,32 @@ export async function POST(request: Request) {
         notificationError: athlete.guardianPhone
           ? null
           : "Responsável sem telefone cadastrado.",
-      })
-      .returning();
+        })
+        .returning();
+    } catch (error) {
+      if (error instanceof Error && /unique constraint failed.*athlete_check_ins/i.test(error.message)) {
+        const [existing] = await db
+          .select({ id: athleteCheckIns.id, scannedAt: athleteCheckIns.scannedAt })
+          .from(athleteCheckIns)
+          .where(and(
+            eq(athleteCheckIns.organizationId, organizationId),
+            eq(athleteCheckIns.athleteId, athlete.id),
+            eq(athleteCheckIns.teamId, teamId),
+            eq(athleteCheckIns.attendanceSessionId, session.id),
+          ))
+          .limit(1);
+        if (existing) {
+          return Response.json({
+            duplicate: true,
+            athlete: { id: athlete.id, name: athlete.name, category: athlete.category },
+            teamName: enrollment.teamName,
+            scannedAt: existing.scannedAt.toISOString(),
+            message: "Entrada jÃ¡ registrada nesta sessÃ£o.",
+          });
+        }
+      }
+      throw error;
+    }
 
     let notificationStatus = initialStatus;
     let notificationError = checkIn.notificationError;
