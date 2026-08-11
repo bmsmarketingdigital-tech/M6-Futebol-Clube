@@ -11,6 +11,7 @@ import {
   type TeamRecord,
 } from "./TeamManagement";
 import { FinanceManagement } from "./FinanceManagement";
+import CombosManagement from "./CombosManagement";
 import { EvaluationManagement } from "./EvaluationManagement";
 import { TrainingManagement } from "./TrainingManagement";
 import { CommunicationManagement } from "./CommunicationManagement";
@@ -65,6 +66,7 @@ type Section =
   | "Financeiro"
   | "Mensalidades"
   | "Planos"
+  | "Combos"
   | "Controle de gastos"
   | "Treinos"
   | "Avaliações"
@@ -113,6 +115,7 @@ const sectionPageClasses: Record<Exclude<Section, "Visão geral">, string> = {
   Financeiro: "finance-page",
   Mensalidades: "finance-page",
   Planos: "finance-page",
+  Combos: "finance-page",
   "Controle de gastos": "finance-page expenses-page",
   Treinos: "trainings-page",
   Avaliações: "evaluations-page",
@@ -462,13 +465,13 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
               <div className="nav-group" key={item.label}>
                 <button
                   className={
-                    section === "Financeiro" || section === "Mensalidades" || section === "Planos" || section === "Controle de gastos"
+                        section === "Financeiro" || section === "Mensalidades" || section === "Planos" || section === "Combos" || section === "Controle de gastos"
                       ? "nav-item expanded"
                       : "nav-item"
                   }
                   onClick={() => {
                     const isFinanceSection =
-                      section === "Financeiro" || section === "Mensalidades" || section === "Planos" || section === "Controle de gastos";
+                      section === "Financeiro" || section === "Mensalidades" || section === "Planos" || section === "Combos" || section === "Controle de gastos";
                     setSection("Mensalidades");
                     setAthletesMenuOpen(false);
                     setFinanceMenuOpen((current) =>
@@ -517,6 +520,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
                       <span />
                       Planos
                     </button>
+                    <button className={section === "Combos" ? "nav-subitem active" : "nav-subitem"} onClick={() => setSection("Combos")}><span />Combos</button>
                   </div>
                 )}
               </div>
@@ -668,6 +672,8 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
               canViewFinance={user.role === "admin"}
               userName={user.displayName}
             />
+          ) : section === "Combos" ? (
+            <CombosManagement notify={notify} />
           ) : section === "Financeiro" || section === "Mensalidades" || section === "Planos" || section === "Controle de gastos" ? (
             <FinanceManagement
               view={section === "Planos" ? "plans" : section === "Controle de gastos" ? "expenses" : "overview"}

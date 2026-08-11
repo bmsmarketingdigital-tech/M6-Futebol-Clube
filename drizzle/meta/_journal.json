@@ -134,6 +134,13 @@
       "when": 1786531000000,
       "tag": "0018_checkin_logical_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786532000000,
+      "tag": "0019_financial_combos",
+      "breakpoints": true
     }
   ]
 }

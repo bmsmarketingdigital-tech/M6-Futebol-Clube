@@ -2,6 +2,8 @@ import { and, eq, inArray, lt } from "drizzle-orm";
 import { getDb } from "../../../db";
 import {
   athleteBilling,
+  athleteComboCoverage,
+  athleteCombos,
   athletes,
   billingNotificationSettings,
   billingPlans,
@@ -130,9 +132,17 @@ export async function generateMonthlyCharges(
       ),
     );
 
+  const covered = await db
+    .select({ athleteId: athleteCombos.athleteId })
+    .from(athleteComboCoverage)
+    .innerJoin(athleteCombos, eq(athleteCombos.id, athleteComboCoverage.athleteComboId))
+    .where(and(eq(athleteComboCoverage.organizationId, organizationId), eq(athleteComboCoverage.referenceMonth, month), eq(athleteCombos.status, "active")));
+  const coveredAthletes = new Set(covered.map((row) => row.athleteId));
+
   let createdCount = 0;
   const now = new Date();
   for (const configuration of configurations) {
+    if (coveredAthletes.has(configuration.athleteId)) continue;
     const created = await db
       .insert(payments)
       .values({

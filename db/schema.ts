@@ -501,6 +501,87 @@ export const athleteBilling = sqliteTable(
   ],
 );
 
+export const billingCombos = sqliteTable(
+  "billing_combos",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    comboType: text("combo_type").notNull().default("custom"),
+    durationMonths: integer("duration_months").notNull(),
+    description: text("description"),
+    basePlanId: text("base_plan_id").references(() => billingPlans.id),
+    baseAmountCents: integer("base_amount_cents").notNull(),
+    discountType: text("discount_type", { enum: ["none", "fixed", "percent"] }).notNull().default("none"),
+    discountValue: integer("discount_value").notNull().default(0),
+    finalAmountCents: integer("final_amount_cents").notNull(),
+    billingMode: text("billing_mode", { enum: ["upfront", "installments"] }).notNull().default("installments"),
+    installmentCount: integer("installment_count").notNull(),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [index("billing_combos_organization_idx").on(table.organizationId)],
+);
+
+export const athleteCombos = sqliteTable(
+  "athlete_combos",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    athleteId: text("athlete_id").notNull().references(() => athletes.id, { onDelete: "cascade" }),
+    comboId: text("combo_id").notNull().references(() => billingCombos.id),
+    comboNameSnapshot: text("combo_name_snapshot").notNull(),
+    durationMonths: integer("duration_months").notNull(),
+    baseAmountCents: integer("base_amount_cents").notNull(),
+    discountType: text("discount_type").notNull(),
+    discountValue: integer("discount_value").notNull(),
+    finalAmountCents: integer("final_amount_cents").notNull(),
+    installmentCount: integer("installment_count").notNull(),
+    startDate: text("start_date").notNull(),
+    endDate: text("end_date").notNull(),
+    status: text("status", { enum: ["active", "completed", "cancelled", "expired"] }).notNull().default("active"),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    index("athlete_combos_organization_idx").on(table.organizationId),
+    index("athlete_combos_athlete_idx").on(table.athleteId),
+    uniqueIndex("athlete_combos_active_athlete_unique").on(table.athleteId, table.startDate),
+  ],
+);
+
+export const athleteComboInstallments = sqliteTable(
+  "athlete_combo_installments",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    athleteComboId: text("athlete_combo_id").notNull().references(() => athleteCombos.id, { onDelete: "cascade" }),
+    installmentNumber: integer("installment_number").notNull(),
+    installmentTotal: integer("installment_total").notNull(),
+    referenceMonth: text("reference_month").notNull(),
+    dueDate: text("due_date").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    paymentId: text("payment_id").references(() => payments.id),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("athlete_combo_installment_unique").on(table.athleteComboId, table.installmentNumber),
+    index("athlete_combo_installments_organization_idx").on(table.organizationId),
+  ],
+);
+
+export const athleteComboCoverage = sqliteTable(
+  "athlete_combo_coverage",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    athleteComboId: text("athlete_combo_id").notNull().references(() => athleteCombos.id, { onDelete: "cascade" }),
+    referenceMonth: text("reference_month").notNull(),
+  },
+  (table) => [uniqueIndex("athlete_combo_coverage_unique").on(table.athleteComboId, table.referenceMonth)],
+);
+
 export const payments = sqliteTable(
   "payments",
   {
@@ -511,6 +592,9 @@ export const payments = sqliteTable(
     athleteId: text("athlete_id")
       .notNull()
       .references(() => athletes.id, { onDelete: "cascade" }),
+    athleteComboId: text("athlete_combo_id").references(() => athleteCombos.id),
+    comboInstallmentNumber: integer("combo_installment_number"),
+    comboInstallmentTotal: integer("combo_installment_total"),
     referenceMonth: text("reference_month").notNull(),
     amountCents: integer("amount_cents").notNull(),
     dueDate: text("due_date").notNull(),
