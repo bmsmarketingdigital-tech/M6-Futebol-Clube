@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { CircleDashed, Plus, Star, TrendingUp, X } from "lucide-react";
 import type { AthleteRecord } from "./AthleteProfileModal";
 
 type Evaluation = {
@@ -74,12 +75,12 @@ export function EvaluationManagement({
     <>
       <div className="section-heading">
         <div><span className="eyebrow">DESENVOLVIMENTO ESPORTIVO</span><h1>Avaliações</h1><p>Acompanhe a evolução técnica, física, tática e comportamental.</p></div>
-        <button className="primary-button" onClick={() => setModal("new")}>＋ Nova avaliação</button>
+        <button className="primary-button" onClick={() => setModal("new")}><Plus size={16} strokeWidth={2} /> Nova avaliação</button>
       </div>
       <section className="evaluation-metrics">
-        <article className="metric-card"><div className="metric-icon green">↗</div><div><span>ATLETAS AVALIADOS</span><strong>{latest.length}</strong><small>de {athletes.length} ativos</small></div></article>
-        <article className="metric-card"><div className="metric-icon blue">★</div><div><span>MÉDIA GERAL</span><strong>{average.toFixed(1)} / 5</strong><small>última avaliação</small></div></article>
-        <article className="metric-card"><div className="metric-icon orange">○</div><div><span>SEM AVALIAÇÃO</span><strong>{Math.max(0, athletes.length - latest.length)}</strong><small>precisam de acompanhamento</small></div></article>
+        <article className="metric-card"><div className="metric-icon green"><TrendingUp size={19} strokeWidth={1.75} /></div><div><span>ATLETAS AVALIADOS</span><strong>{latest.length}</strong><small>de {athletes.length} ativos</small></div></article>
+        <article className="metric-card"><div className="metric-icon blue"><Star size={19} strokeWidth={1.75} /></div><div><span>MÉDIA GERAL</span><strong>{average.toFixed(1)} / 5</strong><small>última avaliação</small></div></article>
+        <article className="metric-card"><div className="metric-icon orange"><CircleDashed size={19} strokeWidth={1.75} /></div><div><span>SEM AVALIAÇÃO</span><strong>{Math.max(0, athletes.length - latest.length)}</strong><small>precisam de acompanhamento</small></div></article>
       </section>
       <section className="card evaluation-panel">
         <div className="card-header"><div><h2>Histórico de avaliações</h2><p>{evaluations.length} registros salvos</p></div><span className={loading ? "finance-loading" : "finance-ready"}>{loading ? "Carregando..." : "Atualizado"}</span></div>
@@ -95,7 +96,7 @@ export function EvaluationManagement({
               <div className="evaluation-actions"><button onClick={() => setModal(item)}>Editar</button><button onClick={() => void remove(item)}>Excluir</button></div>
             </article>
           ))}
-          {!loading && evaluations.length === 0 && <div className="finance-empty"><span>↗</span><strong>Nenhuma avaliação registrada</strong><small>Crie a primeira avaliação para iniciar o histórico.</small></div>}
+          {!loading && evaluations.length === 0 && <div className="finance-empty"><span><TrendingUp size={22} strokeWidth={1.75} /></span><strong>Nenhuma avaliação registrada</strong><small>Crie a primeira avaliação para iniciar o histórico.</small></div>}
         </div>
       </section>
       {modal && <EvaluationModal athletes={athletes} evaluation={modal === "new" ? null : modal} onClose={() => setModal(null)} onSaved={async () => { setModal(null); notify("Avaliação salva com sucesso."); await load(); }} />}
@@ -127,7 +128,7 @@ function EvaluationModal({ athletes, evaluation, onClose, onSaved }: { athletes:
     } finally { setSaving(false); }
   }
   return <div className="modal-backdrop" onMouseDown={onClose}><div className="evaluation-modal" onMouseDown={(event) => event.stopPropagation()}>
-    <header><div><span className="eyebrow">AVALIAÇÃO ESPORTIVA</span><h2>{evaluation ? "Editar avaliação" : "Nova avaliação"}</h2><p>Use a escala de 1 (inicial) a 5 (excelente).</p></div><button className="modal-close" onClick={onClose}>×</button></header>
+    <header><div><span className="eyebrow">AVALIAÇÃO ESPORTIVA</span><h2>{evaluation ? "Editar avaliação" : "Nova avaliação"}</h2><p>Use a escala de 1 (inicial) a 5 (excelente).</p></div><button className="modal-close" onClick={onClose}><X size={18} strokeWidth={1.75} /></button></header>
     <form onSubmit={submit}>
       <div className="form-row"><label>Atleta<select name="athleteId" required defaultValue={evaluation?.athleteId ?? ""}><option value="" disabled>Selecione</option>{athletes.map((athlete) => <option key={athlete.id} value={athlete.id}>{athlete.name} · {athlete.category}</option>)}</select></label><label>Data<input name="evaluationDate" type="date" required defaultValue={evaluation?.evaluationDate ?? new Date().toISOString().slice(0, 10)} /></label></div>
       <div className="score-grid">{(["technicalScore", "physicalScore", "tacticalScore", "behavioralScore"] as const).map((name, index) => <label key={name}>{["Técnica", "Física", "Tática", "Comportamento"][index]}<select name={name} defaultValue={evaluation?.[name] ?? 3}>{[1,2,3,4,5].map((score) => <option key={score} value={score}>{score} — {["","Inicial","Em desenvolvimento","Adequado","Muito bom","Excelente"][score]}</option>)}</select></label>)}</div>

@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { getDb } from "../../../../../../db";
+import { getD1, getDb } from "../../../../../../db";
 import {
   athleteBilling,
   athletes,
@@ -14,6 +14,10 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  let reservedId: string | null = null;
+  let reservedOrganizationId: string | null = null;
+  let creationToken: string | null = null;
+  let providerPaymentRequested = false;
   try {
     const context = await getApiContext(request);
     if (!context) {
@@ -49,6 +53,24 @@ export async function POST(
       );
     }
 
+    creationToken = crypto.randomUUID();
+    reservedId = id;
+    reservedOrganizationId = organizationId;
+    const reservation = await getD1().prepare(`UPDATE payments
+      SET external_creation_status='creating', external_creation_token=?,
+          external_creation_started_at=unixepoch(), updated_at=unixepoch()
+      WHERE id=? AND organization_id=? AND external_payment_id IS NULL
+        AND (external_creation_status IS NULL OR external_creation_status='failed'
+          OR (external_creation_status='creating' AND external_creation_started_at < unixepoch()-300))
+      RETURNING id`)
+      .bind(creationToken, id, organizationId).first<{ id: string }>();
+    if (!reservation) {
+      return Response.json(
+        { error: "A emissão desta cobrança já está em andamento. Aguarde a conclusão." },
+        { status: 409 },
+      );
+    }
+
     let customerId = row.billing.providerCustomerId;
     if (!customerId) {
       const customer = await asaasRequest<{ id: string }>("/customers", {
@@ -68,6 +90,7 @@ export async function POST(
         .where(eq(athleteBilling.id, row.billing.id));
     }
 
+    providerPaymentRequested = true;
     const external = await asaasRequest<{
       id: string;
       invoiceUrl?: string;
@@ -80,25 +103,34 @@ export async function POST(
         billingType: "UNDEFINED",
         value: row.payment.amountCents / 100,
         dueDate: row.payment.dueDate,
-        description: `Mensalidade BaseForte - ${row.payment.referenceMonth}`,
+        description: `Mensalidade Escola de Futebol M6 Futebol Clube - ${row.payment.referenceMonth}`,
         externalReference: row.payment.id,
       }),
     });
 
-    await db
-      .update(payments)
-      .set({
-        externalProvider: "asaas",
-        externalPaymentId: external.id,
-        invoiceUrl: external.invoiceUrl || null,
-        bankSlipUrl: external.bankSlipUrl || null,
-        externalStatus: external.status || "PENDING",
-        updatedAt: new Date(),
-      })
-      .where(eq(payments.id, id));
+    const finalized = await getD1().prepare(`UPDATE payments SET
+        external_provider='asaas', external_payment_id=?, invoice_url=?, bank_slip_url=?,
+        external_status=?, external_creation_status='created', external_creation_token=NULL,
+        external_creation_started_at=NULL, updated_at=unixepoch()
+      WHERE id=? AND organization_id=? AND external_creation_status='creating'
+        AND external_creation_token=? AND external_payment_id IS NULL RETURNING id`)
+      .bind(external.id, external.invoiceUrl || null, external.bankSlipUrl || null,
+        external.status || "PENDING", id, organizationId, creationToken).first<{ id: string }>();
+    if (!finalized) throw new Error("A reserva local da cobrança foi perdida antes da confirmação.");
 
     return Response.json({ invoiceUrl: external.invoiceUrl, alreadySent: false });
   } catch (error) {
+    try {
+      if (reservedId && reservedOrganizationId && creationToken) {
+        await getD1().prepare(`UPDATE payments SET external_creation_status=?,
+            external_creation_token=NULL, external_creation_started_at=NULL, updated_at=unixepoch()
+          WHERE id=? AND organization_id=? AND external_payment_id IS NULL
+            AND external_creation_status='creating' AND external_creation_token=?`)
+          .bind(providerPaymentRequested ? "unknown" : "failed", reservedId, reservedOrganizationId, creationToken).run();
+      }
+    } catch (cleanupError) {
+      console.error("Failed to release Asaas reservation", cleanupError);
+    }
     console.error("Failed to send Asaas charge", error);
     return Response.json(
       { error: error instanceof Error ? error.message : "Não foi possível emitir a cobrança." },

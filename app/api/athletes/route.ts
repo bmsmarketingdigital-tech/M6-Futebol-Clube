@@ -1,8 +1,12 @@
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { athletes } from "../../../db/schema";
+import { athletes, teamAthletes, teams } from "../../../db/schema";
 import { getApiContext } from "../api-auth";
 import { isValidCategory } from "../categories/category-utils";
+import {
+  enqueueNotification,
+  processNotificationQueue,
+} from "../notifications/outbox";
 
 export const dynamic = "force-dynamic";
 
@@ -96,13 +100,15 @@ export async function POST(request: Request) {
       category?: string;
       guardianName?: string;
       guardianPhone?: string;
+      teamId?: string;
     };
 
     const name = payload.name?.trim() ?? "";
     const age = Number(payload.age);
     const category = payload.category?.trim() ?? "";
     const guardianName = payload.guardianName?.trim() ?? "";
-    const guardianPhone = payload.guardianPhone?.trim() || null;
+    const guardianPhone = payload.guardianPhone?.trim() ?? "";
+    const requestedTeamId = payload.teamId?.trim() ?? "";
 
     if (name.length < 3 || name.length > 120) {
       return Response.json(
@@ -133,9 +139,42 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    if (!/^\d{10,11}$/.test(guardianPhone.replace(/\D/g, ""))) {
+      return Response.json(
+        { error: "Informe um telefone válido do responsável, com DDD." },
+        { status: 400 },
+      );
+    }
 
     const now = new Date();
     const db = getDb();
+    const compatibleTeams = await db
+      .select({ id: teams.id, name: teams.name })
+      .from(teams)
+      .where(
+        and(
+          eq(teams.organizationId, context.membership.organizationId),
+          eq(teams.category, category),
+          eq(teams.active, true),
+        ),
+      );
+    let enrolledTeamId = requestedTeamId;
+    if (enrolledTeamId) {
+      if (!compatibleTeams.some((team) => team.id === enrolledTeamId)) {
+        return Response.json(
+          { error: "Selecione uma turma ativa da mesma categoria do atleta." },
+          { status: 400 },
+        );
+      }
+    } else if (compatibleTeams.length === 1) {
+      enrolledTeamId = compatibleTeams[0].id;
+    } else if (compatibleTeams.length > 1) {
+      return Response.json(
+        { error: "Selecione a turma em que o atleta será matriculado." },
+        { status: 400 },
+      );
+    }
+
     const [created] = await db
       .insert(athletes)
       .values({
@@ -156,7 +195,53 @@ export async function POST(request: Request) {
       })
       .returning();
 
-    return Response.json({ athlete: toDto(created) }, { status: 201 });
+    if (enrolledTeamId) {
+      await db.insert(teamAthletes).values({
+        organizationId: context.membership.organizationId,
+        teamId: enrolledTeamId,
+        athleteId: created.id,
+        active: true,
+        enrolledAt: now,
+      });
+    }
+
+    let enrollmentNotification = { created: false, processed: 0 };
+    try {
+      const teamName = compatibleTeams.find((team) => team.id === enrolledTeamId)?.name;
+      const queued = await enqueueNotification({
+        organizationId: context.membership.organizationId,
+        athleteId: created.id,
+        teamId: enrolledTeamId || null,
+        eventType: "enrollment",
+        idempotencyKey:
+          `enrollment:${context.membership.organizationId}:${created.id}:` +
+          (enrolledTeamId || "unassigned"),
+        phone: guardianPhone,
+        message:
+          `Olá, ${guardianName}! A inscrição de ${name}` +
+          `${teamName ? ` na turma ${teamName}` : ""} foi confirmada.\n\n` +
+          "M6 Futebol Clube",
+      });
+      const processed = await processNotificationQueue(
+        context.membership.organizationId,
+        "enrollment",
+      );
+      enrollmentNotification = {
+        created: queued.created,
+        processed: processed.processed,
+      };
+    } catch (notificationError) {
+      console.error("Failed to enqueue enrollment notification", notificationError);
+    }
+
+    return Response.json(
+      {
+        athlete: toDto(created),
+        enrolledTeamId: enrolledTeamId || null,
+        enrollmentNotification,
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error("Failed to create athlete", error);
     return Response.json(

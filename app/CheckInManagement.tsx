@@ -1,13 +1,12 @@
 "use client";
 
 import {
-  FormEvent,
   useCallback,
   useEffect,
-  useRef,
+  useMemo,
   useState,
 } from "react";
-import type { Html5Qrcode } from "html5-qrcode";
+import { CheckCircle2, MessageCircle, QrCode, Search, TrendingUp, X } from "lucide-react";
 import type { TeamRecord } from "./TeamManagement";
 
 type QrCard = {
@@ -31,21 +30,7 @@ type CheckIn = {
   notificationError: string | null;
 };
 
-type ScanResult = {
-  duplicate?: boolean;
-  athlete?: { id: string; name: string; category: string };
-  teamName?: string;
-  scannedAt?: string;
-  message?: string;
-  notification?: {
-    status: CheckIn["notificationStatus"];
-    error: string | null;
-    phone: string | null;
-  };
-  error?: string;
-};
-
-type Tab = "scanner" | "cards" | "history";
+type Tab = "cards" | "history";
 
 type WhatsAppStatus = {
   configured: boolean;
@@ -96,28 +81,41 @@ const notificationLabels = {
 export function CheckInManagement({
   teams,
   notify,
-  onAttendanceChanged,
 }: {
   teams: TeamRecord[];
   notify: (message: string) => void;
-  onAttendanceChanged: () => void;
 }) {
-  const [tab, setTab] = useState<Tab>("scanner");
-  const [teamId, setTeamId] = useState(teams[0]?.id ?? "");
-  const [date, setDate] = useState(localDate);
+  const [tab, setTab] = useState<Tab>("cards");
   const [history, setHistory] = useState<CheckIn[]>([]);
   const [cards, setCards] = useState<QrCard[]>([]);
+  const [selectedQrCard, setSelectedQrCard] = useState<QrCard | null>(null);
+  const [cardQuery, setCardQuery] = useState("");
+  const [cardTeamId, setCardTeamId] = useState("all");
   const [loading, setLoading] = useState(true);
   const [loadingCards, setLoadingCards] = useState(false);
-  const [scanning, setScanning] = useState(false);
-  const [registering, setRegistering] = useState(false);
   const [retrying, setRetrying] = useState(false);
-  const [lastResult, setLastResult] = useState<ScanResult | null>(null);
   const [whatsapp, setWhatsapp] =
     useState<WhatsAppStatus>(unavailableWhatsApp);
   const [controllingWhatsApp, setControllingWhatsApp] = useState(false);
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const processingRef = useRef(false);
+
+  const filteredCards = useMemo(() => {
+    const query = cardQuery.trim().toLocaleLowerCase("pt-BR");
+    const selectedTeam = cardTeamId === "all"
+      ? null
+      : teams.find((team) => team.id === cardTeamId);
+
+    return cards.filter((card) => {
+      if (selectedTeam && !selectedTeam.athleteIds.includes(card.id)) return false;
+      if (!query) return true;
+      const athleteTeams = teams
+        .filter((team) => team.athleteIds.includes(card.id))
+        .map((team) => team.name)
+        .join(" ");
+      return `${card.name} ${card.category} ${athleteTeams}`
+        .toLocaleLowerCase("pt-BR")
+        .includes(query);
+    });
+  }, [cardQuery, cardTeamId, cards, teams]);
 
   const loadHistory = useCallback(async () => {
     setLoading(true);
@@ -171,110 +169,7 @@ export function CheckInManagement({
     return () => window.clearInterval(interval);
   }, [loadWhatsAppStatus, whatsapp.status]);
 
-  useEffect(() => {
-    if (teamId || !teams[0]) return;
-    const timeout = window.setTimeout(() => setTeamId(teams[0].id), 0);
-    return () => window.clearTimeout(timeout);
-  }, [teamId, teams]);
-
-  const stopScanner = useCallback(async () => {
-    const scanner = scannerRef.current;
-    scannerRef.current = null;
-    processingRef.current = false;
-    setScanning(false);
-    if (!scanner) return;
-    try {
-      if (scanner.isScanning) await scanner.stop();
-      await scanner.clear();
-    } catch {
-      // A câmera pode já ter sido encerrada pelo navegador.
-    }
-  }, []);
-
-  useEffect(
-    () => () => {
-      void stopScanner();
-    },
-    [stopScanner],
-  );
-
-  const registerCode = useCallback(
-    async (code: string) => {
-      if (processingRef.current) return;
-      if (!teamId) {
-        notify("Selecione uma turma antes de ler o QR Code.");
-        return;
-      }
-      processingRef.current = true;
-      setRegistering(true);
-      try {
-        const response = await fetch("/api/check-in", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code, teamId, date }),
-        });
-        const payload = (await response.json()) as ScanResult;
-        if (!response.ok) {
-          throw new Error(payload.error || "Não foi possível registrar a entrada.");
-        }
-        setLastResult(payload);
-        notify(
-          payload.duplicate
-            ? payload.message || "Entrada já registrada."
-            : `${payload.athlete?.name} teve a entrada registrada.`,
-        );
-        await stopScanner();
-        await loadHistory();
-        onAttendanceChanged();
-      } catch (error) {
-        processingRef.current = false;
-        notify(
-          error instanceof Error
-            ? error.message
-            : "Não foi possível registrar a entrada.",
-        );
-      } finally {
-        setRegistering(false);
-      }
-    },
-    [date, loadHistory, notify, onAttendanceChanged, stopScanner, teamId],
-  );
-
-  async function startScanner() {
-    if (!teamId) {
-      notify("Selecione a turma antes de ligar a câmera.");
-      return;
-    }
-    setLastResult(null);
-    try {
-      const { Html5Qrcode } = await import("html5-qrcode");
-      const scanner = new Html5Qrcode("baseforte-qr-reader");
-      scannerRef.current = scanner;
-      processingRef.current = false;
-      await scanner.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: (width, height) => {
-            const size = Math.min(width, height, 260);
-            return { width: size, height: size };
-          },
-        },
-        (decodedText) => void registerCode(decodedText),
-        () => undefined,
-      );
-      setScanning(true);
-    } catch (error) {
-      await stopScanner();
-      notify(
-        error instanceof Error
-          ? `Não foi possível abrir a câmera: ${error.message}`
-          : "Não foi possível abrir a câmera.",
-      );
-    }
-  }
-
-  async function loadCards() {
+  const loadCards = useCallback(async () => {
     setTab("cards");
     if (cards.length > 0) return;
     setLoadingCards(true);
@@ -311,7 +206,12 @@ export function CheckInManagement({
     } finally {
       setLoadingCards(false);
     }
-  }
+  }, [cards.length, notify]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void loadCards(), 0);
+    return () => window.clearTimeout(timeout);
+  }, [loadCards]);
 
   async function retryNotifications() {
     setRetrying(true);
@@ -339,6 +239,20 @@ export function CheckInManagement({
       );
     } finally {
       setRetrying(false);
+    }
+  }
+
+  async function sendWhatsAppTest() {
+    setControllingWhatsApp(true);
+    try {
+      const response = await fetch("/api/check-in/whatsapp/test", { method: "POST" });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Falha ao enviar o teste.");
+      notify("Mensagem de teste enviada para 18981518787.");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Falha ao enviar o teste.");
+    } finally {
+      setControllingWhatsApp(false);
     }
   }
 
@@ -374,18 +288,8 @@ export function CheckInManagement({
     }
   }
 
-  async function submitManual(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    await registerCode(String(form.get("code") || ""));
-    event.currentTarget.reset();
-  }
-
   const todayCount = history.filter(
     (item) => localDateFromIso(item.scannedAt) === localDate(),
-  ).length;
-  const sentCount = history.filter(
-    (item) => item.notificationStatus === "sent",
   ).length;
   const pendingCount = history.filter(
     (item) => item.notificationStatus === "pending",
@@ -395,52 +299,44 @@ export function CheckInManagement({
     <>
       <div className="section-heading checkin-heading">
         <div>
-          <span className="eyebrow">CHEGADA SEGURA</span>
-          <h1>QR e entrada</h1>
-          <p>Registre a presença pela câmera e avise o responsável automaticamente.</p>
+          <span className="eyebrow">GESTÃO DE ENTRADAS</span>
+          <h1>QR Codes dos atletas</h1>
+          <p>Consulte os cartões e acompanhe as entradas registradas pelo aplicativo móvel.</p>
         </div>
         <div className="checkin-heading-actions">
-          <span className={whatsapp.status === "connected" ? "bridge-status connected" : "bridge-status"}>
-            <i />
-            {whatsapp.status === "connected"
-              ? `WhatsApp conectado${whatsapp.connectedPhone ? ` · ${whatsapp.connectedPhone}` : ""}`
-              : whatsapp.configured
-                ? "WhatsApp desconectado"
-                : "Abra pelo aplicativo Windows"}
-          </span>
           {whatsapp.status === "connected" && pendingCount > 0 && (
             <button className="queue-button" onClick={() => void retryNotifications()} disabled={retrying}>
               {retrying ? "Enviando fila..." : `Enviar fila (${pendingCount})`}
             </button>
           )}
-          <button className="primary-button" onClick={() => void startScanner()}>
-            ◎ Ler QR Code
-          </button>
         </div>
       </div>
 
       <section className="checkin-metrics">
         <article className="metric-card">
-          <div className="metric-icon green">✓</div>
+          <div className="metric-icon green"><CheckCircle2 size={19} strokeWidth={1.75} /></div>
           <div><span>ENTRADAS HOJE</span><strong>{todayCount}</strong><small>presenças por QR</small></div>
         </article>
         <article className="metric-card">
-          <div className="metric-icon blue">◌</div>
-          <div><span>WHATSAPP ENVIADO</span><strong>{sentCount}</strong><small>responsáveis avisados</small></div>
+          <div className="metric-icon blue"><MessageCircle size={19} strokeWidth={1.75} /></div>
+ <div><span>CARTÕES ATIVOS</span><strong>{cards.length}</strong><small>cartões disponíveis</small></div>
         </article>
         <article className="metric-card">
-          <div className="metric-icon orange">↗</div>
-          <div><span>NA FILA</span><strong>{pendingCount}</strong><small>aguardando o aplicativo</small></div>
+          <div className="metric-icon orange"><TrendingUp size={19} strokeWidth={1.75} /></div>
+ <div><span>FILTRE POR TURMA</span><strong>{teams.length}</strong><small>turmas cadastradas</small></div>
         </article>
       </section>
 
-      <section className={`card whatsapp-connector-card ${whatsapp.status}`}>
+ {false && <section className={`card whatsapp-connector-card ${whatsapp.status}`}>
         <div className="whatsapp-connector-copy">
           <span className="whatsapp-logo">◌</span>
           <div>
-            <span className="eyebrow">CONECTOR LOCAL</span>
-            <h2>WhatsApp da escolinha</h2>
-            <p>{whatsapp.lastError || whatsapp.lastMessage}</p>
+            <span className="eyebrow">NOTIFICAÇÕES AUTOMÁTICAS</span>
+            <h2>Avisos automáticos por WhatsApp</h2>
+            <p>
+              {whatsapp.lastError || whatsapp.lastMessage}
+              {whatsapp.status !== "connected" && " Conecte para confirmar a chegada ao responsável."}
+            </p>
           </div>
         </div>
         {whatsapp.status === "qr" && whatsapp.qrCodeDataUrl && (
@@ -452,12 +348,12 @@ export function CheckInManagement({
         )}
         <div className="whatsapp-connector-actions">
           {!whatsapp.configured && (
-            <small>Esta função fica disponível ao abrir o BaseForte instalado no PC.</small>
+            <small>Esta função fica disponível ao abrir o sistema da Escola de Futebol M6 Futebol Clube instalado no PC.</small>
           )}
           {whatsapp.configured &&
             ["disconnected", "error"].includes(whatsapp.status) && (
-              <button className="primary-button" onClick={() => void controlWhatsApp("connect")} disabled={controllingWhatsApp}>
-                {controllingWhatsApp ? "Iniciando..." : "Conectar WhatsApp"}
+              <button className="whatsapp-connect-button" onClick={() => void controlWhatsApp("connect")} disabled={controllingWhatsApp}>
+                {controllingWhatsApp ? "Preparando conexão..." : "Conectar para enviar avisos"}
               </button>
             )}
           {["starting", "authenticated"].includes(whatsapp.status) && (
@@ -466,93 +362,76 @@ export function CheckInManagement({
           {whatsapp.status === "connected" && (
             <>
               <span className="whatsapp-ready">✓ Pronto para enviar</span>
-              <button className="disconnect-button" onClick={() => void controlWhatsApp("disconnect")} disabled={controllingWhatsApp}>
+<button className="whatsapp-connect-button" onClick={() => void sendWhatsAppTest()} disabled={controllingWhatsApp}>
+  {controllingWhatsApp ? "Enviando..." : "Enviar teste (18981518787)"}
+</button>
+<button className="disconnect-button" onClick={() => void controlWhatsApp("disconnect")} disabled={controllingWhatsApp}>
                 Desconectar
               </button>
             </>
           )}
         </div>
-      </section>
+ </section>}
 
-      <section className="card checkin-panel">
+ <section className="card checkin-panel">
         <div className="checkin-tabs">
-          <button className={tab === "scanner" ? "active" : ""} onClick={() => setTab("scanner")}>Leitor</button>
           <button className={tab === "cards" ? "active" : ""} onClick={() => void loadCards()}>Cartões dos atletas</button>
           <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>Histórico</button>
         </div>
-
-        {tab === "scanner" && (
-          <div className="scanner-layout">
-            <div className="scanner-stage">
-              <div id="baseforte-qr-reader" className={scanning ? "active" : ""} />
-              {!scanning && (
-                <div className="scanner-placeholder">
-                  <span>◎</span>
-                  <strong>Câmera pronta para leitura</strong>
-                  <small>Escolha a turma e aproxime o cartão do atleta.</small>
-                  <button className="primary-button" onClick={() => void startScanner()} disabled={registering}>
-                    Ativar câmera
-                  </button>
-                </div>
-              )}
-              {scanning && (
-                <button className="scanner-stop" onClick={() => void stopScanner()}>
-                  Encerrar câmera
-                </button>
-              )}
-            </div>
-            <div className="scanner-settings">
-              <span className="eyebrow">CONFIGURAÇÃO DA LEITURA</span>
-              <label>Turma
-                <select value={teamId} onChange={(event) => setTeamId(event.target.value)}>
-                  <option value="">Selecione uma turma</option>
-                  {teams.map((team) => (
-                    <option key={team.id} value={team.id}>{team.name} · {team.category}</option>
-                  ))}
-                </select>
-              </label>
-              <label>Data
-                <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-              </label>
-              <form className="manual-code" onSubmit={submitManual}>
-                <label>Código manual
-                  <input name="code" placeholder="BF1:..." autoComplete="off" />
-                </label>
-                <button type="submit" disabled={registering}>{registering ? "Registrando..." : "Confirmar código"}</button>
-              </form>
-              {lastResult?.athlete && (
-                <article className={`scan-success ${lastResult.duplicate ? "duplicate" : ""}`}>
-                  <span>{lastResult.duplicate ? "↻" : "✓"}</span>
-                  <div>
-                    <strong>{lastResult.athlete.name}</strong>
-                    <small>{lastResult.teamName} · {lastResult.duplicate ? "já registrado" : "entrada confirmada"}</small>
-                    {lastResult.notification && (
-                      <b className={`notification-result ${lastResult.notification.status}`}>
-                        {notificationLabels[lastResult.notification.status]}
-                      </b>
-                    )}
-                  </div>
-                </article>
-              )}
-              {teams.length === 0 && (
-                <div className="scanner-warning">Cadastre uma turma e matricule atletas antes de utilizar o leitor.</div>
-              )}
-            </div>
-          </div>
-        )}
 
         {tab === "cards" && (
           <div className="qr-cards-panel">
             <div className="qr-print-toolbar">
               <div><strong>Cartões individuais</strong><small>{cards.length} atletas ativos</small></div>
-              <button onClick={() => window.print()} disabled={loadingCards || cards.length === 0}>Imprimir cartões</button>
+              <div className="qr-card-filters">
+                <label className="qr-card-search">
+                  <span><Search size={14} strokeWidth={1.75} /></span>
+                  <input
+                    aria-label="Buscar cartão por atleta, categoria ou turma"
+                    value={cardQuery}
+                    onChange={(event) => setCardQuery(event.target.value)}
+                    placeholder="Buscar atleta..."
+                  />
+                  {cardQuery && (
+                    <button type="button" aria-label="Limpar busca" onClick={() => setCardQuery("")}><X size={14} strokeWidth={1.75} /></button>
+                  )}
+                </label>
+                <select
+                  aria-label="Filtrar cartões por turma"
+                  value={cardTeamId}
+                  onChange={(event) => setCardTeamId(event.target.value)}
+                >
+                  <option value="all">Todas as turmas</option>
+                  {teams.map((team) => (
+                    <option key={team.id} value={team.id}>{team.name} · {team.category}</option>
+                  ))}
+                </select>
+                <strong>{filteredCards.length} resultado(s)</strong>
+              </div>
+              <button onClick={() => window.print()} disabled={loadingCards || filteredCards.length === 0}>Imprimir cartões</button>
+            </div>
+            <div className="qr-purpose-note">
+              <span><QrCode size={18} strokeWidth={1.75} /></span>
+              <div>
+                <strong>Cartão de entrada do atleta</strong>
+                <small>
+                  O aplicativo móvel escaneia este QR, identifica o atleta e registra sua presença.
+                  O computador recebe a entrada e pode avisar o responsável pelo WhatsApp.
+                </small>
+              </div>
             </div>
             {loadingCards && <div className="checkin-empty">Gerando QR Codes seguros...</div>}
             {!loadingCards && cards.length === 0 && <div className="checkin-empty">Nenhum atleta ativo para gerar cartões.</div>}
             <div className="qr-card-grid">
-              {cards.map((card) => (
+              {filteredCards.map((card) => (
                 <article key={card.id} className="athlete-qr-card">
-                  <div className="qr-card-brand"><span>BF</span><strong>BaseForte</strong></div>
+                  <div className="qr-card-brand">
+                    <span>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src="/logo.jpeg" alt="Escola de Futebol M6 Futebol Clube" />
+                    </span>
+                    <strong>M6 Futebol Clube</strong>
+                  </div>
                   {card.image && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={card.image} alt={`QR Code de ${card.name}`} />
@@ -560,9 +439,17 @@ export function CheckInManagement({
                   <strong>{card.name}</strong>
                   <small>{card.category} · Cartão de entrada</small>
                   <p>Apresente este código ao chegar à escolinha.</p>
+                  <button type="button" className="qr-view-button" onClick={() => setSelectedQrCard(card)}>
+                    Ver QR Code
+                  </button>
                 </article>
               ))}
             </div>
+            {!loadingCards && cards.length > 0 && filteredCards.length === 0 && (
+              <div className="checkin-empty">
+                Nenhum cartão encontrado. Ajuste a busca ou selecione outra turma.
+              </div>
+            )}
           </div>
         )}
 
@@ -584,6 +471,40 @@ export function CheckInManagement({
           </div>
         )}
       </section>
+      {selectedQrCard && (
+        <div className="modal-backdrop qr-card-modal-backdrop" onMouseDown={() => setSelectedQrCard(null)}>
+          <div className="qr-card-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <header>
+              <div>
+                <span className="eyebrow">CARTÃO DE ENTRADA</span>
+                <h2>{selectedQrCard.name}</h2>
+                <p>{selectedQrCard.category} · identificação individual do atleta</p>
+              </div>
+              <button className="modal-close" onClick={() => setSelectedQrCard(null)} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button>
+            </header>
+            <div className="qr-card-modal-content">
+              <div className="qr-card-brand">
+                <span>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/logo.jpeg" alt="Escola de Futebol M6 Futebol Clube" />
+                </span>
+                <strong>M6 Futebol Clube</strong>
+              </div>
+              {selectedQrCard.image && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={selectedQrCard.image} alt={`QR Code de ${selectedQrCard.name}`} />
+              )}
+              <strong>{selectedQrCard.name}</strong>
+              <small>{selectedQrCard.category} · Cartão de entrada</small>
+              <p>A escola deve escanear este código na chegada do atleta.</p>
+            </div>
+            <footer className="qr-card-modal-actions">
+              <button className="filter-button" onClick={() => setSelectedQrCard(null)}>Fechar</button>
+              <button className="primary-button" onClick={() => window.print()}>Imprimir este cartão</button>
+            </footer>
+          </div>
+        </div>
+      )}
     </>
   );
 }

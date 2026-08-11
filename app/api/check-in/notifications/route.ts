@@ -51,12 +51,14 @@ export async function POST(request: Request) {
     for (const item of queued) {
       if (!item.phone) continue;
       const delivery = await sendWhatsAppMessage(item.phone, item.message);
+      const notificationStatus =
+        delivery.status === "delivery_unknown" ? "failed" : delivery.status;
       if (delivery.status === "sent") sent += 1;
       else failed += 1;
       await db
         .update(athleteCheckIns)
         .set({
-          notificationStatus: delivery.status,
+          notificationStatus,
           notificationError: delivery.error,
           notifiedAt: delivery.status === "sent" ? new Date() : null,
         })

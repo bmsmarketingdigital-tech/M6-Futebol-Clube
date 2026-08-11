@@ -1,6 +1,7 @@
-/** Runtime local usado pelo aplicativo desktop BaseForte. */
+/** Runtime local usado pelo aplicativo desktop da Escola de Futebol M6 Futebol Clube. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { getLicenseStatus } from "../db/license";
 
 interface Env {
   ASSETS: Fetcher;
@@ -39,6 +40,25 @@ const worker = {
           return result.response();
         },
       }, allowedWidths);
+    }
+
+    if (
+      url.pathname.startsWith("/api/") &&
+      !url.pathname.startsWith("/api/license/") &&
+      !url.pathname.startsWith("/api/auth/")
+    ) {
+      const status = await getLicenseStatus();
+      if (status.blocked) {
+        return Response.json(
+          {
+            error: status.message,
+            code: "LICENSE_BLOCKED",
+            state: status.state,
+            installId: status.installId,
+          },
+          { status: 403 },
+        );
+      }
     }
 
     return handler.fetch(request, env, ctx);

@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
 export const organizations = sqliteTable("organizations", {
   id: text("id").primaryKey(),
@@ -507,6 +507,11 @@ export const payments = sqliteTable(
     invoiceUrl: text("invoice_url"),
     bankSlipUrl: text("bank_slip_url"),
     externalStatus: text("external_status"),
+    externalCreationStatus: text("external_creation_status", {
+      enum: ["creating", "created", "failed", "unknown"],
+    }),
+    externalCreationToken: text("external_creation_token"),
+    externalCreationStartedAt: integer("external_creation_started_at", { mode: "timestamp" }),
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
     status: text("status", {
       enum: ["open", "paid", "partial", "overdue", "cancelled"],
@@ -524,5 +529,241 @@ export const payments = sqliteTable(
       table.organizationId,
       table.status,
     ),
+    uniqueIndex("payments_external_payment_unique").on(table.externalPaymentId),
   ],
 );
+
+export const paymentTransactions = sqliteTable(
+  "payment_transactions",
+  {
+    id: text("id").primaryKey(),
+    paymentId: text("payment_id")
+      .notNull()
+      .references(() => payments.id, { onDelete: "cascade" }),
+    type: text("type", {
+      enum: ["payment", "refund", "opening_balance"],
+    }).notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    paymentMethod: text("payment_method", {
+      enum: ["cash", "pix", "card", "bank", "other"],
+    }),
+    origin: text("origin", {
+      enum: ["manual", "asaas", "migration", "system"],
+    }).notNull(),
+    occurredAt: integer("occurred_at", { mode: "timestamp" }).notNull(),
+    createdBy: text("created_by"),
+    externalTransactionId: text("external_transaction_id"),
+    reversesTransactionId: text("reverses_transaction_id").references(
+      (): AnySQLiteColumn => paymentTransactions.id,
+      { onDelete: "restrict" },
+    ),
+    idempotencyKey: text("idempotency_key").notNull(),
+    note: text("note"),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("payment_transactions_idempotency_unique").on(table.idempotencyKey),
+    uniqueIndex("payment_transactions_external_unique").on(
+      table.origin,
+      table.externalTransactionId,
+      table.type,
+    ),
+    index("payment_transactions_payment_date_idx").on(table.paymentId, table.occurredAt),
+    index("payment_transactions_reversal_idx").on(table.reversesTransactionId),
+  ],
+);
+
+export const billingNotificationSettings = sqliteTable(
+  "billing_notification_settings",
+  {
+    organizationId: text("organization_id")
+      .primaryKey()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    beforeDueEnabled: integer("before_due_enabled", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    beforeDueDays: integer("before_due_days").notNull().default(3),
+    dueTodayEnabled: integer("due_today_enabled", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    overdueEnabled: integer("overdue_enabled", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    overdueDays: integer("overdue_days").notNull().default(5),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+);
+
+export const billingNotifications = sqliteTable(
+  "billing_notifications",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    paymentId: text("payment_id")
+      .notNull()
+      .references(() => payments.id, { onDelete: "cascade" }),
+    athleteId: text("athlete_id")
+      .notNull()
+      .references(() => athletes.id, { onDelete: "cascade" }),
+    type: text("type", {
+      enum: ["before_due", "due_today", "overdue"],
+    }).notNull(),
+    phone: text("phone").notNull(),
+    message: text("message").notNull(),
+    status: text("status", {
+      enum: ["sent", "failed"],
+    }).notNull(),
+    error: text("error"),
+    sentAt: integer("sent_at", { mode: "timestamp" }),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("billing_notifications_payment_type_unique").on(
+      table.paymentId,
+      table.type,
+    ),
+    index("billing_notifications_organization_status_idx").on(
+      table.organizationId,
+      table.status,
+    ),
+  ],
+);
+
+export const notificationOutbox = sqliteTable(
+  "notification_outbox",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    athleteId: text("athlete_id")
+      .notNull()
+      .references(() => athletes.id, { onDelete: "cascade" }),
+    paymentId: text("payment_id").references(() => payments.id, {
+      onDelete: "set null",
+    }),
+    teamId: text("team_id").references(() => teams.id, { onDelete: "set null" }),
+    legacyNotificationId: text("legacy_notification_id"),
+    originalNotificationId: text("original_notification_id"),
+    eventType: text("event_type", {
+      enum: ["before_due", "due_today", "overdue", "enrollment", "controlled_test"],
+    }).notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    phone: text("phone").notNull(),
+    message: text("message").notNull(),
+    status: text("status", {
+      enum: ["pending", "processing", "sent", "failed", "delivery_unknown", "superseded"],
+    }).notNull().default("pending"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(3),
+    nextAttemptAt: integer("next_attempt_at", { mode: "timestamp" }),
+    lockedAt: integer("locked_at", { mode: "timestamp" }),
+    lockedUntil: integer("locked_until", { mode: "timestamp" }),
+    lockToken: text("lock_token"),
+    lastError: text("last_error"),
+    sentAt: integer("sent_at", { mode: "timestamp" }),
+    providerMessageId: text("provider_message_id"),
+    lastAttemptOrigin: text("last_attempt_origin", {
+      enum: ["startup", "reconnect", "automatic", "verify_now", "enrollment", "controlled_test", "manual"],
+    }),
+    manualResendCount: integer("manual_resend_count").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("notification_outbox_idempotency_unique").on(table.idempotencyKey),
+    index("notification_outbox_eligible_idx").on(
+      table.organizationId,
+      table.status,
+      table.nextAttemptAt,
+    ),
+    index("notification_outbox_original_idx").on(table.originalNotificationId),
+  ],
+);
+
+export const notificationAttempts = sqliteTable(
+  "notification_attempts",
+  {
+    id: text("id").primaryKey(),
+    notificationId: text("notification_id")
+      .notNull()
+      .references(() => notificationOutbox.id, { onDelete: "cascade" }),
+    attemptNumber: integer("attempt_number").notNull(),
+    origin: text("origin").notNull(),
+    lockToken: text("lock_token").notNull(),
+    status: text("status").notNull(),
+    error: text("error"),
+    providerMessageId: text("provider_message_id"),
+    startedAt: integer("started_at", { mode: "timestamp" }).notNull(),
+    finishedAt: integer("finished_at", { mode: "timestamp" }),
+  },
+  (table) => [
+    uniqueIndex("notification_attempts_lock_token_unique").on(table.lockToken),
+    index("notification_attempts_notification_idx").on(
+      table.notificationId,
+      table.startedAt,
+    ),
+  ],
+);
+
+export const expenses = sqliteTable(
+  "expenses",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    referenceMonth: text("reference_month").notNull(),
+    description: text("description").notNull(),
+    category: text("category").notNull(),
+    supplier: text("supplier"),
+    amountCents: integer("amount_cents").notNull(),
+    dueDate: text("due_date").notNull(),
+    paidAt: integer("paid_at", { mode: "timestamp" }),
+    paymentMethod: text("payment_method", {
+      enum: ["cash", "pix", "card", "bank", "other"],
+    }),
+    status: text("status", {
+      enum: ["open", "paid", "overdue", "cancelled"],
+    })
+      .notNull()
+      .default("open"),
+    notes: text("notes"),
+    installmentGroupId: text("installment_group_id"),
+    installmentNumber: integer("installment_number").notNull().default(1),
+    installmentCount: integer("installment_count").notNull().default(1),
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    index("expenses_organization_month_idx").on(
+      table.organizationId,
+      table.referenceMonth,
+    ),
+    index("expenses_organization_status_idx").on(
+      table.organizationId,
+      table.status,
+    ),
+    index("expenses_installment_group_idx").on(
+      table.organizationId,
+      table.installmentGroupId,
+    ),
+  ],
+);
+
+export const licenseState = sqliteTable("license_state", {
+  id: text("id").primaryKey(),
+  installId: text("install_id").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }),
+  graceDays: integer("grace_days").notNull().default(3),
+  lastSeenAt: integer("last_seen_at", { mode: "timestamp" }).notNull(),
+  lastIssuedAt: integer("last_issued_at", { mode: "timestamp" }),
+  usedNonces: text("used_nonces").notNull().default("[]"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});

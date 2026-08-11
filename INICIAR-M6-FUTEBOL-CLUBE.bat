@@ -1,13 +1,13 @@
 @echo off
 setlocal
-title BaseForte - Sistema da Escolinha
+title Escola de Futebol M6 Futebol Clube - Sistema da Escolinha
 color 0A
 
 cd /d "%~dp0"
 
 echo.
 echo ============================================================
-echo              BASEFORTE - GESTAO ESPORTIVA
+echo    ESCOLA DE FUTEBOL M6 FUTEBOL CLUBE - GESTAO ESPORTIVA
 echo ============================================================
 echo.
 
@@ -32,7 +32,7 @@ if errorlevel 1 (
 )
 
 if not exist "package.json" (
-    echo [ERRO] Este arquivo precisa permanecer na pasta do BaseForte.
+    echo [ERRO] Este arquivo precisa permanecer na pasta do sistema.
     echo.
     pause
     exit /b 1
@@ -53,7 +53,7 @@ if not exist "node_modules\" (
     )
 )
 
-echo [2/2] Abrindo o aplicativo BaseForte...
+echo [2/2] Abrindo o aplicativo da Escola de Futebol M6 Futebol Clube...
 echo.
 echo IMPORTANTE: mantenha esta janela aberta enquanto estiver usando.
 echo Para encerrar, pressione Ctrl+C e confirme com S.
@@ -62,6 +62,6 @@ echo.
 call npm.cmd run desktop
 
 echo.
-echo O BaseForte foi encerrado.
+echo O sistema foi encerrado.
 pause
 endlocal

@@ -1,6 +1,6 @@
-appId: br.com.baseforte.gestao
-productName: BaseForte
-copyright: Copyright © 2026 BaseForte
+appId: br.com.m6futebolclube.escoladefutebol
+productName: Escola de Futebol M6 Futebol Clube
+copyright: Copyright © 2026 Escola de Futebol M6 Futebol Clube
 asar: false
 npmRebuild: false
 electronDist: node_modules/electron/dist
@@ -32,7 +32,7 @@ win:
     - target: nsis
       arch:
         - x64
-  artifactName: BaseForte-Setup-${version}.${ext}
+  artifactName: M6FutebolClube-Setup-${version}.${ext}
   signAndEditExecutable: false
 nsis:
   oneClick: false
@@ -40,5 +40,5 @@ nsis:
   allowToChangeInstallationDirectory: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: BaseForte
+  shortcutName: Escola de Futebol M6 Futebol Clube
   deleteAppDataOnUninstall: false

@@ -3,6 +3,14 @@ const fs = require("fs");
 const path = require("path");
 const express = require("express");
 const QRCode = require("qrcode");
+const { resolveWhatsAppAuthConfig } = require("./whatsapp-auth-config.cjs");
+const {
+  normalizePhone,
+  readWhatsAppTestMode,
+  canSendToPhone,
+  maskPhone,
+  validateControlledTestInput,
+} = require("./whatsapp-test-mode.cjs");
 
 const CONNECTION_TIMEOUT_MS = 90000;
 const SEND_TIMEOUT_MS = 20000;
@@ -12,16 +20,22 @@ function createWhatsAppBridge({
   log,
   token,
   port,
+  onConnected,
+  clientFactory,
+  chromePathResolver,
 }) {
-  const sessionDir = path.join(dataDir, "whatsapp-session");
-  const cacheDir = path.join(dataDir, "whatsapp-cache");
+  const { clientId, sessionDir, sessionPath, cacheDir } =
+    resolveWhatsAppAuthConfig(dataDir);
   fs.mkdirSync(sessionDir, { recursive: true });
   fs.mkdirSync(cacheDir, { recursive: true });
 
   let client = null;
   let server = null;
   let connectionTimer = null;
+  let connectionPromise = null;
+  let clientSequence = 0;
   let manualDisconnect = false;
+  const observedBrowsers = new WeakSet();
   const state = {
     status: "disconnected",
     qrCodeDataUrl: "",
@@ -58,6 +72,42 @@ function createWhatsAppBridge({
     return candidates.find((candidate) => fs.existsSync(candidate)) || null;
   }
 
+  function observeChromium(current, clientNumber) {
+    const browser = current?.pupBrowser;
+    const page = current?.pupPage;
+    if (!browser || observedBrowsers.has(browser)) return;
+    observedBrowsers.add(browser);
+    const browserProcess = typeof browser.process === "function" ? browser.process() : null;
+    log(`CHROMIUM_STARTED: client=${clientNumber} pid=${browserProcess?.pid || "indisponivel"}.`);
+    browser.on?.("disconnected", () =>
+      log(`BROWSER_DISCONNECTED: client=${clientNumber}.`),
+    );
+    browserProcess?.once?.("exit", (code, signal) =>
+      log(`CHROMIUM_EXITED: client=${clientNumber} code=${code ?? "null"} signal=${signal ?? "null"}.`),
+    );
+    page?.on?.("close", () => log(`PAGE_CLOSED: client=${clientNumber}.`));
+    page?.on?.("error", (error) =>
+      log(`PAGE_CRASH: client=${clientNumber} ${error?.message || "sem detalhe"}.`),
+    );
+    log(`PAGE_STATE: client=${clientNumber} closed=${page?.isClosed?.() === true}.`);
+  }
+
+  async function logInternalState(current, clientNumber, stage) {
+    observeChromium(current, clientNumber);
+    let internalState = "indisponivel";
+    try {
+      internalState = (await current.getState?.()) || "indisponivel";
+    } catch (error) {
+      internalState = `erro:${error?.message || "sem detalhe"}`;
+    }
+    log(
+      `CLIENT_STATE: client=${clientNumber} stage=${stage} state=${internalState} ` +
+        `info=${current.info ? "disponivel" : "indisponivel"} ` +
+        `browserConnected=${current.pupBrowser?.connected ?? "indisponivel"} ` +
+        `pageClosed=${current.pupPage?.isClosed?.() ?? "indisponivel"}.`,
+    );
+  }
+
   async function destroyClient() {
     clearTimeout(connectionTimer);
     connectionTimer = null;
@@ -74,9 +124,14 @@ function createWhatsAppBridge({
     }
   }
 
-  async function connect() {
+  async function initializeConnection() {
     if (client) return publicState();
     manualDisconnect = false;
+    log(
+      fs.existsSync(sessionPath)
+        ? `SESSION_FOUND: ${sessionPath}`
+        : `SESSION_NOT_FOUND: ${sessionPath}`,
+    );
     update({
       status: "starting",
       qrCodeDataUrl: "",
@@ -87,6 +142,7 @@ function createWhatsAppBridge({
 
     let Client;
     let LocalAuth;
+    if (!clientFactory) {
     try {
       ({ Client, LocalAuth } = require("whatsapp-web.js"));
     } catch (error) {
@@ -96,8 +152,9 @@ function createWhatsAppBridge({
       });
       throw error;
     }
+    }
 
-    const chromePath = resolveChromePath();
+    const chromePath = chromePathResolver?.() ?? resolveChromePath();
     if (!chromePath) {
       update({
         status: "error",
@@ -107,11 +164,11 @@ function createWhatsAppBridge({
       return publicState();
     }
 
-    client = new Client({
-      authStrategy: new LocalAuth({
-        clientId: "baseforte",
-        dataPath: sessionDir,
-      }),
+    const clientNumber = ++clientSequence;
+    const clientOptions = {
+      authStrategy: clientFactory
+        ? undefined
+        : new LocalAuth({ clientId, dataPath: sessionDir }),
       webVersionCache: {
         type: "local",
         path: cacheDir,
@@ -129,7 +186,11 @@ function createWhatsAppBridge({
           "--no-zygote",
         ],
       },
-    });
+    };
+    client = clientFactory
+      ? clientFactory({ clientId, sessionDir, cacheDir, options: clientOptions })
+      : new Client(clientOptions);
+    const currentClient = client;
 
     client.on("qr", async (qr) => {
       clearTimeout(connectionTimer);
@@ -144,18 +205,30 @@ function createWhatsAppBridge({
           lastMessage: "Escaneie o QR Code com o WhatsApp da escolinha.",
           lastError: "",
         });
-        log("QR Code do WhatsApp gerado.");
+        log("QR_REQUIRED: QR Code do WhatsApp gerado.");
       } catch (error) {
         update({ status: "error", lastError: error.message });
       }
     });
 
     client.on("authenticated", () => {
+      clearTimeout(connectionTimer);
+      connectionTimer = null;
       update({
         status: "authenticated",
         lastMessage: "WhatsApp autenticado. Finalizando conexão...",
         lastError: "",
       });
+      log("AUTHENTICATED: sessao local aceita pelo WhatsApp.");
+      void logInternalState(currentClient, clientNumber, "authenticated");
+    });
+
+    client.on("loading_screen", (percent, message) => {
+      log(`LOADING_SCREEN: client=${clientNumber} percent=${percent} message=${String(message || "")}.`);
+    });
+
+    client.on("change_state", (nextState) => {
+      log(`CHANGE_STATE: client=${clientNumber} state=${String(nextState || "indisponivel")}.`);
     });
 
     client.on("ready", () => {
@@ -170,7 +243,12 @@ function createWhatsAppBridge({
         lastMessage: "WhatsApp conectado e pronto para enviar.",
         lastError: "",
       });
-      log(`WhatsApp conectado: ${state.connectedPhone || "conta ativa"}.`);
+      log(`READY: WhatsApp conectado: ${state.connectedPhone || "conta ativa"}.`);
+      log(`RECONNECT_FINISHED: client=${clientNumber}.`);
+      void logInternalState(currentClient, clientNumber, "ready");
+      Promise.resolve(onConnected?.()).catch((error) =>
+        log(`Falha ao iniciar recuperação após conexão: ${error.message}`),
+      );
     });
 
     client.on("auth_failure", async (message) => {
@@ -179,6 +257,7 @@ function createWhatsAppBridge({
         qrCodeDataUrl: "",
         lastError: `Falha de autenticação: ${String(message || "")}`,
       });
+      log(`AUTH_FAILURE: ${String(message || "falha sem detalhe")}`);
       await destroyClient();
     });
 
@@ -191,7 +270,7 @@ function createWhatsAppBridge({
         lastError: String(reason || ""),
       });
       await destroyClient();
-      if (!manualDisconnect) log(`WhatsApp desconectado: ${reason || ""}`);
+      if (!manualDisconnect) log(`DISCONNECTED: ${reason || "sem detalhe"}`);
     });
 
     connectionTimer = setTimeout(async () => {
@@ -200,20 +279,45 @@ function createWhatsAppBridge({
           status: "error",
           lastError: "O WhatsApp demorou demais para iniciar. Tente novamente.",
         });
+        log(`INITIALIZE_TIMEOUT: client=${clientNumber} stage=${state.status}.`);
         await destroyClient();
       }
     }, CONNECTION_TIMEOUT_MS);
 
     try {
-      await client.initialize();
+      log(`INITIALIZE_STARTED: client=${clientNumber}.`);
+      const browserProbe = setInterval(
+        () => observeChromium(currentClient, clientNumber),
+        250,
+      );
+      try {
+        await currentClient.initialize();
+      } finally {
+        clearInterval(browserProbe);
+      }
+      observeChromium(currentClient, clientNumber);
+      log(`INITIALIZE_RESOLVED: client=${clientNumber}.`);
     } catch (error) {
       update({
         status: "error",
         lastError: error.message || "Não foi possível iniciar o WhatsApp.",
       });
+      log(`INITIALIZE_REJECTED: client=${clientNumber} ${error.message || error || "falha ao inicializar"}.`);
+      log(`RECONNECT_FAILED: ${error.message || error || "falha ao inicializar"}`);
       await destroyClient();
     }
     return publicState();
+  }
+
+  function connect() {
+    if (connectionPromise) return connectionPromise;
+    if (client) return Promise.resolve(publicState());
+    const pending = initializeConnection();
+    const guarded = pending.finally(() => {
+      if (connectionPromise === guarded) connectionPromise = null;
+    });
+    connectionPromise = guarded;
+    return guarded;
   }
 
   async function disconnect() {
@@ -238,15 +342,6 @@ function createWhatsAppBridge({
     return publicState();
   }
 
-  function normalizePhone(value) {
-    let phone = String(value || "").replace(/\D/g, "");
-    if (!phone) return "";
-    if (!phone.startsWith("55") && [10, 11].includes(phone.length)) {
-      phone = `55${phone}`;
-    }
-    return phone;
-  }
-
   async function send(phoneRaw, message) {
     if (!client || state.status !== "connected") {
       return { ok: false, error: "WhatsApp não está conectado." };
@@ -255,6 +350,17 @@ function createWhatsAppBridge({
     const text = String(message || "").trim();
     if (!phone || !text) {
       return { ok: false, error: "Telefone ou mensagem inválidos." };
+    }
+
+    const testMode = readWhatsAppTestMode();
+    if (!canSendToPhone(phone, testMode)) {
+      const masked = maskPhone(phone);
+      log(`Envio bloqueado pelo TEST_MODE para ${masked}.`);
+      return {
+        ok: false,
+        blockedByTestMode: true,
+        error: "Envio bloqueado pelo modo de teste controlado.",
+      };
     }
 
     try {
@@ -269,21 +375,33 @@ function createWhatsAppBridge({
         }
         chatId = numberId._serialized;
       }
-      await Promise.race([
+      const sentMessage = await Promise.race([
         client.sendMessage(chatId, text),
         new Promise((_, reject) =>
           setTimeout(
-            () => reject(new Error("Tempo limite ao enviar a mensagem.")),
+            () => {
+              const timeout = new Error("Tempo limite ao enviar a mensagem.");
+              timeout.deliveryUnknown = true;
+              reject(timeout);
+            },
             SEND_TIMEOUT_MS,
           ),
         ),
       ]);
       update({ lastMessage: `Mensagem enviada para ${phone}.`, lastError: "" });
-      log(`Mensagem do BaseForte enviada para ${phone}.`);
-      return { ok: true, phone };
+      log(`Mensagem da Escola de Futebol M6 Futebol Clube enviada para ${phone}.`);
+      return {
+        ok: true,
+        phone,
+        providerMessageId: sentMessage?.id?._serialized || null,
+      };
     } catch (error) {
       update({ lastError: error.message || "Falha ao enviar mensagem." });
-      return { ok: false, error: state.lastError };
+      return {
+        ok: false,
+        error: state.lastError,
+        deliveryUnknown: Boolean(error.deliveryUnknown),
+      };
     }
   }
 
@@ -300,10 +418,31 @@ function createWhatsAppBridge({
     const api = express();
     api.disable("x-powered-by");
     api.use(express.json({ limit: "64kb" }));
-    api.get("/health", (_request, response) =>
-      response.json({ ok: true }),
-    );
+    api.get("/health", (_request, response) => {
+      const testMode = readWhatsAppTestMode();
+      response.json({
+        ok: true,
+        whatsappConnected: state.status === "connected",
+        testMode: testMode.enabled,
+        testPhoneConfigured: Boolean(testMode.allowedPhone),
+        testPhoneMasked: maskPhone(testMode.allowedPhone),
+      });
+    });
     api.use(authorized);
+    api.post("/test-mode/validate", (request, response) => {
+      const validation = validateControlledTestInput({
+        configuration: readWhatsAppTestMode(),
+        requestedPhone: request.body?.phone,
+        message: request.body?.message,
+      });
+      response.status(validation.valid ? 200 : 409).json({
+        ok: validation.valid,
+        testMode: validation.testMode,
+        testPhoneConfigured: validation.testPhoneConfigured,
+        matches: validation.matches,
+        messageConfigured: Boolean(validation.normalizedMessage),
+      });
+    });
     api.get("/status", (_request, response) =>
       response.json({ ok: true, ...publicState() }),
     );
@@ -316,7 +455,7 @@ function createWhatsAppBridge({
     });
     api.post("/send", async (request, response) => {
       const result = await send(request.body?.phone, request.body?.message);
-      response.status(result.ok ? 200 : 409).json(result);
+      response.status(result.ok ? 200 : result.deliveryUnknown ? 504 : 409).json(result);
     });
 
     await new Promise((resolve, reject) => {

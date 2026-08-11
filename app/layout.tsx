@@ -13,15 +13,29 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BaseForte | Gestão Esportiva",
-  description: "Sistema local para gestão de escolinhas de futebol.",
+  title: "Escola de Futebol M6 Futebol Clube | Gestão Esportiva",
+  description: "Sistema local de gestão da Escola de Futebol M6 Futebol Clube.",
 };
+
+const themeInitScript = `
+try {
+  var stored = window.localStorage.getItem("m6_theme");
+  var theme = (stored === "light" || stored === "mid" || stored === "dark")
+    ? stored
+    : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.dataset.theme = theme;
+} catch (e) {}
+`;
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
+      <head>
+        {/* Aplica o tema salvo antes do primeiro paint, evitando flash de tema errado */}
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         {children}
       </body>

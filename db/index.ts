@@ -2,6 +2,9 @@ import { env } from "cloudflare:workers";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./schema";
+import { HISTORY_PROTECTION_TRIGGER_SQL } from "./history-protection-triggers";
+import { NOTIFICATION_HISTORY_TRIGGER_SQL } from "./notification-history-triggers";
+import { PAYMENT_TRANSACTION_TRIGGER_SQL } from "./payment-transaction-triggers";
 
 let schemaReady: Promise<void> | null = null;
 
@@ -34,6 +37,37 @@ export function ensureDatabase() {
           display_name TEXT NOT NULL,
           role TEXT NOT NULL DEFAULT 'owner',
           created_at INTEGER NOT NULL
+        )`),
+        d1.prepare(`CREATE TABLE IF NOT EXISTS local_users (
+          id TEXT PRIMARY KEY NOT NULL,
+          username TEXT NOT NULL UNIQUE,
+          email TEXT NOT NULL UNIQUE,
+          display_name TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'admin',
+          password_hash TEXT NOT NULL,
+          password_salt TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )`),
+        d1.prepare(`CREATE TABLE IF NOT EXISTS local_auth_sessions (
+          token_hash TEXT PRIMARY KEY NOT NULL,
+          user_id TEXT NOT NULL REFERENCES local_users(id) ON DELETE CASCADE,
+          expires_at INTEGER NOT NULL,
+          created_at INTEGER NOT NULL
+        )`),
+        d1.prepare(
+          "CREATE INDEX IF NOT EXISTS local_auth_sessions_user_idx ON local_auth_sessions (user_id)",
+        ),
+        d1.prepare(`CREATE TABLE IF NOT EXISTS license_state (
+          id TEXT PRIMARY KEY NOT NULL,
+          install_id TEXT NOT NULL,
+          expires_at INTEGER,
+          grace_days INTEGER NOT NULL DEFAULT 3,
+          last_seen_at INTEGER NOT NULL,
+          last_issued_at INTEGER,
+          used_nonces TEXT NOT NULL DEFAULT '[]',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
         )`),
         d1.prepare(`CREATE TABLE IF NOT EXISTS sports_categories (
           id TEXT PRIMARY KEY NOT NULL,
@@ -231,8 +265,8 @@ export function ensureDatabase() {
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
         )`),
-        d1.prepare(`CREATE TABLE IF NOT EXISTS payments (
-          id TEXT PRIMARY KEY NOT NULL,
+      d1.prepare(`CREATE TABLE IF NOT EXISTS payments (
+        id TEXT PRIMARY KEY NOT NULL,
           organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
           athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
           reference_month TEXT NOT NULL,
@@ -249,8 +283,106 @@ export function ensureDatabase() {
           bank_slip_url TEXT,
           external_status TEXT,
           updated_at INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open',
+        created_at INTEGER NOT NULL
+      )`),
+      d1.prepare(`CREATE TABLE IF NOT EXISTS billing_notification_settings (
+        organization_id TEXT PRIMARY KEY NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        before_due_enabled INTEGER NOT NULL DEFAULT 1,
+        before_due_days INTEGER NOT NULL DEFAULT 3,
+        due_today_enabled INTEGER NOT NULL DEFAULT 1,
+        overdue_enabled INTEGER NOT NULL DEFAULT 1,
+        overdue_days INTEGER NOT NULL DEFAULT 5,
+        updated_at INTEGER NOT NULL
+      )`),
+      d1.prepare(`CREATE TABLE IF NOT EXISTS billing_notifications (
+        id TEXT PRIMARY KEY NOT NULL,
+        organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        payment_id TEXT NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+        athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        message TEXT NOT NULL,
+        status TEXT NOT NULL,
+        error TEXT,
+        sent_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`),
+      d1.prepare(`CREATE TABLE IF NOT EXISTS notification_outbox (
+        id TEXT PRIMARY KEY NOT NULL,
+        organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+        payment_id TEXT REFERENCES payments(id) ON DELETE SET NULL,
+        team_id TEXT REFERENCES teams(id) ON DELETE SET NULL,
+        legacy_notification_id TEXT,
+        original_notification_id TEXT,
+        event_type TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        message TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        max_attempts INTEGER NOT NULL DEFAULT 3,
+        next_attempt_at INTEGER,
+        locked_at INTEGER,
+        locked_until INTEGER,
+        lock_token TEXT,
+        last_error TEXT,
+        sent_at INTEGER,
+        provider_message_id TEXT,
+        last_attempt_origin TEXT,
+        manual_resend_count INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`),
+      d1.prepare(`CREATE TABLE IF NOT EXISTS notification_attempts (
+        id TEXT PRIMARY KEY NOT NULL,
+        notification_id TEXT NOT NULL REFERENCES notification_outbox(id) ON DELETE CASCADE,
+        attempt_number INTEGER NOT NULL,
+        origin TEXT NOT NULL,
+        lock_token TEXT NOT NULL,
+        status TEXT NOT NULL,
+        error TEXT,
+        provider_message_id TEXT,
+        started_at INTEGER NOT NULL,
+        finished_at INTEGER
+      )`),
+      d1.prepare(`CREATE TABLE IF NOT EXISTS payment_transactions (
+        id TEXT PRIMARY KEY NOT NULL,
+        payment_id TEXT NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK(type IN ('payment','refund','opening_balance')),
+        amount_cents INTEGER NOT NULL CHECK(amount_cents > 0),
+        payment_method TEXT,
+        origin TEXT NOT NULL CHECK(origin IN ('manual','asaas','migration','system')),
+        occurred_at INTEGER NOT NULL,
+        created_by TEXT,
+        external_transaction_id TEXT,
+        reverses_transaction_id TEXT REFERENCES payment_transactions(id) ON DELETE RESTRICT,
+        idempotency_key TEXT NOT NULL,
+        note TEXT,
+        created_at INTEGER NOT NULL
+      )`),
+      d1.prepare(`CREATE TABLE IF NOT EXISTS expenses (
+          id TEXT PRIMARY KEY NOT NULL,
+          organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          reference_month TEXT NOT NULL,
+          description TEXT NOT NULL,
+          category TEXT NOT NULL,
+          supplier TEXT,
+          amount_cents INTEGER NOT NULL,
+          due_date TEXT NOT NULL,
+          paid_at INTEGER,
+          payment_method TEXT,
           status TEXT NOT NULL DEFAULT 'open',
-          created_at INTEGER NOT NULL
+          notes TEXT,
+          installment_group_id TEXT,
+          installment_number INTEGER NOT NULL DEFAULT 1,
+          installment_count INTEGER NOT NULL DEFAULT 1,
+          created_by TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
         )`),
         d1.prepare(
           "CREATE UNIQUE INDEX IF NOT EXISTS organization_members_org_email_unique ON organization_members (organization_id, email)",
@@ -351,11 +483,107 @@ export function ensureDatabase() {
         d1.prepare(
           "CREATE UNIQUE INDEX IF NOT EXISTS payments_athlete_month_unique ON payments (athlete_id, reference_month)",
         ),
+      d1.prepare(
+        "CREATE INDEX IF NOT EXISTS payments_organization_status_idx ON payments (organization_id, status)",
+      ),
+      d1.prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS billing_notifications_payment_type_unique ON billing_notifications (payment_id, type)",
+      ),
+      d1.prepare(
+        "CREATE INDEX IF NOT EXISTS billing_notifications_organization_status_idx ON billing_notifications (organization_id, status)",
+      ),
+      d1.prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS notification_outbox_idempotency_unique ON notification_outbox (idempotency_key)",
+      ),
+      d1.prepare(
+        "CREATE INDEX IF NOT EXISTS notification_outbox_eligible_idx ON notification_outbox (organization_id, status, next_attempt_at)",
+      ),
+      d1.prepare(
+        "CREATE INDEX IF NOT EXISTS notification_outbox_original_idx ON notification_outbox (original_notification_id)",
+      ),
+      d1.prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS notification_attempts_lock_token_unique ON notification_attempts (lock_token)",
+      ),
+      d1.prepare(
+        "CREATE INDEX IF NOT EXISTS notification_attempts_notification_idx ON notification_attempts (notification_id, started_at)",
+      ),
+      d1.prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS payment_transactions_idempotency_unique ON payment_transactions (idempotency_key)",
+      ),
+      d1.prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS payment_transactions_external_unique ON payment_transactions (origin, external_transaction_id, type) WHERE external_transaction_id IS NOT NULL",
+      ),
+      d1.prepare(
+        "CREATE INDEX IF NOT EXISTS payment_transactions_payment_date_idx ON payment_transactions (payment_id, occurred_at)",
+      ),
+      d1.prepare(
+        "CREATE INDEX IF NOT EXISTS payment_transactions_reversal_idx ON payment_transactions (reverses_transaction_id)",
+      ),
+      d1.prepare(
+        "CREATE INDEX IF NOT EXISTS expenses_organization_month_idx ON expenses (organization_id, reference_month)",
+      ),
         d1.prepare(
-          "CREATE INDEX IF NOT EXISTS payments_organization_status_idx ON payments (organization_id, status)",
+          "CREATE INDEX IF NOT EXISTS expenses_organization_status_idx ON expenses (organization_id, status)",
         ),
       ])
       .then(async () => {
+        await d1.batch(
+          [
+            ...PAYMENT_TRANSACTION_TRIGGER_SQL,
+            ...HISTORY_PROTECTION_TRIGGER_SQL,
+            ...NOTIFICATION_HISTORY_TRIGGER_SQL,
+          ].map(
+            (statement) => d1.prepare(statement),
+          ),
+        );
+        await d1
+          .prepare(`INSERT INTO notification_outbox (
+              id, organization_id, athlete_id, payment_id,
+              legacy_notification_id, event_type, idempotency_key,
+              phone, message, status, attempt_count, max_attempts,
+              last_error, sent_at, last_attempt_origin, created_at, updated_at
+            )
+            SELECT
+              'legacy:' || id, organization_id, athlete_id, payment_id,
+              id, type, 'billing:' || payment_id || ':' || type,
+              phone, message, status,
+              CASE WHEN status = 'failed' THEN 3 ELSE 1 END,
+              3, error, sent_at, 'automatic', created_at, updated_at
+            FROM billing_notifications
+            WHERE 1
+            ON CONFLICT(idempotency_key) DO NOTHING`)
+          .run();
+
+        const localUserColumns = await d1
+          .prepare("PRAGMA table_info(local_users)")
+          .all<{ name: string }>();
+        const existingLocalUserColumns = new Set(
+          localUserColumns.results.map((column) => column.name),
+        );
+        if (!existingLocalUserColumns.has("username")) {
+          await d1.prepare("ALTER TABLE local_users ADD COLUMN username TEXT").run();
+          await d1
+            .prepare(
+              `UPDATE local_users
+               SET username = CASE
+                 WHEN instr(email, '@') > 1 THEN substr(email, 1, instr(email, '@') - 1)
+                 ELSE lower(replace(display_name, ' ', '.'))
+               END
+               WHERE username IS NULL OR username = ''`,
+            )
+            .run();
+        }
+        if (!existingLocalUserColumns.has("role")) {
+          await d1
+            .prepare("ALTER TABLE local_users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'")
+            .run();
+        }
+        await d1
+          .prepare(
+            "CREATE UNIQUE INDEX IF NOT EXISTS local_users_username_unique ON local_users (username)",
+          )
+          .run();
+
         const columns = await d1
           .prepare("PRAGMA table_info(athletes)")
           .all<{ name: string }>();
@@ -440,6 +668,9 @@ export function ensureDatabase() {
           ["invoice_url", "ALTER TABLE payments ADD COLUMN invoice_url TEXT"],
           ["bank_slip_url", "ALTER TABLE payments ADD COLUMN bank_slip_url TEXT"],
           ["external_status", "ALTER TABLE payments ADD COLUMN external_status TEXT"],
+          ["external_creation_status", "ALTER TABLE payments ADD COLUMN external_creation_status TEXT"],
+          ["external_creation_token", "ALTER TABLE payments ADD COLUMN external_creation_token TEXT"],
+          ["external_creation_started_at", "ALTER TABLE payments ADD COLUMN external_creation_started_at INTEGER"],
           [
             "updated_at",
             "ALTER TABLE payments ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0",
@@ -451,6 +682,37 @@ export function ensureDatabase() {
             await d1.prepare(statement).run();
           }
         }
+        await d1
+          .prepare("CREATE UNIQUE INDEX IF NOT EXISTS payments_external_payment_unique ON payments (external_payment_id) WHERE external_payment_id IS NOT NULL")
+          .run();
+
+        const expenseColumns = await d1
+          .prepare("PRAGMA table_info(expenses)")
+          .all<{ name: string }>();
+        const existingExpenseColumns = new Set(
+          expenseColumns.results.map((column) => column.name),
+        );
+        const expenseAdditions = [
+          ["installment_group_id", "ALTER TABLE expenses ADD COLUMN installment_group_id TEXT"],
+          [
+            "installment_number",
+            "ALTER TABLE expenses ADD COLUMN installment_number INTEGER NOT NULL DEFAULT 1",
+          ],
+          [
+            "installment_count",
+            "ALTER TABLE expenses ADD COLUMN installment_count INTEGER NOT NULL DEFAULT 1",
+          ],
+        ] as const;
+        for (const [column, statement] of expenseAdditions) {
+          if (!existingExpenseColumns.has(column)) {
+            await d1.prepare(statement).run();
+          }
+        }
+        await d1
+          .prepare(
+            "CREATE INDEX IF NOT EXISTS expenses_installment_group_idx ON expenses (organization_id, installment_group_id)",
+          )
+          .run();
 
         const billingColumns = await d1
           .prepare("PRAGMA table_info(athlete_billing)")
@@ -491,6 +753,38 @@ export function ensureDatabase() {
             await d1.prepare(statement).run();
           }
         }
+
+        // Repara cadastros antigos feitos antes de o formulário oferecer a turma.
+        // A associação automática só é segura quando existe uma única turma
+        // ativa da categoria dentro da organização.
+        await d1
+          .prepare(`INSERT INTO team_athletes (
+              organization_id, team_id, athlete_id, active, enrolled_at
+            )
+            SELECT
+              athletes.organization_id,
+              MIN(teams.id),
+              athletes.id,
+              1,
+              unixepoch()
+            FROM athletes
+            INNER JOIN teams
+              ON teams.organization_id = athletes.organization_id
+              AND teams.category = athletes.category
+              AND teams.active = 1
+            WHERE athletes.active = 1
+              AND NOT EXISTS (
+                SELECT 1
+                FROM team_athletes
+                WHERE team_athletes.organization_id = athletes.organization_id
+                  AND team_athletes.athlete_id = athletes.id
+                  AND team_athletes.active = 1
+              )
+            GROUP BY athletes.organization_id, athletes.id
+            HAVING COUNT(teams.id) = 1
+            ON CONFLICT(team_id, athlete_id)
+            DO UPDATE SET active = 1`)
+          .run();
       })
       .catch((error) => {
         schemaReady = null;
@@ -527,12 +821,12 @@ export async function getOrCreateOrganization(user: {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
-      .slice(0, 30) || "baseforte";
+      .slice(0, 30) || "escola-m6";
   const now = new Date();
 
   await db.insert(schema.organizations).values({
     id: organizationId,
-    name: "BaseForte",
+    name: "Escola de Futebol M6 Futebol Clube",
     slug: `${slugBase}-${organizationId.slice(0, 6)}`,
     createdAt: now,
   });

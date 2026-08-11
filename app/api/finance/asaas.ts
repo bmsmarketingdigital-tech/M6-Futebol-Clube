@@ -17,7 +17,7 @@ export async function asaasRequest<T>(path: string, init: RequestInit) {
       ...init,
       headers: {
         "Content-Type": "application/json",
-        "User-Agent": "BaseForte/1.0",
+        "User-Agent": "EscolaM6FutebolClube/1.0",
         access_token: apiKey,
         ...init.headers,
       },

@@ -1,7 +1,10 @@
-import { and, eq, inArray } from "drizzle-orm";
-import { getDb } from "../../../../../db";
-import { athletes, payments } from "../../../../../db/schema";
+import { and, eq } from "drizzle-orm";
+import { getD1, getDb } from "../../../../../db";
+import { payments } from "../../../../../db/schema";
 import { getApiContext } from "../../../api-auth";
+import { refreshAthleteFinancialStatus } from "../../debt-status";
+import { parseMoneyToCents } from "../../finance-utils";
+import { findLatestReversibleTransaction, recordPaymentTransaction } from "../../payment-transactions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,36 +21,6 @@ function formatCents(cents: number) {
   return `R$ ${(cents / 100).toFixed(2).replace(".", ",")}`;
 }
 
-async function refreshAthleteStatus(
-  organizationId: string,
-  athleteId: string,
-) {
-  const db = getDb();
-  const [outstanding] = await db
-    .select({ id: payments.id })
-    .from(payments)
-    .where(
-      and(
-        eq(payments.organizationId, organizationId),
-        eq(payments.athleteId, athleteId),
-        inArray(payments.status, ["open", "overdue", "partial"]),
-      ),
-    )
-    .limit(1);
-  await db
-    .update(athletes)
-    .set({
-      financialStatus: outstanding ? "pending" : "paid",
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(athletes.id, athleteId),
-        eq(athletes.organizationId, organizationId),
-      ),
-    );
-}
-
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -61,7 +34,9 @@ export async function PATCH(
     const payload = (await request.json()) as {
       action?: "pay" | "cancel" | "reverse" | "restore";
       paymentMethod?: "cash" | "pix" | "card" | "bank" | "other";
-      paidAmount?: number;
+      paidAmount?: unknown;
+      refundAmount?: unknown;
+      idempotencyKey?: string;
       notes?: string;
     };
     const db = getDb();
@@ -92,6 +67,14 @@ export async function PATCH(
     const reopenedStatus =
       current.dueDate < now.toISOString().slice(0, 10) ? "overdue" : "open";
 
+    if (payload.idempotencyKey?.trim() && (payload.action === "pay" || payload.action === "reverse")) {
+      const prefix = payload.action === "pay" ? "manual:payment" : "manual:refund";
+      const existingTransaction = await getD1().prepare(
+        "SELECT id FROM payment_transactions WHERE payment_id=? AND idempotency_key=?",
+      ).bind(id, `${prefix}:${id}:${payload.idempotencyKey.trim()}`).first<{ id: string }>();
+      if (existingTransaction) return Response.json({ updated: true, idempotent: true });
+    }
+
     if (payload.action === "pay") {
       if (
         current.status !== "open" &&
@@ -112,8 +95,8 @@ export async function PATCH(
       const incomingCents =
         payload.paidAmount == null
           ? remainingCents
-          : Math.round(Number(payload.paidAmount) * 100);
-      if (!Number.isInteger(incomingCents) || incomingCents <= 0) {
+          : parseMoneyToCents(payload.paidAmount);
+      if (incomingCents === null || incomingCents <= 0) {
         return Response.json({ error: "Valor recebido inválido." }, { status: 400 });
       }
       if (incomingCents > remainingCents) {
@@ -124,27 +107,17 @@ export async function PATCH(
           { status: 400 },
         );
       }
-      const totalPaidCents = alreadyPaidCents + incomingCents;
-      const newStatus = totalPaidCents >= current.amountCents ? "paid" : "partial";
-      await db
-        .update(payments)
-        .set({
-          status: newStatus,
-          paidAt: now,
-          paidAmountCents: totalPaidCents,
-          paymentMethod,
-          notes: appendAuditNote(
-            `Baixa de ${formatCents(incomingCents)} via ${methodLabels[paymentMethod]}`,
-          ),
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(payments.id, id),
-            eq(payments.organizationId, organizationId),
-            inArray(payments.status, ["open", "overdue", "partial"]),
-          ),
-        );
+      if (!payload.idempotencyKey?.trim()) {
+        return Response.json({ error: "Chave de idempotência obrigatória." }, { status: 400 });
+      }
+      const auditNote =
+        `Baixa de ${formatCents(incomingCents)} via ${methodLabels[paymentMethod]}`;
+      await recordPaymentTransaction({
+        paymentId: id, type: "payment", amountCents: incomingCents, paymentMethod,
+        origin: "manual", createdBy: context.user.email,
+        idempotencyKey: `manual:payment:${id}:${payload.idempotencyKey.trim()}`,
+        note: `${auditNote}${reason ? `: ${reason}` : ""}`,
+      });
     } else if (payload.action === "cancel") {
       if (current.status !== "open" && current.status !== "overdue") {
         return Response.json(
@@ -184,23 +157,24 @@ export async function PATCH(
           { status: 400 },
         );
       }
-      await db
-        .update(payments)
-        .set({
-          status: reopenedStatus,
-          paidAt: null,
-          paidAmountCents: null,
-          paymentMethod: null,
-          notes: appendAuditNote("Baixa estornada"),
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(payments.id, id),
-            eq(payments.organizationId, organizationId),
-            inArray(payments.status, ["paid", "partial"]),
-          ),
-        );
+      if (!payload.idempotencyKey?.trim()) {
+        return Response.json({ error: "Chave de idempotência obrigatória." }, { status: 400 });
+      }
+      const original = await findLatestReversibleTransaction(id);
+      if (!original) return Response.json({ error: "Não existe transação reversível." }, { status: 409 });
+      const refundCents = payload.refundAmount == null
+        ? Math.min(current.paidAmountCents ?? 0, original.reversibleCents)
+        : parseMoneyToCents(payload.refundAmount);
+      if (refundCents === null || refundCents <= 0) {
+        return Response.json({ error: "Valor do estorno invÃ¡lido." }, { status: 400 });
+      }
+      await recordPaymentTransaction({
+        paymentId: id, type: "refund", amountCents: refundCents,
+        origin: "manual", createdBy: context.user.email,
+        reversesTransactionId: original.id,
+        idempotencyKey: `manual:refund:${id}:${payload.idempotencyKey.trim()}`,
+        note: `Estorno de ${formatCents(refundCents)}: ${reason}`,
+      });
     } else if (payload.action === "restore") {
       if (current.status !== "cancelled") {
         return Response.json(
@@ -226,7 +200,9 @@ export async function PATCH(
       return Response.json({ error: "Ação inválida." }, { status: 400 });
     }
 
-    await refreshAthleteStatus(organizationId, current.athleteId);
+    if (payload.action === "cancel" || payload.action === "restore") {
+      await refreshAthleteFinancialStatus(organizationId, current.athleteId);
+    }
     return Response.json({ updated: true });
   } catch (error) {
     console.error("Failed to update charge", error);

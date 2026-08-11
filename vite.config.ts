@@ -27,6 +27,14 @@ const localBindingConfig = {
   vars: {
     WHATSAPP_BRIDGE_URL: process.env.WHATSAPP_BRIDGE_URL ?? "",
     WHATSAPP_BRIDGE_TOKEN: process.env.WHATSAPP_BRIDGE_TOKEN ?? "",
+    WHATSAPP_TEST_MODE: process.env.WHATSAPP_TEST_MODE ?? "0",
+    WHATSAPP_TEST_PHONE: process.env.WHATSAPP_TEST_PHONE ?? "",
+    FINANCIAL_NOTIFICATION_TEST_ENABLED:
+      process.env.FINANCIAL_NOTIFICATION_TEST_ENABLED ?? "0",
+    WHATSAPP_FINANCIAL_MAX_PER_RUN:
+      process.env.WHATSAPP_FINANCIAL_MAX_PER_RUN ?? "5",
+    WHATSAPP_FINANCIAL_MIN_INTERVAL_MS:
+      process.env.WHATSAPP_FINANCIAL_MIN_INTERVAL_MS ?? "3000",
   },
 };
 
@@ -42,9 +50,18 @@ export default defineConfig(async () => {
 
   return {
     cacheDir: process.env.BASEFORTE_CACHE_DIR,
-    server: isCodexSeatbeltSandbox
-      ? { watch: { useFsEvents: false, usePolling: true } }
-      : undefined,
+    server: {
+      watch: {
+        // O estado local do D1/R2 (Wrangler/Miniflare) fica em .wrangler/state
+        // dentro do projeto e é reescrito a cada request que toca o banco.
+        // Sem isso, o watcher do Vite interpreta cada gravação como "código
+        // mudou" e recarrega a aplicação inteira em loop.
+        ignored: ["**/.wrangler/**", "**/.vinext/**"],
+        ...(isCodexSeatbeltSandbox
+          ? { useFsEvents: false, usePolling: true }
+          : {}),
+      },
+    },
     plugins: [
       vinext(),
       cloudflare({

@@ -10,7 +10,7 @@ test("keeps every operational module available from the dashboard", async () => 
     "Atletas",
     "Turmas",
     "Presença",
-    "QR e entrada",
+    "Cartões QR",
     "Financeiro",
     "Treinos",
     "Avaliações",
@@ -54,7 +54,42 @@ test("protects persisted APIs and keeps the complete migration history", async (
   const migrations = (await readdir(new URL("drizzle/", root)))
     .filter((file) => /^\d{4}_.+\.sql$/.test(file))
     .sort();
-  assert.equal(migrations.length, 10);
+  assert.equal(migrations.length, 18);
   assert.match(migrations[0], /^0000_/);
-  assert.match(migrations.at(-1) ?? "", /^0009_/);
+  assert.match(migrations.at(-1) ?? "", /^0017_/);
+});
+
+test("keeps monthly billing automation configurable and idempotent", async () => {
+  const [automation, settingsRoute, schema, financeUi, reminders] =
+    await Promise.all([
+      readFile(
+        new URL("app/api/finance/billing-automation.ts", root),
+        "utf8",
+      ),
+      readFile(
+        new URL(
+          "app/api/finance/notifications/settings/route.ts",
+          root,
+        ),
+        "utf8",
+      ),
+      readFile(new URL("db/schema.ts", root), "utf8"),
+      readFile(new URL("app/FinanceManagement.tsx", root), "utf8"),
+      readFile(new URL("app/api/reminders/route.ts", root), "utf8"),
+    ]);
+
+  assert.match(automation, /generateMonthlyCharges/);
+  assert.match(automation, /before_due/);
+  assert.match(automation, /due_today/);
+  assert.match(automation, /overdue/);
+  assert.match(automation, /idempotencyKey: `billing:/);
+  assert.match(automation, /processNotificationQueue/);
+  assert.match(settingsRoute, /beforeDueDays/);
+  assert.match(settingsRoute, /overdueDays/);
+  assert.match(schema, /billing_notification_settings/);
+  assert.match(schema, /billing_notifications_payment_type_unique/);
+  assert.match(schema, /notification_outbox_idempotency_unique/);
+  assert.match(financeUi, /Lembretes de mensalidade pelo WhatsApp/);
+  assert.match(reminders, /getClassReminderStatus/);
+  assert.doesNotMatch(reminders, /sendWhatsAppMessage|runBillingAutomation|export async function POST/);
 });

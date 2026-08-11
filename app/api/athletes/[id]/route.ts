@@ -77,6 +77,7 @@ export async function PATCH(
     const name = payload.name?.trim() ?? "";
     const category = payload.category?.trim() ?? "";
     const guardianName = payload.guardianName?.trim() ?? "";
+    const guardianPhone = payload.guardianPhone?.trim() ?? "";
     const birthDate = payload.birthDate?.trim() || null;
     const guardianDocument = onlyDigits(payload.guardianDocument);
 
@@ -100,6 +101,12 @@ export async function PATCH(
     if (guardianName.length < 3 || guardianName.length > 120) {
       return Response.json(
         { error: "Informe o nome do responsável." },
+        { status: 400 },
+      );
+    }
+    if (!/^\d{10,11}$/.test(guardianPhone.replace(/\D/g, ""))) {
+      return Response.json(
+        { error: "Informe um telefone válido do responsável, com DDD." },
         { status: 400 },
       );
     }
@@ -156,7 +163,7 @@ export async function PATCH(
         birthDate,
         guardianName,
         guardianDocument: guardianDocument || null,
-        guardianPhone: payload.guardianPhone?.trim() || null,
+        guardianPhone,
         guardianEmail: payload.guardianEmail?.trim().toLowerCase() || null,
         emergencyName: payload.emergencyName?.trim() || null,
         emergencyPhone: payload.emergencyPhone?.trim() || null,

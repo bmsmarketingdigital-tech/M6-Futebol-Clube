@@ -1,0 +1,153 @@
+import { getDb } from "../../../../db";
+import { expenses } from "../../../../db/schema";
+import { getApiContext } from "../../api-auth";
+import { dueDateForMonth, parseMoneyToCents, validateMonth } from "../finance-utils";
+
+export const dynamic = "force-dynamic";
+
+const methods = new Set(["cash", "pix", "card", "bank", "other"]);
+const categories = new Set([
+  "Pessoal",
+  "Aluguel",
+  "Materiais",
+  "Manutenção",
+  "Transporte",
+  "Marketing",
+  "Impostos e taxas",
+  "Água, luz e internet",
+  "Outros",
+]);
+
+function validDate(value: string | undefined) {
+  if (!value || !/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(value)) {
+    return false;
+  }
+  return new Date(`${value}T12:00:00Z`).toISOString().slice(0, 10) === value;
+}
+
+function addMonths(month: string, offset: number) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const date = new Date(Date.UTC(year, monthNumber - 1 + offset, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+export async function POST(request: Request) {
+  try {
+    const context = await getApiContext(request);
+    if (!context) {
+      return Response.json({ error: "Acesso não autorizado." }, { status: 401 });
+    }
+
+    const payload = (await request.json()) as {
+      referenceMonth?: string;
+      description?: string;
+      category?: string;
+      supplier?: string;
+      amount?: unknown;
+      dueDate?: string;
+      paid?: boolean;
+      paymentMethod?: string;
+      notes?: string;
+      installments?: number;
+    };
+    const referenceMonth = validateMonth(payload.referenceMonth);
+    const description = payload.description?.trim() ?? "";
+    const category = payload.category?.trim() ?? "";
+    const supplier = payload.supplier?.trim().slice(0, 120) || null;
+    const amountCents = parseMoneyToCents(payload.amount);
+    const dueDate = payload.dueDate ?? "";
+    const notes = payload.notes?.trim().slice(0, 500) || null;
+    const paid = payload.paid === true;
+    const paymentMethod = paid ? payload.paymentMethod ?? "pix" : null;
+    const installmentCount = Number(payload.installments ?? 1);
+
+    if (!referenceMonth || description.length < 2 || description.length > 140) {
+      return Response.json(
+        { error: "Informe competência e descrição válidas." },
+        { status: 400 },
+      );
+    }
+    if (!categories.has(category)) {
+      return Response.json({ error: "Categoria de despesa inválida." }, { status: 400 });
+    }
+    if (amountCents === null || amountCents <= 0) {
+      return Response.json({ error: "Informe um valor maior que zero." }, { status: 400 });
+    }
+    if (
+      !Number.isInteger(installmentCount) ||
+      installmentCount < 1 ||
+      installmentCount > 60 ||
+      amountCents < installmentCount
+    ) {
+      return Response.json(
+        { error: "Informe entre 1 e 60 parcelas, com valor mínimo de R$ 0,01 por parcela." },
+        { status: 400 },
+      );
+    }
+    if (!validDate(dueDate)) {
+      return Response.json({ error: "Informe uma data de vencimento válida." }, { status: 400 });
+    }
+    if (paid && installmentCount > 1) {
+      return Response.json(
+        { error: "Dê baixa em cada parcela conforme ela for paga." },
+        { status: 400 },
+      );
+    }
+    if (paid && !methods.has(paymentMethod ?? "")) {
+      return Response.json({ error: "Forma de pagamento inválida." }, { status: 400 });
+    }
+
+    const now = new Date();
+    const installmentGroupId = installmentCount > 1 ? crypto.randomUUID() : null;
+    const baseAmountCents = Math.floor(amountCents / installmentCount);
+    const remainderCents = amountCents % installmentCount;
+    const firstDueDay = Number(dueDate.slice(8, 10));
+    const values = Array.from({ length: installmentCount }, (_, index) => {
+      const installmentDueMonth = addMonths(dueDate.slice(0, 7), index);
+      const installmentDueDate = dueDateForMonth(installmentDueMonth, firstDueDay);
+      const installmentReferenceMonth = addMonths(referenceMonth, index);
+      const status = paid
+        ? "paid" as const
+        : installmentDueDate < now.toISOString().slice(0, 10)
+          ? "overdue" as const
+          : "open" as const;
+      return {
+        id: crypto.randomUUID(),
+        organizationId: context.membership.organizationId,
+        referenceMonth: installmentReferenceMonth,
+        description,
+        category,
+        supplier,
+        amountCents: baseAmountCents + (index < remainderCents ? 1 : 0),
+        dueDate: installmentDueDate,
+        paidAt: paid ? now : null,
+        paymentMethod: paid
+          ? (paymentMethod as "cash" | "pix" | "card" | "bank" | "other")
+          : null,
+        status,
+        notes,
+        installmentGroupId,
+        installmentNumber: index + 1,
+        installmentCount,
+        createdBy: context.user.email,
+        createdAt: now,
+        updatedAt: now,
+      };
+    });
+    const createdExpenses = await getDb()
+      .insert(expenses)
+      .values(values)
+      .returning();
+
+    return Response.json(
+      { expense: createdExpenses[0], expenses: createdExpenses },
+      { status: 201 },
+    );
+  } catch (error) {
+    console.error("Failed to create expense", error);
+    return Response.json(
+      { error: "Não foi possível lançar a despesa." },
+      { status: 500 },
+    );
+  }
+}

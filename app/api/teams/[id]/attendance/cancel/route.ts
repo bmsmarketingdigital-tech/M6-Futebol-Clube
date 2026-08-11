@@ -63,7 +63,7 @@ export async function POST(
       return Response.json({ error: "Turma não encontrada." }, { status: 404 });
     }
 
-    let [session] = await db
+    const [session] = await db
       .select()
       .from(attendanceSessions)
       .where(

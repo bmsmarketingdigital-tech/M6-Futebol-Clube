@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   AthleteProfileModal,
   type AthleteRecord,
@@ -20,6 +20,39 @@ import {
   type CategoryRecord,
 } from "./CategoryManagerModal";
 import { AthleteEditModal } from "./AthleteEditModal";
+import { AccessGate, type SessionUser } from "./AccessGate";
+import { LicenseWidget } from "./LicenseWidget";
+import { UserManagement } from "./UserManagement";
+import {
+  type LucideIcon,
+  Home as HomeIcon,
+  Users,
+  LayoutGrid,
+  CheckSquare,
+  QrCode,
+  Wallet,
+  Dumbbell,
+  TrendingUp,
+  MessageCircle,
+  ChevronUp,
+  ChevronDown,
+  Search,
+  HelpCircle,
+  Bell,
+  MoreVertical,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowUp,
+  ArrowDown,
+  Sun,
+  Contrast,
+  Moon,
+  Settings,
+  Plus,
+  UserPlus,
+  X,
+} from "lucide-react";
+import { useTheme } from "./useTheme";
 
 type Section =
   | "Visão geral"
@@ -27,12 +60,16 @@ type Section =
   | "Prontuário"
   | "Turmas"
   | "Presença"
+  | "Cartões QR"
   | "QR e entrada"
   | "Financeiro"
+  | "Mensalidades"
   | "Planos"
+  | "Controle de gastos"
   | "Treinos"
   | "Avaliações"
-  | "Comunicação";
+  | "Comunicação"
+  | "Usuários e permissões";
 
 type Athlete = AthleteRecord;
 
@@ -43,18 +80,27 @@ type FinanceOverview = {
   expectedCents: number;
   paidCount: number;
   overdueCount: number;
+  openCount: number;
+  openCents: number;
+  dueTodayCount: number;
+  dueTodayCents: number;
+  dueSoonCount: number;
+  dueSoonCents: number;
+  totalOverdueCount: number;
+  totalOverdueCents: number;
+  collectionRate: number;
 };
 
-const navItems: { label: Section; icon: string }[] = [
-  { label: "Visão geral", icon: "⌂" },
-  { label: "Atletas", icon: "◎" },
-  { label: "Turmas", icon: "▦" },
-  { label: "Presença", icon: "✓" },
-  { label: "QR e entrada", icon: "◎" },
-  { label: "Financeiro", icon: "$" },
-  { label: "Treinos", icon: "◫" },
-  { label: "Avaliações", icon: "↗" },
-  { label: "Comunicação", icon: "◌" },
+const navItems: { label: Section; icon: LucideIcon }[] = [
+  { label: "Visão geral", icon: HomeIcon },
+  { label: "Atletas", icon: Users },
+  { label: "Turmas", icon: LayoutGrid },
+  { label: "Presença", icon: CheckSquare },
+  { label: "Cartões QR", icon: QrCode },
+  { label: "Financeiro", icon: Wallet },
+  { label: "Treinos", icon: Dumbbell },
+  { label: "Avaliações", icon: TrendingUp },
+  { label: "Comunicação", icon: MessageCircle },
 ];
 
 const sectionPageClasses: Record<Exclude<Section, "Visão geral">, string> = {
@@ -62,17 +108,58 @@ const sectionPageClasses: Record<Exclude<Section, "Visão geral">, string> = {
   Prontuário: "records-page",
   Turmas: "teams-page",
   Presença: "attendance-page",
+  "Cartões QR": "checkin-page",
   "QR e entrada": "checkin-page",
   Financeiro: "finance-page",
+  Mensalidades: "finance-page",
   Planos: "finance-page",
+  "Controle de gastos": "finance-page expenses-page",
   Treinos: "trainings-page",
   Avaliações: "evaluations-page",
   Comunicação: "communications-page",
+  "Usuários e permissões": "users-page",
 };
 
 const financeBars = [52, 68, 58, 76, 64, 84, 73, 92, 78, 96, 88, 100];
 
+function initials(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "AD";
+}
+
 export default function Home() {
+  return (
+    <AccessGate>
+      {({ user, signOut }) => (
+        <ManagementApp user={user} onSignOut={signOut} />
+      )}
+    </AccessGate>
+  );
+}
+
+function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () => Promise<void> }) {
+  useEffect(() => {
+    const uppercaseText = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
+      if (target.dataset.preserveCase === "true" || target.closest("[data-preserve-case='true']")) return;
+      if (["password", "email", "date", "datetime-local", "month", "time", "number", "tel"].includes(target.type)) return;
+      const start = target.selectionStart;
+      const end = target.selectionEnd;
+      const upper = target.value.toLocaleUpperCase("pt-BR");
+      if (upper === target.value) return;
+      target.value = upper;
+      if (start !== null && end !== null) target.setSelectionRange(start, end);
+    };
+    document.addEventListener("input", uppercaseText, true);
+    return () => document.removeEventListener("input", uppercaseText, true);
+  }, []);
+
+  const { theme, setTheme } = useTheme();
   const [section, setSection] = useState<Section>("Visão geral");
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [teams, setTeams] = useState<TeamRecord[]>([]);
@@ -82,14 +169,17 @@ export default function Home() {
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
   const [athletesMenuOpen, setAthletesMenuOpen] = useState(false);
   const [financeMenuOpen, setFinanceMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [editingAthlete, setEditingAthlete] = useState<Athlete | null>(null);
   const [profileAthlete, setProfileAthlete] = useState<Athlete | null>(null);
+  const [qrAthlete, setQrAthlete] = useState<Athlete | null>(null);
   const [teamModalOpen, setTeamModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamRecord | null>(null);
   const [attendanceTeam, setAttendanceTeam] = useState<TeamRecord | null>(null);
   const [toast, setToast] = useState("");
   const [loadingAthletes, setLoadingAthletes] = useState(true);
   const [savingAthlete, setSavingAthlete] = useState(false);
+  const [newAthleteCategory, setNewAthleteCategory] = useState("");
   const [loadError, setLoadError] = useState("");
   const [loadingTeams, setLoadingTeams] = useState(true);
   const [financeOverview, setFinanceOverview] = useState<FinanceOverview>({
@@ -99,6 +189,15 @@ export default function Home() {
     expectedCents: 0,
     paidCount: 0,
     overdueCount: 0,
+    openCount: 0,
+    openCents: 0,
+    dueTodayCount: 0,
+    dueTodayCents: 0,
+    dueSoonCount: 0,
+    dueSoonCents: 0,
+    totalOverdueCount: 0,
+    totalOverdueCents: 0,
+    collectionRate: 0,
   });
 
   const loadAthletes = useCallback(async () => {
@@ -189,18 +288,9 @@ export default function Home() {
 
   const checkReminders = useCallback(async () => {
     try {
-      const response = await fetch("/api/reminders", { method: "POST" });
-      const payload = (await response.json()) as {
-        remindersSent?: number;
-        teams?: string[];
-      };
-      if (response.ok && (payload.remindersSent ?? 0) > 0) {
-        notify(
-          `Lembretes de treino enviados para: ${(payload.teams ?? []).join(", ")}.`,
-        );
-      }
+      await fetch("/api/reminders", { method: "GET" });
     } catch {
-      // Os lembretes são reenviados na próxima verificação.
+      // Consulta somente leitura; o scheduler interno processa os lembretes.
     }
   }, []);
 
@@ -209,19 +299,28 @@ export default function Home() {
       void loadAthletes();
       void loadTeams();
       void loadCategories();
-      void loadFinanceOverview();
+      if (user.role === "admin") void loadFinanceOverview();
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [loadAthletes, loadCategories, loadFinanceOverview, loadTeams]);
+  }, [loadAthletes, loadCategories, loadFinanceOverview, loadTeams, user.role]);
 
   useEffect(() => {
-    void checkReminders();
+    const timeout = window.setTimeout(() => void checkReminders(), 0);
     const interval = window.setInterval(
       () => void checkReminders(),
       30 * 60 * 1000,
     );
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearTimeout(timeout);
+      window.clearInterval(interval);
+    };
   }, [checkReminders]);
+
+  useEffect(() => {
+    if (section !== "QR e entrada") return;
+    const timeout = window.setTimeout(() => setSection("Cartões QR"), 0);
+    return () => window.clearTimeout(timeout);
+  }, [section]);
 
   const filteredAthletes = useMemo(
     () =>
@@ -229,6 +328,12 @@ export default function Home() {
         `${athlete.name} ${athlete.category}`.toLowerCase().includes(search.toLowerCase()),
       ),
     [athletes, search],
+  );
+  const currentNewAthleteCategory =
+    newAthleteCategory || categories[0]?.name || "";
+  const compatibleNewAthleteTeams = useMemo(
+    () => teams.filter((team) => team.category === currentNewAthleteCategory),
+    [currentNewAthleteCategory, teams],
   );
 
   function notify(message: string) {
@@ -254,10 +359,12 @@ export default function Home() {
           age: Number(form.get("age")),
           guardianName: String(form.get("guardian") || ""),
           guardianPhone: String(form.get("guardianPhone") || ""),
+          teamId: String(form.get("teamId") || ""),
         }),
       });
       const payload = (await response.json()) as {
         athlete?: Athlete;
+        enrolledTeamId?: string | null;
         error?: string;
       };
       if (!response.ok || !payload.athlete) {
@@ -265,9 +372,23 @@ export default function Home() {
       }
 
       setAthletes((current) => [payload.athlete!, ...current]);
+      if (payload.enrolledTeamId) {
+        setTeams((current) =>
+          current.map((team) =>
+            team.id === payload.enrolledTeamId
+              ? {
+                  ...team,
+                  athleteIds: [...team.athleteIds, payload.athlete!.id],
+                  players: team.players + 1,
+                }
+              : team,
+          ),
+        );
+      }
       formElement.reset();
       setShowAthleteModal(false);
-      notify(`${name} foi cadastrado e salvo com sucesso.`);
+      setQrAthlete(payload.athlete);
+      notify(`${name} foi cadastrado e o QR Code individual já está pronto.`);
     } catch (error) {
       notify(
         error instanceof Error
@@ -283,16 +404,19 @@ export default function Home() {
     <main className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">BF</span>
+          <span className="brand-mark">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.jpeg" alt="Escola de Futebol M6 Futebol Clube" />
+          </span>
           <span>
-            <strong>BaseForte</strong>
-            <small>GESTÃO ESPORTIVA</small>
+            <strong>M6 Futebol Clube</strong>
+            <small>ESCOLA DE FUTEBOL</small>
           </span>
         </div>
 
         <nav aria-label="Navegação principal">
           <p className="nav-label">GESTÃO</p>
-          {navItems.slice(0, 6).map((item) =>
+          {navItems.slice(0, 6).filter((item) => user.role === "admin" || item.label !== "Financeiro").map((item) =>
             item.label === "Atletas" ? (
               <div className="nav-group" key={item.label}>
                 <button
@@ -305,71 +429,95 @@ export default function Home() {
                     const isAthleteSection =
                       section === "Atletas" || section === "Prontuário";
                     setSection("Atletas");
+                    setFinanceMenuOpen(false);
                     setAthletesMenuOpen((current) =>
                       isAthleteSection ? !current : true,
                     );
                   }}
                   aria-expanded={athletesMenuOpen}
                 >
-                  <span className="nav-icon">{item.icon}</span>
+                  <span className="nav-icon"><item.icon size={18} strokeWidth={1.75} /></span>
                   Atletas
                   <span className="nav-chevron">
-                    {athletesMenuOpen ? "⌃" : "⌄"}
+                    {athletesMenuOpen ? <ChevronUp size={14} strokeWidth={2} /> : <ChevronDown size={14} strokeWidth={2} />}
                   </span>
                 </button>
                 {athletesMenuOpen && (
-                  <button
-                    className={
-                      section === "Prontuário"
-                        ? "nav-subitem active"
-                        : "nav-subitem"
-                    }
-                    onClick={() => setSection("Prontuário")}
-                  >
-                    <span />
-                    Prontuário
-                  </button>
+                  <div className="nav-group-items">
+                    <button
+                      className={
+                        section === "Prontuário"
+                          ? "nav-subitem active"
+                          : "nav-subitem"
+                      }
+                      onClick={() => setSection("Prontuário")}
+                    >
+                      <span />
+                      Prontuário
+                    </button>
+                  </div>
                 )}
               </div>
             ) : item.label === "Financeiro" ? (
               <div className="nav-group" key={item.label}>
                 <button
                   className={
-                    section === "Financeiro" || section === "Planos"
+                    section === "Financeiro" || section === "Mensalidades" || section === "Planos" || section === "Controle de gastos"
                       ? "nav-item expanded"
                       : "nav-item"
                   }
                   onClick={() => {
                     const isFinanceSection =
-                      section === "Financeiro" || section === "Planos";
-                    setSection("Financeiro");
+                      section === "Financeiro" || section === "Mensalidades" || section === "Planos" || section === "Controle de gastos";
+                    setSection("Mensalidades");
+                    setAthletesMenuOpen(false);
                     setFinanceMenuOpen((current) =>
                       isFinanceSection ? !current : true,
                     );
                   }}
                   aria-expanded={financeMenuOpen}
                 >
-                  <span className="nav-icon">{item.icon}</span>
+                  <span className="nav-icon"><item.icon size={18} strokeWidth={1.75} /></span>
                   Financeiro
-                  {financeOverview.overdueCount > 0 && (
-                    <span className="nav-badge">
-                      {financeOverview.overdueCount}
-                    </span>
-                  )}
+                        {financeOverview.totalOverdueCount > 0 && (
+                          <span className="nav-badge">
+                            {financeOverview.totalOverdueCount}
+                          </span>
+                        )}
                   <span className="nav-chevron">
-                    {financeMenuOpen ? "⌃" : "⌄"}
+                    {financeMenuOpen ? <ChevronUp size={14} strokeWidth={2} /> : <ChevronDown size={14} strokeWidth={2} />}
                   </span>
                 </button>
                 {financeMenuOpen && (
-                  <button
-                    className={
-                      section === "Planos" ? "nav-subitem active" : "nav-subitem"
-                    }
-                    onClick={() => setSection("Planos")}
-                  >
-                    <span />
-                    Planos
-                  </button>
+                  <div className="nav-group-items">
+                    <button
+                      className={
+                        section === "Mensalidades" || section === "Financeiro"
+                          ? "nav-subitem active"
+                          : "nav-subitem"
+                      }
+                      onClick={() => setSection("Mensalidades")}
+                    >
+                      <span />
+                      Mensalidades
+                    </button>
+                    <button
+                      className={section === "Controle de gastos" ? "nav-subitem active" : "nav-subitem"}
+                      onClick={() => setSection("Controle de gastos")}
+                    >
+                      <span />
+                      Controle de gastos
+                    </button>
+                    <button
+                      className={
+                        section === "Planos" ? "nav-subitem active" : "nav-subitem"
+                      }
+                      onClick={() => setSection("Planos")}
+                    >
+                      <span />
+                      Planos
+                    </button>
+                  </div>
                 )}
               </div>
             ) : (
@@ -380,7 +528,7 @@ export default function Home() {
                 }
                 onClick={() => setSection(item.label)}
               >
-                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-icon"><item.icon size={18} strokeWidth={1.75} /></span>
                 {item.label}
               </button>
             ),
@@ -392,27 +540,48 @@ export default function Home() {
               className={section === item.label ? "nav-item active" : "nav-item"}
               onClick={() => setSection(item.label)}
             >
-              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-icon"><item.icon size={18} strokeWidth={1.75} /></span>
               {item.label}
             </button>
           ))}
         </nav>
 
         <div className="sidebar-profile">
-          <span className="avatar">BM</span>
+          <span className="avatar">{initials(user.displayName)}</span>
           <span>
-            <strong>Bruno Martins</strong>
-            <small>Administrador</small>
+            <strong>{user.displayName}</strong>
+            <small>{user.role === "admin" ? "Administrador" : "Operador"}</small>
           </span>
-          <button aria-label="Mais opções">•••</button>
+          <button aria-label="Mais opções" aria-expanded={profileMenuOpen} onClick={() => setProfileMenuOpen((current) => !current)}><MoreVertical size={16} strokeWidth={1.75} /></button>
+          {profileMenuOpen && (
+            <div className="profile-menu">
+              <span><strong>{user.displayName}</strong><small>@{user.username}</small></span>
+              {user.role === "admin" && (
+                <button
+                  type="button"
+                  className="profile-settings"
+                  onClick={() => {
+                    setSection("Usuários e permissões");
+                    setProfileMenuOpen(false);
+                  }}
+                >
+                  Usuários e permissões
+                </button>
+              )}
+              <button type="button" onClick={() => void onSignOut()}>Sair do sistema</button>
+            </div>
+          )}
         </div>
       </aside>
 
       <section className="workspace">
         <header className="topbar">
-          <button className="mobile-brand" onClick={() => setSection("Visão geral")} aria-label="Página inicial">BF</button>
+          <button className="mobile-brand" onClick={() => setSection("Visão geral")} aria-label="Página inicial">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.jpeg" alt="Escola de Futebol M6 Futebol Clube" />
+          </button>
           <label className="search">
-            <span>⌕</span>
+            <Search size={16} strokeWidth={1.75} />
             <input
               aria-label="Buscar no sistema"
               value={search}
@@ -425,8 +594,44 @@ export default function Home() {
             <span className={loadingAthletes || loadingTeams ? "sync-status loading" : "sync-status"}>
               <i /> {loadingAthletes || loadingTeams ? "Sincronizando" : "Dados salvos"}
             </span>
-            <button className="icon-button" aria-label="Ajuda">?</button>
-            <button className="icon-button notification" aria-label="Notificações">♢</button>
+            <LicenseWidget />
+            <div className="theme-picker" role="radiogroup" aria-label="Tema do sistema">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={theme === "light"}
+                className={theme === "light" ? "theme-picker-option active" : "theme-picker-option"}
+                aria-label="Tema claro"
+                title="Claro"
+                onClick={() => setTheme("light")}
+              >
+                <Sun size={15} strokeWidth={1.75} />
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={theme === "mid"}
+                className={theme === "mid" ? "theme-picker-option active" : "theme-picker-option"}
+                aria-label="Tema intermediário"
+                title="Intermediário"
+                onClick={() => setTheme("mid")}
+              >
+                <Contrast size={15} strokeWidth={1.75} />
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={theme === "dark"}
+                className={theme === "dark" ? "theme-picker-option active" : "theme-picker-option"}
+                aria-label="Tema escuro"
+                title="Escuro"
+                onClick={() => setTheme("dark")}
+              >
+                <Moon size={15} strokeWidth={1.75} />
+              </button>
+            </div>
+            <button className="icon-button" aria-label="Ajuda"><HelpCircle size={18} strokeWidth={1.75} /></button>
+            <button className="icon-button notification" aria-label="Notificações"><Bell size={18} strokeWidth={1.75} /></button>
           </div>
         </header>
 
@@ -460,10 +665,12 @@ export default function Home() {
               onOpenAthlete={setProfileAthlete}
               finance={financeOverview}
               notify={notify}
+              canViewFinance={user.role === "admin"}
+              userName={user.displayName}
             />
-          ) : section === "Financeiro" || section === "Planos" ? (
+          ) : section === "Financeiro" || section === "Mensalidades" || section === "Planos" || section === "Controle de gastos" ? (
             <FinanceManagement
-              view={section === "Planos" ? "plans" : "overview"}
+              view={section === "Planos" ? "plans" : section === "Controle de gastos" ? "expenses" : "overview"}
               athletes={athletes}
               notify={notify}
               onChanged={() => {
@@ -478,14 +685,12 @@ export default function Home() {
             <TrainingManagement teams={teams} notify={notify} />
           ) : section === "Comunicação" ? (
             <CommunicationManagement teams={teams} notify={notify} />
-          ) : section === "QR e entrada" ? (
+          ) : section === "Usuários e permissões" && user.role === "admin" ? (
+            <UserManagement notify={notify} />
+          ) : section === "Cartões QR" || section === "QR e entrada" ? (
             <CheckInManagement
               teams={teams}
               notify={notify}
-              onAttendanceChanged={() => {
-                void loadAthletes();
-                void loadTeams();
-              }}
             />
           ) : (
             <SectionView
@@ -507,6 +712,8 @@ export default function Home() {
               onOpenAthlete={
                 section === "Atletas" ? setEditingAthlete : setProfileAthlete
               }
+              onOpenQr={setQrAthlete}
+              canViewFinance={user.role === "admin"}
               notify={notify}
             />
           )}
@@ -516,7 +723,7 @@ export default function Home() {
       {showAthleteModal && (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowAthleteModal(false)}>
           <div className="modal" role="dialog" aria-modal="true" aria-labelledby="new-athlete-title" onMouseDown={(event) => event.stopPropagation()}>
-            <button className="modal-close" onClick={() => setShowAthleteModal(false)} aria-label="Fechar">×</button>
+            <button className="modal-close" onClick={() => setShowAthleteModal(false)} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button>
             <span className="eyebrow">NOVO CADASTRO</span>
             <h2 id="new-athlete-title">Adicionar atleta</h2>
             <p>Comece com os dados essenciais. O responsável poderá completar o perfil depois.</p>
@@ -534,10 +741,14 @@ export default function Home() {
                       aria-label="Configurar categorias"
                       title="Configurar categorias"
                     >
-                      ⚙
+                      <Settings size={14} strokeWidth={1.75} />
                     </button>
                   </span>
-                  <select name="category" defaultValue={categories[0]?.name}>
+                  <select
+                    name="category"
+                    value={currentNewAthleteCategory}
+                    onChange={(event) => setNewAthleteCategory(event.target.value)}
+                  >
                     {categories.map((category) => (
                       <option key={category.id} value={category.name}>
                         {category.name}
@@ -546,8 +757,29 @@ export default function Home() {
                   </select>
                 </label>
               </div>
+              {compatibleNewAthleteTeams.length > 0 ? (
+                <label>
+                  Turma
+                  <select
+                    key={currentNewAthleteCategory}
+                    name="teamId"
+                    required
+                    defaultValue={compatibleNewAthleteTeams[0]?.id}
+                  >
+                    {compatibleNewAthleteTeams.map((team) => (
+                      <option key={team.id} value={team.id}>
+                        {team.name} · {team.startTime}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <p className="field-hint">
+                  Não há turma ativa nesta categoria. O atleta será cadastrado sem turma.
+                </p>
+              )}
               <label>Responsável<input name="guardian" required placeholder="Nome do responsável" /></label>
-              <label>Telefone do responsável<input name="guardianPhone" type="tel" placeholder="(11) 99999-9999" /></label>
+              <label>Telefone do responsável<input name="guardianPhone" type="tel" required inputMode="tel" autoComplete="tel" placeholder="(11) 99999-9999" /></label>
               <button className="primary-button full" type="submit" disabled={savingAthlete || categories.length === 0}>
                 {savingAthlete ? "Salvando..." : "Cadastrar e salvar atleta"}
               </button>
@@ -597,6 +829,15 @@ export default function Home() {
               current.filter((athlete) => athlete.id !== athleteId),
             );
           }}
+          notify={notify}
+        />
+      )}
+
+      {qrAthlete && (
+        <AthleteQrModal
+          key={qrAthlete.id}
+          athlete={qrAthlete}
+          onClose={() => setQrAthlete(null)}
           notify={notify}
         />
       )}
@@ -655,7 +896,7 @@ export default function Home() {
         />
       )}
 
-      {toast && <div className="toast" role="status"><span>✓</span>{toast}</div>}
+      {toast && <div className="toast" role="status"><span><CheckCircle2 size={16} strokeWidth={1.75} /></span>{toast}</div>}
     </main>
   );
 }
@@ -669,6 +910,8 @@ function Dashboard({
   onOpenAthlete,
   finance,
   notify,
+  canViewFinance,
+  userName,
 }: {
   athletes: Athlete[];
   teams: TeamRecord[];
@@ -676,15 +919,10 @@ function Dashboard({
   onAttendance: (team: TeamRecord) => void;
   onOpenTeam: (team: TeamRecord) => void;
   onOpenAthlete: (athlete: Athlete) => void;
-  finance: {
-    receivedCents: number;
-    pendingCents: number;
-    overdueCents: number;
-    expectedCents: number;
-    paidCount: number;
-    overdueCount: number;
-  };
+  finance: FinanceOverview;
   notify: (message: string) => void;
+  canViewFinance: boolean;
+  userName: string;
 }) {
   const averageAttendance = athletes.length
     ? Math.round(
@@ -715,27 +953,31 @@ function Dashboard({
       <div className="welcome-row">
         <div>
           <span className="eyebrow">{todayLabel}</span>
-          <h1>Olá, Bruno! <span>👋</span></h1>
+          <h1>Olá, {userName.split(/\s+/)[0]}! <span>👋</span></h1>
           <p>Veja como está a operação da sua escolinha hoje.</p>
         </div>
-        <div className="period-pill"><span className="status-dot" /> Temporada 2026 <b>⌄</b></div>
+        <div className="period-pill"><span className="status-dot" /> Temporada 2026 <b><ChevronDown size={13} strokeWidth={2} /></b></div>
       </div>
 
-      <section className="metrics-grid" aria-label="Indicadores principais">
-        <Metric icon="◎" label="ATLETAS ATIVOS" value={String(athletes.length)} trend="cadastros persistentes" tone="green" />
-        <Metric icon="✓" label="FREQUÊNCIA MÉDIA" value={`${averageAttendance}%`} trend="calculada pelas chamadas" tone="blue" />
-        <Metric icon="$" label="RECEITA DO MÊS" value={formatMoney(finance.receivedCents)} trend={`${finance.paidCount} pagamento(s) recebido(s)`} tone="orange" />
-        <Metric icon="!" label="PENDÊNCIAS" value={String(finance.overdueCount)} trend={`${formatMoney(finance.overdueCents)} em atraso`} tone="red" negative />
+      <section className={canViewFinance ? "metrics-grid" : "metrics-grid operator-metrics"} aria-label="Indicadores principais">
+        <Metric icon={Users} label="ATLETAS ATIVOS" value={String(athletes.length)} trend="cadastros persistentes" tone="green" />
+        <Metric icon={CheckCircle2} label="FREQUÊNCIA MÉDIA" value={`${averageAttendance}%`} trend="calculada pelas chamadas" tone="blue" />
+        {canViewFinance && (
+          <>
+            <Metric icon={Wallet} label="RECEITA DO MÊS" value={formatMoney(finance.receivedCents)} trend={`${finance.paidCount} pagamento(s) recebido(s)`} tone="orange" />
+            <Metric icon={AlertTriangle} label="MENSALIDADES VENCIDAS" value={String(finance.totalOverdueCount)} trend={`${formatMoney(finance.totalOverdueCents)} em atraso`} tone="red" negative />
+          </>
+        )}
       </section>
 
-      <section className="dashboard-grid">
+      <section className={canViewFinance ? "dashboard-grid" : "dashboard-grid operator-dashboard-grid"}>
         <div className="card schedule-card">
           <CardHeader title="Turmas ativas" subtitle={`${teams.length} turmas · ${totalTeamAthletes} matrículas`} action="Ver turmas" onAction={() => setSection("Turmas")} />
           <div className="schedule-list">
-            {teams.slice(0, 3).map((item) => (
+            {teams.slice(0, 3).map((item, index) => (
               <div className="schedule-item" key={item.id}>
                 <div className="time"><strong>{item.startTime}</strong><small>{item.scheduleDays.join(" · ")}</small></div>
-                <span className={`timeline-dot ${item.color}`} />
+                <span className="team-badge">{String(index + 1).padStart(2, "0")}</span>
                 <div className="schedule-info">
                   <strong>{item.category} <span>{item.place}</span></strong>
                   <small>{item.coachName} · {item.players} atletas</small>
@@ -747,8 +989,8 @@ function Dashboard({
           </div>
         </div>
 
-        <div className="card finance-card">
-          <CardHeader title="Receita mensal" subtitle="Comparativo últimos 12 meses" action="Detalhes" onAction={() => setSection("Financeiro")} />
+        {canViewFinance && <div className="card finance-card">
+          <CardHeader title="Receita mensal" subtitle="Comparativo últimos 12 meses" action="Detalhes" onAction={() => setSection("Mensalidades")} />
           <div className="chart-head"><div><strong>{formatMoney(finance.receivedCents)}</strong><span>mês atual</span></div><small>Previsto: {formatMoney(finance.expectedCents)}</small></div>
           <div className="bar-chart" aria-label="Gráfico de receita mensal">
             {financeBars.map((height, index) => <span key={index} className={index === 11 ? "current" : ""} style={{ height: `${height}%` }} />)}
@@ -756,27 +998,46 @@ function Dashboard({
           <div className="chart-labels"><span>AGO</span><span>OUT</span><span>DEZ</span><span>FEV</span><span>ABR</span><span>JUN</span><b>JUL</b></div>
           <div className="finance-summary">
             <div><span className="legend received" /><p><small>RECEBIDO</small><strong>{formatMoney(finance.receivedCents)}</strong></p></div>
-            <div><span className="legend pending" /><p><small>A RECEBER</small><strong>{formatMoney(finance.pendingCents + finance.overdueCents)}</strong></p></div>
+            <div><span className="legend pending" /><p><small>EM ABERTO</small><strong>{finance.openCount} · {formatMoney(finance.openCents)}</strong></p></div>
+            <div><span className="legend overdue" /><p><small>VENCIDAS</small><strong>{finance.totalOverdueCount} · {formatMoney(finance.totalOverdueCents)}</strong></p></div>
           </div>
-        </div>
+          <div className="dashboard-billing-alerts">
+            <button onClick={() => setSection("Mensalidades")}>
+              <span>HOJE</span>
+              <strong>{finance.dueTodayCount}</strong>
+              <small>{formatMoney(finance.dueTodayCents)}</small>
+            </button>
+            <button onClick={() => setSection("Mensalidades")}>
+              <span>PRÓXIMOS 7 DIAS</span>
+              <strong>{finance.dueSoonCount}</strong>
+              <small>{formatMoney(finance.dueSoonCents)}</small>
+            </button>
+            <div>
+              <span>RECEBIMENTO DO MÊS</span>
+              <strong>{finance.collectionRate}%</strong>
+              <small>do faturado já recebido</small>
+            </div>
+          </div>
+        </div>}
       </section>
 
       <section className="lower-grid">
         <div className="card athletes-card">
           <CardHeader title="Atletas em destaque" subtitle="Frequência e evolução no mês" action="Ver todos" onAction={() => setSection("Atletas")} />
-          <div className="athlete-table">
-            <div className="table-row table-head"><span>ATLETA</span><span>CATEGORIA</span><span>FREQUÊNCIA</span><span>FINANCEIRO</span></div>
-            {athletes.slice(0, 3).map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} onOpen={onOpenAthlete} />)}
+          <div className={canViewFinance ? "athlete-table" : "athlete-table operator-athlete-table"}>
+            <div className="table-row table-head"><span>ATLETA</span><span>CATEGORIA</span><span>FREQUÊNCIA</span>{canViewFinance && <span>FINANCEIRO</span>}</div>
+            {athletes.slice(0, 3).map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} onOpen={onOpenAthlete} showFinance={canViewFinance} />)}
             {athletes.length === 0 && <EmptyAthletes compact />}
           </div>
         </div>
 
         <div className="card attention-card">
           <CardHeader title="Precisa de atenção" subtitle="Ações importantes para hoje" />
-          <button onClick={() => setSection("Financeiro")}><span className="attention-icon red">!</span><p><strong>{finance.overdueCount} mensalidade(s) vencida(s)</strong><small>{formatMoney(finance.overdueCents)} em aberto</small></p><b>›</b></button>
-          <button onClick={() => setSection("Avaliações")}><span className="attention-icon orange">↗</span><p><strong>5 avaliações pendentes</strong><small>Prazo até 31 de julho</small></p><b>›</b></button>
-          <button onClick={() => notify("Comunicado aberto para revisão.")}><span className="attention-icon blue">◌</span><p><strong>Comunicado agendado</strong><small>Festival interno · Amanhã, 9h</small></p><b>›</b></button>
-          <div className="all-good"><span>✓</span><p><strong>Documentação em dia</strong><small>Nenhuma pendência cadastral</small></p></div>
+          {canViewFinance && <button onClick={() => setSection("Mensalidades")}><span className="attention-icon red"><AlertTriangle size={15} strokeWidth={1.75} /></span><p><strong>{finance.totalOverdueCount} mensalidade(s) vencida(s)</strong><small>{formatMoney(finance.totalOverdueCents)} em atraso no histórico completo</small></p><b>›</b></button>}
+          {canViewFinance && finance.dueTodayCount > 0 && <button onClick={() => setSection("Mensalidades")}><span className="attention-icon orange"><Wallet size={15} strokeWidth={1.75} /></span><p><strong>{finance.dueTodayCount} mensalidade(s) vencem hoje</strong><small>{formatMoney(finance.dueTodayCents)} aguardando pagamento</small></p><b>›</b></button>}
+          <button onClick={() => setSection("Avaliações")}><span className="attention-icon orange"><TrendingUp size={15} strokeWidth={1.75} /></span><p><strong>5 avaliações pendentes</strong><small>Prazo até 31 de julho</small></p><b>›</b></button>
+          <button onClick={() => notify("Comunicado aberto para revisão.")}><span className="attention-icon blue"><MessageCircle size={15} strokeWidth={1.75} /></span><p><strong>Comunicado agendado</strong><small>Festival interno · Amanhã, 9h</small></p><b>›</b></button>
+          <div className="all-good"><span><CheckCircle2 size={15} strokeWidth={1.75} /></span><p><strong>Documentação em dia</strong><small>Nenhuma pendência cadastral</small></p></div>
         </div>
       </section>
     </div>
@@ -805,6 +1066,8 @@ function SectionView({
   onOpenTeam,
   onAttendance,
   onOpenAthlete,
+  onOpenQr,
+  canViewFinance,
   notify,
 }: {
   section: Section;
@@ -816,6 +1079,8 @@ function SectionView({
   onOpenTeam: (team: TeamRecord) => void;
   onAttendance: (team: TeamRecord) => void;
   onOpenAthlete: (athlete: Athlete) => void;
+  onOpenQr: (athlete: Athlete) => void;
+  canViewFinance: boolean;
   notify: (message: string) => void;
 }) {
   const [athleteQuery, setAthleteQuery] = useState("");
@@ -824,6 +1089,9 @@ function SectionView({
   const [teamCategory, setTeamCategory] = useState("all");
   const [teamDay, setTeamDay] = useState("all");
   const [teamSort, setTeamSort] = useState<"schedule" | "name" | "category">("schedule");
+  const [attendanceQuery, setAttendanceQuery] = useState("");
+  const [attendanceCategory, setAttendanceCategory] = useState("all");
+  const [attendanceDay, setAttendanceDay] = useState("all");
   const [recordPickerOpen, setRecordPickerOpen] = useState(false);
   const [recordAthleteId, setRecordAthleteId] = useState("");
   const visibleAthletes = useMemo(
@@ -869,6 +1137,15 @@ function SectionView({
         }),
     [teams, teamQuery, teamCategory, teamDay, teamSort],
   );
+  const visibleAttendanceTeams = useMemo(() => {
+    const query = attendanceQuery.trim().toLocaleLowerCase("pt-BR");
+    return teams.filter((team) => {
+      const matchesQuery = !query || `${team.name} ${team.coachName} ${team.category}`.toLocaleLowerCase("pt-BR").includes(query);
+      const matchesCategory = attendanceCategory === "all" || team.category === attendanceCategory;
+      const matchesDay = attendanceDay === "all" || team.scheduleDays.includes(attendanceDay);
+      return matchesQuery && matchesCategory && matchesDay;
+    });
+  }, [teams, attendanceQuery, attendanceCategory, attendanceDay]);
 
   const descriptions: Record<Section, string> = {
     "Visão geral": "",
@@ -876,12 +1153,16 @@ function SectionView({
     Prontuário: "Acesse informações médicas, autorizações, documentos e histórico individual.",
     Turmas: "Horários, categorias, professores e capacidade das turmas.",
     Presença: "Acompanhe frequência, ausências e reposições.",
-    "QR e entrada": "Leia o cartão do atleta, registre presença e avise o responsável.",
+    "Cartões QR": "Consulte os cartões individuais e acompanhe as entradas registradas pelo aplicativo.",
+    "QR e entrada": "Consulte os cartões individuais e acompanhe as entradas registradas pelo aplicativo.",
     Financeiro: "Mensalidades, cobranças, fluxo de caixa e inadimplência.",
+    Mensalidades: "Cobranças mensais, recebimentos, baixas e inadimplência.",
     Planos: "Planos de mensalidade, faturamento e vínculo de cobrança por atleta.",
+    "Controle de gastos": "Contas a pagar, despesas parceladas, baixas e resultado realizado.",
     Treinos: "Planejamento de sessões e biblioteca de exercícios.",
     Avaliações: "Evolução técnica, física, tática e comportamental.",
     Comunicação: "Avisos segmentados para responsáveis, atletas e equipe.",
+    "Usuários e permissões": "Gerencie acessos e restrições por função.",
   };
 
   const action =
@@ -908,17 +1189,17 @@ function SectionView({
       <div className="section-heading">
         <div>
           <span className="eyebrow">
-            {section === "Atletas" ? "CADASTRO" : section === "Prontuário" ? "ATLETAS" : "BASEFORTE"}
+            {section === "Atletas" ? "CADASTRO" : section === "Prontuário" ? "ATLETAS" : "M6 FUTEBOL CLUBE"}
           </span>
           <h1>{section}</h1>
           <p>{descriptions[section]}</p>
         </div>
         {section === "Prontuário" ? (
           <button className="primary-button" onClick={() => setRecordPickerOpen(true)}>
-            ＋ Adicionar prontuário
+            <Plus size={16} strokeWidth={2} /> Adicionar prontuário
           </button>
         ) : (
-          <button className="primary-button" onClick={action}>＋ {actionLabel}</button>
+          <button className="primary-button" onClick={action}><Plus size={16} strokeWidth={2} /> {actionLabel}</button>
         )}
       </div>
       {section === "Atletas" ? (
@@ -935,7 +1216,7 @@ function SectionView({
           <div className="athlete-list-toolbar">
             <div className="athlete-search-wrap">
               <label className="athlete-list-search">
-                <span>⌕</span>
+                <span><Search size={14} strokeWidth={1.75} /></span>
                 <input
                   aria-label="Pesquisar atleta por nome"
                   value={athleteQuery}
@@ -970,9 +1251,9 @@ function SectionView({
             </label>
             <strong>{visibleAthletes.length} resultado(s)</strong>
           </div>
-          <div className="athlete-table expanded">
-            <div className="table-row table-head"><span>ATLETA</span><span>CATEGORIA</span><span>FREQUÊNCIA</span><span>FINANCEIRO</span></div>
-            {visibleAthletes.map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} onOpen={onOpenAthlete} />)}
+          <div className={canViewFinance ? "athlete-table expanded" : "athlete-table expanded operator-athlete-table"}>
+            <div className="table-row table-head"><span>ATLETA</span><span>CATEGORIA</span><span>FREQUÊNCIA</span><span>{canViewFinance ? "FINANCEIRO / QR" : "QR CODE"}</span></div>
+            {visibleAthletes.map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} onOpen={onOpenAthlete} onQr={onOpenQr} showFinance={canViewFinance} />)}
             {visibleAthletes.length === 0 && <EmptyAthletes />}
           </div>
         </div>
@@ -986,7 +1267,7 @@ function SectionView({
             <div className="record-toolbar">
               <div className="athlete-search-wrap">
                 <label className="athlete-list-search">
-                  <span>⌕</span>
+                  <span><Search size={14} strokeWidth={1.75} /></span>
                   <input
                     aria-label="Pesquisar prontuário por nome"
                     value={athleteQuery}
@@ -1042,7 +1323,7 @@ function SectionView({
           <div className="card team-toolbar-card">
             <div className="team-toolbar">
               <label className="athlete-list-search">
-                <span>⌕</span>
+                <span><Search size={14} strokeWidth={1.75} /></span>
                 <input
                   aria-label="Pesquisar turma por nome ou professor"
                   value={teamQuery}
@@ -1099,21 +1380,21 @@ function SectionView({
                 </div>
               );
             })}
-            {teams.length === 0 && <div className="card class-empty"><span>▦</span><strong>Nenhuma turma cadastrada</strong><small>Crie a primeira turma e selecione os atletas participantes.</small><button className="primary-button" onClick={onNewTeam}>Criar primeira turma</button></div>}
-            {teams.length > 0 && visibleTeams.length === 0 && <div className="card class-empty"><span>⌕</span><strong>Nenhuma turma encontrada</strong><small>Ajuste a busca ou o filtro de categoria.</small></div>}
+            {teams.length === 0 && <div className="card class-empty"><span><LayoutGrid size={20} strokeWidth={1.75} /></span><strong>Nenhuma turma cadastrada</strong><small>Crie a primeira turma e selecione os atletas participantes.</small><button className="primary-button" onClick={onNewTeam}>Criar primeira turma</button></div>}
+            {teams.length > 0 && visibleTeams.length === 0 && <div className="card class-empty"><span><Search size={14} strokeWidth={1.75} /></span><strong>Nenhuma turma encontrada</strong><small>Ajuste a busca ou o filtro de categoria.</small></div>}
           </div>
         </div>
       ) : section === "Presença" ? (
-        <div className="attendance-team-grid">
-          {teams.map((team) => (
+<div className="attendance-browser"><div className="card attendance-toolbar-card"><div className="attendance-toolbar"><label className="athlete-list-search"><span><Search size={14} strokeWidth={1.75} /></span><input value={attendanceQuery} onChange={(event) => setAttendanceQuery(event.target.value)} placeholder="Buscar turma, categoria ou professor..." /></label><label className="athlete-category-filter"><span>Categoria</span><select value={attendanceCategory} onChange={(event) => setAttendanceCategory(event.target.value)}><option value="all">Todas</option>{categories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}</select></label><label className="athlete-category-filter"><span>Dia</span><select value={attendanceDay} onChange={(event) => setAttendanceDay(event.target.value)}><option value="all">Todos</option><option value="Seg">Segunda</option><option value="Ter">Terça</option><option value="Qua">Quarta</option><option value="Qui">Quinta</option><option value="Sex">Sexta</option><option value="Sáb">Sábado</option><option value="Dom">Domingo</option></select></label><strong>{visibleAttendanceTeams.length} turma(s)</strong></div></div><div className="attendance-team-grid">
+            {visibleAttendanceTeams.map((team) => (
             <button className="card attendance-team-card" key={team.id} onClick={() => onAttendance(team)}>
-              <span className={`attention-icon ${team.color === "orange" ? "orange" : "green"}`}>✓</span>
+              <span className={`attention-icon ${team.color === "orange" ? "orange" : "green"}`}><CheckSquare size={15} strokeWidth={1.75} /></span>
               <div><strong>{team.name} · {team.category}</strong><small>{team.scheduleDays.join(" e ")} · {team.startTime} · {team.players} atletas</small></div>
               <b>Fazer chamada →</b>
             </button>
           ))}
-          {teams.length === 0 && <div className="card class-empty"><span>✓</span><strong>Nenhuma turma disponível</strong><small>Cadastre uma turma antes de registrar presenças.</small><button className="primary-button" onClick={onNewTeam}>Criar turma</button></div>}
-        </div>
+ {teams.length === 0 && <div className="card class-empty"><span><CheckSquare size={20} strokeWidth={1.75} /></span><strong>Nenhuma turma disponível</strong><small>Cadastre uma turma antes de registrar presenças.</small><button className="primary-button" onClick={onNewTeam}>Criar turma</button></div>}
+ </div></div>
       ) : section === "Treinos" ? (
         <div className="module-two-columns">
           <div className="card training-plan"><span className="eyebrow">PRÓXIMA SESSÃO</span><h2>Domínio e progressão</h2><p>Sub-11 · Sexta-feira, 10:00 · 75 minutos</p><div className="drill"><span>01</span><p><strong>Aquecimento com bola</strong><small>Mobilidade + condução · 12 min</small></p></div><div className="drill"><span>02</span><p><strong>Rondo 5 × 2</strong><small>Tomada de decisão · 18 min</small></p></div><div className="drill"><span>03</span><p><strong>Jogo posicional</strong><small>Progressão por setores · 25 min</small></p></div><button className="primary-button" onClick={() => notify("Plano de treino aberto para edição.")}>Editar sessão</button>
@@ -1126,7 +1407,7 @@ function SectionView({
       {recordPickerOpen && (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setRecordPickerOpen(false)}>
           <div className="record-picker-modal" role="dialog" aria-modal="true" aria-labelledby="record-picker-title" onMouseDown={(event) => event.stopPropagation()}>
-            <button className="modal-close" type="button" onClick={() => setRecordPickerOpen(false)} aria-label="Fechar">×</button>
+            <button className="modal-close" type="button" onClick={() => setRecordPickerOpen(false)} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button>
             <span className="eyebrow">PRONTUÁRIO DO ATLETA</span>
             <h2 id="record-picker-title">Adicionar prontuário</h2>
             <p>Selecione o atleta para abrir e completar seu prontuário individual.</p>
@@ -1203,22 +1484,139 @@ function GenericModule({ section, notify }: { section: Section; notify: (message
   );
 }
 
-function Metric({ icon, label, value, trend, tone, negative, progress }: { icon: string; label: string; value: string; trend: string; tone: string; negative?: boolean; progress?: boolean }) {
-  return <article className="metric-card"><div className={`metric-icon ${tone}`}>{icon}</div><div><span>{label}</span><strong>{value}</strong><small className={negative ? "negative" : ""}>{progress && <i className="mini-progress"><b /></i>}{!progress && <b>{negative ? "↓" : "↑"}</b>} {trend}</small></div></article>;
+function Metric({ icon: Icon, label, value, trend, tone, negative, progress }: { icon: LucideIcon; label: string; value: string; trend: string; tone: string; negative?: boolean; progress?: boolean }) {
+  return <article className="metric-card"><div className={`metric-icon ${tone}`}><Icon size={19} strokeWidth={1.75} /></div><div><span>{label}</span><strong>{value}</strong><small className={negative ? "negative" : ""}>{progress && <i className="mini-progress"><b /></i>}{!progress && <b>{negative ? <ArrowDown size={11} strokeWidth={2.25} /> : <ArrowUp size={11} strokeWidth={2.25} />}</b>} {trend}</small></div></article>;
 }
 
 function CardHeader({ title, subtitle, action, onAction }: { title: string; subtitle: string; action?: string; onAction?: () => void }) {
   return <div className="card-header"><div><h2>{title}</h2><p>{subtitle}</p></div>{action && <button onClick={onAction}>{action} <span>→</span></button>}</div>;
 }
 
-function AthleteRow({ athlete, onOpen }: { athlete: Athlete; onOpen: (athlete: Athlete) => void }) {
-  return <button className="table-row athlete-row-button" onClick={() => onOpen(athlete)}><span className="athlete-name"><i className={`mini-avatar ${athlete.tone}`}>{athlete.initials}</i><span><strong>{athlete.name}</strong><small>{athlete.age} anos</small></span></span><span><b className="category-tag">{athlete.category}</b></span><span className="attendance-cell"><strong>{athlete.attendance}%</strong><i><b style={{ width: `${athlete.attendance}%` }} /></i></span><span><b className={athlete.status === "Em dia" ? "status-tag paid" : "status-tag pending"}><i />{athlete.status}</b></span></button>;
+function AthleteRow({
+  athlete,
+  onOpen,
+  onQr,
+  showFinance = true,
+}: {
+  athlete: Athlete;
+  onOpen: (athlete: Athlete) => void;
+  onQr?: (athlete: Athlete) => void;
+  showFinance?: boolean;
+}) {
+  function openFromKeyboard(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onOpen(athlete);
+    }
+  }
+
+  return (
+    <div className="table-row athlete-row-button" role="button" tabIndex={0} onClick={() => onOpen(athlete)} onKeyDown={openFromKeyboard}>
+      <span className="athlete-name"><i className={`mini-avatar ${athlete.tone}`}>{athlete.initials}</i><span><strong>{athlete.name}</strong><small>{athlete.age} anos</small></span></span>
+      <span><b className="category-tag">{athlete.category}</b></span>
+      <span className="attendance-cell"><strong>{athlete.attendance}%</strong><i><b style={{ width: `${athlete.attendance}%` }} /></i></span>
+      <span className="athlete-finance-cell">
+        {showFinance && <b className={athlete.status === "Em dia" ? "status-tag paid" : "status-tag pending"}><i />{athlete.status}</b>}
+        {onQr && (
+          <button
+            type="button"
+            className="athlete-row-qr-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onQr(athlete);
+            }}
+          >
+            Ver QR Code
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function AthleteQrModal({ athlete, onClose, notify }: { athlete: Athlete; onClose: () => void; notify: (message: string) => void }) {
+  const [image, setImage] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    async function generateQrCode() {
+      try {
+        const [response, qrCode] = await Promise.all([
+          fetch("/api/check-in/cards"),
+          import("qrcode"),
+        ]);
+        const payload = (await response.json()) as {
+          cards?: Array<{ id: string; value: string }>;
+          error?: string;
+        };
+        if (!response.ok) throw new Error(payload.error || "Não foi possível carregar o QR Code.");
+        const card = payload.cards?.find((item) => item.id === athlete.id);
+        if (!card) throw new Error("O cartão deste atleta não foi encontrado.");
+        const dataUrl = await qrCode.toDataURL(card.value, {
+          width: 420,
+          margin: 2,
+          color: { dark: "#16392d", light: "#ffffff" },
+          errorCorrectionLevel: "M",
+        });
+        if (active) setImage(dataUrl);
+      } catch (error) {
+        if (active) {
+          notify(error instanceof Error ? error.message : "Não foi possível gerar o QR Code.");
+          onClose();
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void generateQrCode();
+    return () => {
+      active = false;
+    };
+  }, [athlete.id, notify, onClose]);
+
+  return (
+    <div className="modal-backdrop qr-card-modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <div className="qr-card-modal" role="dialog" aria-modal="true" aria-labelledby="athlete-qr-title" onMouseDown={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span className="eyebrow">CARTÃO INDIVIDUAL</span>
+            <h2 id="athlete-qr-title">{athlete.name}</h2>
+            <p>{athlete.category} · gerado automaticamente no cadastro</p>
+          </div>
+          <button className="modal-close" onClick={onClose} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button>
+        </header>
+        <div className="qr-card-modal-content">
+          <div className="qr-card-brand">
+            <span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.jpeg" alt="Escola de Futebol M6 Futebol Clube" />
+            </span>
+            <strong>M6 Futebol Clube</strong>
+          </div>
+          {loading ? (
+            <div className="athlete-qr-loading">Gerando QR Code...</div>
+          ) : image ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={image} alt={`QR Code de ${athlete.name}`} />
+          ) : null}
+          <strong>{athlete.name}</strong>
+          <small>{athlete.category} · Cartão de entrada</small>
+          <p>A escola escaneia este código na chegada para registrar a presença.</p>
+        </div>
+        <footer className="qr-card-modal-actions">
+          <button className="filter-button" onClick={onClose}>Fechar</button>
+          <button className="primary-button" onClick={() => window.print()} disabled={!image}>Imprimir cartão</button>
+        </footer>
+      </div>
+    </div>
+  );
 }
 
 function EmptyAthletes({ compact = false }: { compact?: boolean }) {
   return (
     <div className={compact ? "empty-athletes compact" : "empty-athletes"}>
-      <span>＋</span>
+      <span><UserPlus size={22} strokeWidth={1.75} /></span>
       <div>
         <strong>Nenhum atleta cadastrado</strong>
         <small>Use “Novo atleta” para salvar o primeiro cadastro.</small>

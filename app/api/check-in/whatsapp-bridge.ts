@@ -2,6 +2,12 @@ import { env } from "cloudflare:workers";
 
 const runtime = env as unknown as Record<string, string | undefined>;
 
+class WhatsAppBridgeError extends Error {
+  constructor(message: string, readonly deliveryUnknown: boolean) {
+    super(message);
+  }
+}
+
 export type WhatsAppBridgeStatus = {
   configured: boolean;
   status:
@@ -26,22 +32,38 @@ export function whatsappBridgeConfigured() {
 async function bridgeRequest<T>(path: string, init?: RequestInit) {
   const bridgeUrl = runtime.WHATSAPP_BRIDGE_URL?.replace(/\/+$/, "");
   if (!bridgeUrl) throw new Error("Conector local não configurado.");
-  const response = await fetch(`${bridgeUrl}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(runtime.WHATSAPP_BRIDGE_TOKEN
-        ? { Authorization: `Bearer ${runtime.WHATSAPP_BRIDGE_TOKEN}` }
-        : {}),
-      ...init?.headers,
-    },
-  });
-  const payload = (await response.json()) as T & {
-    ok?: boolean;
-    error?: string;
-  };
+  let response: Response;
+  try {
+    response = await fetch(`${bridgeUrl}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(runtime.WHATSAPP_BRIDGE_TOKEN
+          ? { Authorization: `Bearer ${runtime.WHATSAPP_BRIDGE_TOKEN}` }
+          : {}),
+        ...init?.headers,
+      },
+    });
+  } catch (error) {
+    throw new WhatsAppBridgeError(
+      error instanceof Error ? error.message : "O conector local não respondeu.",
+      path === "/send",
+    );
+  }
+  let payload: T & { ok?: boolean; error?: string; deliveryUnknown?: boolean };
+  try {
+    payload = (await response.json()) as typeof payload;
+  } catch {
+    throw new WhatsAppBridgeError(
+      "O conector retornou uma resposta inválida.",
+      path === "/send",
+    );
+  }
   if (!response.ok || payload.ok === false) {
-    throw new Error(payload.error || "O conector do WhatsApp recusou a operação.");
+    throw new WhatsAppBridgeError(
+      payload.error || "O conector do WhatsApp recusou a operação.",
+      Boolean(payload.deliveryUnknown),
+    );
   }
   return payload;
 }
@@ -69,10 +91,7 @@ export async function getWhatsAppBridgeStatus(): Promise<WhatsAppBridgeStatus> {
       status: "error",
       qrCodeDataUrl: "",
       connectedPhone: "",
-      lastError:
-        error instanceof Error
-          ? error.message
-          : "O conector local não respondeu.",
+      lastError: error instanceof Error ? error.message : "O conector local não respondeu.",
       lastMessage: "Conector local indisponível.",
       updatedAt: null,
     };
@@ -85,27 +104,45 @@ export async function controlWhatsAppBridge(action: "connect" | "disconnect") {
   });
 }
 
+export async function validateWhatsAppTestMode(phone: string, message: string) {
+  return bridgeRequest<{
+    ok: boolean;
+    testMode: boolean;
+    testPhoneConfigured: boolean;
+    matches: boolean;
+    messageConfigured: boolean;
+  }>("/test-mode/validate", {
+    method: "POST",
+    body: JSON.stringify({ phone, message }),
+  });
+}
+
 export async function sendWhatsAppMessage(phone: string, message: string) {
   if (!whatsappBridgeConfigured()) {
     return {
       status: "pending" as const,
       error: "Aguardando conexão do WhatsApp no aplicativo Windows.",
+      providerMessageId: null,
     };
   }
-
   try {
-    await bridgeRequest<{ ok: boolean }>("/send", {
-      method: "POST",
-      body: JSON.stringify({ phone, message }),
-    });
-    return { status: "sent" as const, error: null };
+    const payload = await bridgeRequest<{ ok: boolean; providerMessageId?: string }>(
+      "/send",
+      { method: "POST", body: JSON.stringify({ phone, message }) },
+    );
+    return {
+      status: "sent" as const,
+      error: null,
+      providerMessageId: payload.providerMessageId ?? null,
+    };
   } catch (error) {
     return {
-      status: "failed" as const,
-      error:
-        error instanceof Error
-          ? error.message
-          : "O conector do WhatsApp não respondeu.",
+      status:
+        error instanceof WhatsAppBridgeError && error.deliveryUnknown
+          ? ("delivery_unknown" as const)
+          : ("failed" as const),
+      error: error instanceof Error ? error.message : "O conector do WhatsApp não respondeu.",
+      providerMessageId: null,
     };
   }
 }

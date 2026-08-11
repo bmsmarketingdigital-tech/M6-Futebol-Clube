@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { X } from "lucide-react";
 import type { AthleteRecord } from "./AthleteProfileModal";
 import type { CategoryRecord } from "./CategoryManagerModal";
 
@@ -114,7 +115,7 @@ export function AthleteEditModal({
             <p>Atualize os dados cadastrais e do responsável.</p>
           </div>
           <button className="modal-close" onClick={onClose} aria-label="Fechar">
-            ×
+            <X size={18} strokeWidth={1.75} />
           </button>
         </header>
 
@@ -163,6 +164,9 @@ export function AthleteEditModal({
             <input
               name="guardianPhone"
               type="tel"
+              required
+              inputMode="tel"
+              autoComplete="tel"
               defaultValue={athlete.guardianPhone ?? ""}
               placeholder="(11) 99999-9999"
             />

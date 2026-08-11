@@ -46,3 +46,11 @@ next-env.d.ts
 
 # desktop test logs
 /desktop-*.log
+
+# tooling / local caches
+/.tokensave/
+tsconfig.tsbuildinfo
+
+# claude code local/personal config (never share permissions or machine paths)
+.claude/settings.local.json
+.claude/.headroom_wrap_marker.json

@@ -13,13 +13,14 @@ let mainWindow = null;
 let webServer = null;
 let whatsappBridge = null;
 let shuttingDown = false;
+let notificationRecoveryTimer = null;
 
 function programDataDir() {
   const base =
     process.env.ProgramData ||
     process.env.PROGRAMDATA ||
     app.getPath("userData");
-  return path.join(base, "BaseForte");
+  return path.join(base, "M6FutebolClube");
 }
 
 function ensureDirectory(directory) {
@@ -29,13 +30,17 @@ function ensureDirectory(directory) {
 
 function createLogger(dataDir) {
   const logDir = ensureDirectory(path.join(dataDir, "logs"));
-  const logFile = path.join(logDir, "baseforte.log");
+  const logFile = path.join(logDir, "m6futebolclube.log");
   return (message) => {
     const line = `[${new Date().toISOString()}] ${message}`;
     try {
       fs.appendFileSync(logFile, `${line}\n`, "utf8");
     } catch {}
-    console.log(line);
+    try {
+      console.log(line);
+    } catch (error) {
+      if (error?.code !== "EPIPE") throw error;
+    }
   };
 }
 
@@ -73,12 +78,41 @@ function waitForServer(url, timeoutMs = 120000) {
     };
     const retry = () => {
       if (Date.now() - startedAt >= timeoutMs) {
-        reject(new Error("O servidor local do BaseForte não iniciou."));
+        reject(new Error("O servidor local da Escola de Futebol M6 Futebol Clube não iniciou."));
         return;
       }
       setTimeout(check, 700);
     };
     check();
+  });
+}
+
+function triggerNotificationRecovery({ bridgeToken, origin, log }) {
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      {
+        hostname: "127.0.0.1",
+        port: APP_PORT,
+        path: `/api/internal/notifications/recover?origin=${origin}`,
+        method: "POST",
+        headers: { Authorization: `Bearer ${bridgeToken}` },
+        timeout: 120000,
+      },
+      (response) => {
+        response.resume();
+        response.on("end", () => {
+          if (response.statusCode && response.statusCode < 300) {
+            log(`Recuperação de notificações concluída (${origin}).`);
+            resolve();
+          } else {
+            reject(new Error(`Rotina respondeu HTTP ${response.statusCode}.`));
+          }
+        });
+      },
+    );
+    request.on("timeout", () => request.destroy(new Error("Tempo limite da rotina.")));
+    request.on("error", reject);
+    request.end();
   });
 }
 
@@ -127,7 +161,7 @@ function startWebServer({ appRoot, dataDir, bridgeToken, log }) {
     webServer = null;
     if (!shuttingDown) {
       dialog.showErrorBox(
-        "BaseForte",
+        "Escola de Futebol M6 Futebol Clube",
         "O servidor local foi encerrado inesperadamente. Reinicie o aplicativo.",
       );
       app.quit();
@@ -160,7 +194,7 @@ function createWindow(log) {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: "#f4f7f5",
-    title: "BaseForte — Gestão Esportiva",
+    title: "Escola de Futebol M6 Futebol Clube — Gestão Esportiva",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -211,13 +245,25 @@ async function boot() {
     log,
     token: bridgeToken,
     port: BRIDGE_PORT,
+    onConnected: () =>
+      triggerNotificationRecovery({ bridgeToken, origin: "reconnect", log }),
   });
   await whatsappBridge.start();
+  log("RECONNECT_STARTED: restaurando sessao oficial no startup.");
+  void whatsappBridge.connect().catch((error) =>
+    log(`RECONNECT_FAILED: ${error.message || "falha ao iniciar cliente"}`),
+  );
   startWebServer({ appRoot, dataDir, bridgeToken, log });
   await waitForServer(`http://127.0.0.1:${APP_PORT}/`);
+  await triggerNotificationRecovery({ bridgeToken, origin: "startup", log });
+  notificationRecoveryTimer = setInterval(() => {
+    void triggerNotificationRecovery({ bridgeToken, origin: "automatic", log }).catch(
+      (error) => log(`Falha na verificação periódica: ${error.message}`),
+    );
+  }, 15 * 60 * 1000);
   const window = createWindow(log);
   await window.loadURL(`http://127.0.0.1:${APP_PORT}/`);
-  log("BaseForte iniciado com sucesso.");
+  log("Escola de Futebol M6 Futebol Clube iniciado com sucesso.");
 }
 
 const singleInstance = app.requestSingleInstanceLock();
@@ -232,8 +278,8 @@ if (!singleInstance) {
   });
   app.whenReady().then(boot).catch((error) => {
     dialog.showErrorBox(
-      "Não foi possível iniciar o BaseForte",
-      `${error.message}\n\nConsulte os registros em C:\\ProgramData\\BaseForte\\logs.`,
+      "Não foi possível iniciar o sistema",
+      `${error.message}\n\nConsulte os registros em C:\\ProgramData\\M6FutebolClube\\logs.`,
     );
     app.quit();
   });
@@ -244,6 +290,7 @@ app.on("before-quit", (event) => {
   if (shuttingDown) return;
   event.preventDefault();
   shuttingDown = true;
+  clearInterval(notificationRecoveryTimer);
   Promise.resolve()
     .then(() => whatsappBridge?.stop())
     .catch(() => undefined)

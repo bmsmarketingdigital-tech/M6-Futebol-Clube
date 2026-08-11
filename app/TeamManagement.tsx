@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Check, CalendarX, Plus, Search, Users, X } from "lucide-react";
 import type { AthleteRecord } from "./AthleteProfileModal";
 import type { CategoryRecord } from "./CategoryManagerModal";
 
@@ -44,11 +45,17 @@ export function TeamModal({
   const [selectedAthletes, setSelectedAthletes] = useState<Set<string>>(
     new Set(team?.athleteIds ?? []),
   );
+  const [rosterQuery, setRosterQuery] = useState("");
+  const [rosterOpen, setRosterOpen] = useState(false);
 
   const categoryAthletes = useMemo(
     () => athletes.filter((athlete) => athlete.category === category),
     [athletes, category],
   );
+  const visibleAthletes = useMemo(() => {
+    const query = rosterQuery.trim().toLocaleLowerCase("pt-BR");
+    return categoryAthletes.filter((athlete) => !query || athlete.name.toLocaleLowerCase("pt-BR").includes(query));
+  }, [categoryAthletes, rosterQuery]);
 
   function toggleAthlete(athleteId: string) {
     setSelectedAthletes((current) => {
@@ -140,7 +147,7 @@ export function TeamModal({
       <section className="team-modal" role="dialog" aria-modal="true" aria-labelledby="team-modal-title" onMouseDown={(event) => event.stopPropagation()}>
         <header className="team-modal-header">
           <div><span className="eyebrow">{team ? "EDITAR TURMA" : "NOVA TURMA"}</span><h2 id="team-modal-title">{team ? team.name : "Criar turma"}</h2><p>Defina horários, professor, capacidade e atletas matriculados.</p></div>
-          <button className="modal-close" onClick={onClose} aria-label="Fechar">×</button>
+          <button className="modal-close" onClick={onClose} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button>
         </header>
         <form className="team-form" onSubmit={saveTeam}>
           <label>Nome da turma<input name="name" defaultValue={team?.name ?? "Turma principal"} required /></label>
@@ -171,18 +178,21 @@ export function TeamModal({
           <label>Término<input name="endTime" type="time" defaultValue={team?.endTime ?? "09:00"} required /></label>
           <label>Local<input name="place" defaultValue={team?.place ?? "Campo 1"} required /></label>
           <label>Capacidade<input name="capacity" type="number" min="1" max="100" defaultValue={team?.capacity ?? 24} required /></label>
-          <div className="roster-picker wide">
-            <div><strong>Atletas da categoria {category}</strong><small>{selectedAthletes.size} selecionados</small></div>
+ <div className={`roster-picker wide ${rosterOpen ? "roster-picker-modal" : "roster-picker-collapsed"}`}>
+<div className="roster-picker-header"><span><strong>Atletas matriculados</strong><small>{selectedAthletes.size} selecionados · categoria {category}</small></span>{!rosterOpen && <button type="button" onClick={() => setRosterOpen(true)}>+ Adicionar atletas</button>}</div>
+ {rosterOpen && <button type="button" className="roster-picker-close" aria-label="Fechar seleção de atletas" onClick={() => setRosterOpen(false)}><X size={18} strokeWidth={1.75} /></button>}
+ {rosterOpen && <button type="button" className="roster-picker-done" onClick={() => setRosterOpen(false)}>Concluir seleção</button>}
+<div className="roster-search"><span><Search size={14} strokeWidth={1.75} /></span><input value={rosterQuery} onChange={(event) => setRosterQuery(event.target.value)} placeholder="Buscar atleta nesta categoria..." /></div>
             {categoryAthletes.length === 0 ? (
               <p>Nenhum atleta ativo nesta categoria.</p>
             ) : (
               <div className="roster-options">
-                {categoryAthletes.map((athlete) => (
+ {visibleAthletes.map((athlete) => (
                   <label key={athlete.id}>
                     <input type="checkbox" checked={selectedAthletes.has(athlete.id)} onChange={() => toggleAthlete(athlete.id)} />
                     <span className={`mini-avatar ${athlete.tone}`}>{athlete.initials}</span>
                     <span><strong>{athlete.name}</strong><small>{athlete.age} anos</small></span>
-                    <b>{selectedAthletes.has(athlete.id) ? "✓" : "+"}</b>
+                    <b>{selectedAthletes.has(athlete.id) ? <Check size={14} strokeWidth={2} /> : <Plus size={14} strokeWidth={2} />}</b>
                   </label>
                 ))}
               </div>
@@ -342,7 +352,7 @@ export function AttendanceModal({
       <section className="attendance-panel" role="dialog" aria-modal="true" aria-labelledby="attendance-panel-title" onMouseDown={(event) => event.stopPropagation()}>
         <header className="attendance-panel-header">
           <div><span className="eyebrow">CHAMADA DA TURMA</span><h2 id="attendance-panel-title">{team.name} · {team.category}</h2><p>{team.coachName} · {team.startTime} · {team.place}</p></div>
-          <button className="modal-close" onClick={onClose} aria-label="Fechar">×</button>
+          <button className="modal-close" onClick={onClose} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button>
         </header>
         <div className="attendance-toolbar">
           <label>Data da aula<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
@@ -358,16 +368,16 @@ export function AttendanceModal({
           {loading && <div className="document-empty">Carregando atletas...</div>}
           {!loading && canceled && (
             <div className="document-empty">
-              <span>☔</span>
+              <span><CalendarX size={22} strokeWidth={1.75} /></span>
               <strong>Aula cancelada</strong>
               <small>Motivo: {cancelReason || "Não informado"}</small>
               <button className="filter-button" onClick={() => toggleCancel(false)} disabled={canceling}>{canceling ? "Reabrindo..." : "Reabrir aula"}</button>
             </div>
           )}
-          {!loading && !canceled && roster.length === 0 && <div className="document-empty"><span>◎</span><strong>Turma sem atletas</strong><small>Edite a turma e adicione atletas antes da chamada.</small></div>}
+          {!loading && !canceled && roster.length === 0 && <div className="document-empty"><span><Users size={22} strokeWidth={1.75} /></span><strong>Turma sem atletas</strong><small>Edite a turma e adicione atletas antes da chamada.</small></div>}
           {!loading && !canceled && roster.map((athlete) => (
             <article key={athlete.id} className={athlete.present ? "attendance-person present" : "attendance-person absent"}>
-              <button onClick={() => updateAthlete(athlete.id, { present: !athlete.present })} aria-label={`${athlete.present ? "Marcar ausência de" : "Marcar presença de"} ${athlete.name}`}><span>{athlete.present ? "✓" : "×"}</span></button>
+              <button onClick={() => updateAthlete(athlete.id, { present: !athlete.present })} aria-label={`${athlete.present ? "Marcar ausência de" : "Marcar presença de"} ${athlete.name}`}><span>{athlete.present ? <Check size={14} strokeWidth={2} /> : <X size={14} strokeWidth={2} />}</span></button>
               <span className="mini-avatar green">{athlete.initials}</span>
               <div><strong>{athlete.name}</strong><small>Frequência histórica: {athlete.attendance}%</small></div>
               <input value={athlete.note} onChange={(event) => updateAthlete(athlete.id, { note: event.target.value })} placeholder={athlete.present ? "Observação opcional" : "Motivo da ausência"} maxLength={240} />

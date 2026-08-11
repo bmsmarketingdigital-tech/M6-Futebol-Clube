@@ -1,6 +1,6 @@
-# BaseForte
+# Escola de Futebol M6 Futebol Clube
 
-Sistema local para gestão de escolinhas de futebol, preparado para instalação em computadores Windows.
+Sistema local para gestão da Escola de Futebol M6 Futebol Clube, preparado para instalação em computadores Windows.
 
 ## Desenvolvimento
 
@@ -11,8 +11,8 @@ Sistema local para gestão de escolinhas de futebol, preparado para instalação
 
 ## Armazenamento local
 
-O aplicativo mantém banco de dados, documentos, registros e sessão do WhatsApp em `C:\ProgramData\BaseForte`.
+O aplicativo mantém banco de dados, documentos, registros e sessão do WhatsApp em `C:\ProgramData\M6FutebolClube`.
 
 Nenhuma configuração de publicação online faz parte desta versão.
 
-Consulte [INSTALAR-BASEFORTE.md](./INSTALAR-BASEFORTE.md) para as instruções de instalação e conexão do WhatsApp.
+Consulte [INSTALAR-M6-FUTEBOL-CLUBE.md](./INSTALAR-M6-FUTEBOL-CLUBE.md) para as instruções de instalação e conexão do WhatsApp.

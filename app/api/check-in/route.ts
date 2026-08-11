@@ -107,7 +107,7 @@ export async function POST(request: Request) {
     const date = payload.date?.trim() ?? "";
     if (!token) {
       return Response.json(
-        { error: "Este QR Code não pertence ao BaseForte." },
+        { error: "Este QR Code não pertence à Escola de Futebol M6 Futebol Clube." },
         { status: 400 },
       );
     }
@@ -244,7 +244,7 @@ export async function POST(request: Request) {
     const scannedAt = new Date();
     const message =
       `Olá, ${athlete.guardianName}! A entrada de ${athlete.name} ` +
-      `na BaseForte foi registrada em ${formatArrival(scannedAt)} ` +
+      `na Escola de Futebol M6 Futebol Clube foi registrada em ${formatArrival(scannedAt)} ` +
       `para a turma ${enrollment.teamName}.`;
     const initialStatus = athlete.guardianPhone ? "pending" : "skipped";
     const [checkIn] = await db
@@ -273,12 +273,14 @@ export async function POST(request: Request) {
         athlete.guardianPhone,
         message,
       );
-      notificationStatus = delivery.status;
+      const persistedStatus =
+        delivery.status === "delivery_unknown" ? "failed" : delivery.status;
+      notificationStatus = persistedStatus;
       notificationError = delivery.error;
       await db
         .update(athleteCheckIns)
         .set({
-          notificationStatus: delivery.status,
+          notificationStatus: persistedStatus,
           notificationError: delivery.error,
           notifiedAt: delivery.status === "sent" ? new Date() : null,
         })

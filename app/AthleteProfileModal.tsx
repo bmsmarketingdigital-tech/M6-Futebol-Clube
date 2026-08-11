@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FileX, X } from "lucide-react";
 import type { CategoryRecord } from "./CategoryManagerModal";
 
 export type AthleteRecord = {
@@ -232,7 +233,7 @@ export function AthleteProfileModal({
             <h2 id="athlete-profile-title">{athlete.name}</h2>
             <p>{athlete.category} · {athlete.age} anos · {athlete.attendance}% de frequência</p>
           </div>
-          <button className="modal-close" onClick={onClose} aria-label="Fechar">×</button>
+          <button className="modal-close" onClick={onClose} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button>
         </header>
 
         <nav className="profile-tabs" aria-label="Seções do prontuário">
@@ -261,7 +262,7 @@ export function AthleteProfileModal({
                 <div className="profile-section-title wide"><strong>Responsável principal</strong><small>Contato para cobranças, comunicados e emergências.</small></div>
                 <label>Nome do responsável<input name="guardianName" defaultValue={athlete.guardianName ?? ""} required /></label>
                 <label>CPF ou CNPJ do responsável<input name="guardianDocument" inputMode="numeric" defaultValue={athlete.guardianDocument ?? ""} placeholder="Somente números" /></label>
-                <label>Telefone<input name="guardianPhone" type="tel" defaultValue={athlete.guardianPhone ?? ""} placeholder="(11) 99999-9999" /></label>
+                <label>Telefone<input name="guardianPhone" type="tel" required inputMode="tel" autoComplete="tel" defaultValue={athlete.guardianPhone ?? ""} placeholder="(11) 99999-9999" /></label>
                 <label>E-mail<input name="guardianEmail" type="email" defaultValue={athlete.guardianEmail ?? ""} placeholder="responsavel@email.com" /></label>
                 <label>Contato de emergência<input name="emergencyName" defaultValue={athlete.emergencyName ?? ""} /></label>
                 <label>Telefone de emergência<input name="emergencyPhone" type="tel" defaultValue={athlete.emergencyPhone ?? ""} /></label>
@@ -312,13 +313,13 @@ export function AthleteProfileModal({
 
             <div className="document-list">
               {loadingDocuments && <div className="document-empty">Carregando documentos...</div>}
-              {!loadingDocuments && documents.length === 0 && <div className="document-empty"><span>▤</span><strong>Nenhum documento armazenado</strong><small>Adicione ficha de matrícula, atestado ou autorização.</small></div>}
+              {!loadingDocuments && documents.length === 0 && <div className="document-empty"><span><FileX size={22} strokeWidth={1.75} /></span><strong>Nenhum documento armazenado</strong><small>Adicione ficha de matrícula, atestado ou autorização.</small></div>}
               {documents.map((document) => (
                 <article key={document.id} className="document-row">
                   <span className="document-icon">{document.contentType === "application/pdf" ? "PDF" : "IMG"}</span>
                   <div><strong>{document.fileName}</strong><small>{documentKindLabel(document.kind)} · {formatBytes(document.sizeBytes)}</small></div>
                   <a href={document.downloadUrl}>Baixar</a>
-                  <button onClick={() => void removeDocument(document)} aria-label={`Excluir ${document.fileName}`}>×</button>
+                  <button onClick={() => void removeDocument(document)} aria-label={`Excluir ${document.fileName}`}><X size={14} strokeWidth={1.75} /></button>
                 </article>
               ))}
             </div>

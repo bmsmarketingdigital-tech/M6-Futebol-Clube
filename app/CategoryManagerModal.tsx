@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { X } from "lucide-react";
 
 export type CategoryRecord = {
   id: string;
@@ -143,7 +144,7 @@ export function CategoryManagerModal({
             <p>Inclua, renomeie ou exclua categorias que não estejam em uso.</p>
           </div>
           <button className="modal-close" onClick={onClose} aria-label="Fechar">
-            ×
+            <X size={18} strokeWidth={1.75} />
           </button>
         </header>
 

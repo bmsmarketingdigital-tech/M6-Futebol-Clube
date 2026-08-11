@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../../../db";
 import { athleteBilling, athletes, billingPlans } from "../../../../../db/schema";
 import { getApiContext } from "../../../api-auth";
+import { parseMoneyToCents } from "../../finance-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -18,12 +19,14 @@ export async function PATCH(
     const payload = (await request.json()) as {
       planId?: string;
       discountType?: "none" | "fixed" | "percent";
-      discountValue?: number;
+      discountValue?: unknown;
       customDueDay?: number | null;
       active?: boolean;
     };
     const discountType = payload.discountType ?? "none";
-    const discountValue = Math.max(0, Math.round(Number(payload.discountValue) || 0));
+    const discountValue = discountType === "fixed"
+      ? parseMoneyToCents(payload.discountValue ?? 0)
+      : Number(payload.discountValue ?? 0);
     const customDueDay =
       payload.customDueDay == null || payload.customDueDay === 0
         ? null
@@ -34,6 +37,9 @@ export async function PATCH(
     }
     if (!["none", "fixed", "percent"].includes(discountType)) {
       return Response.json({ error: "Tipo de desconto inválido." }, { status: 400 });
+    }
+    if (discountValue === null || !Number.isInteger(discountValue) || discountValue < 0) {
+      return Response.json({ error: "Valor do desconto invÃ¡lido." }, { status: 400 });
     }
     if (discountType === "percent" && discountValue > 100) {
       return Response.json({ error: "O desconto percentual não pode superar 100%." }, { status: 400 });
