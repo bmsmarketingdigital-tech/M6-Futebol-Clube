@@ -1,26 +1,163 @@
 "use client";
+
 import { useEffect, useState } from "react";
-import { Copy, Power, Plus, WalletCards } from "lucide-react";
-type Combo = { id:string; name:string; comboType:string; durationMonths:number; baseAmountCents:number; discountType:string; discountValue:number; finalAmountCents:number; billingMode:string; installmentCount:number; active:boolean; planName:string|null };
-type Athlete = { id:string; fullName:string; active?:boolean };
-const money=(v:number)=>new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(v/100);
-const parseCurrency=(value:string)=>Number(value.replace(/\D/g,""))||0;
-const parsePercent=(value:string)=>Math.max(0,Math.min(100,Number(value.replace(/\D/g,""))||0));
-export default function CombosManagement({ notify, athletes }: { notify:(message:string)=>void; athletes: Athlete[] }) {
- const [combos,setCombos]=useState<Combo[]>([]); const [open,setOpen]=useState(false); const [form,setForm]=useState({name:"",comboType:"monthly",durationMonths:1,baseAmountCents:0,discountType:"none",discountValue:0,billingMode:"installments",installmentCount:1});
- const [applyCombo,setApplyCombo]=useState<Combo|null>(null); const [applyAthlete,setApplyAthlete]=useState(""); const [startDate,setStartDate]=useState(""); const [firstDueDate,setFirstDueDate]=useState(""); const [applying,setApplying]=useState(false);
- const load=async()=>{const r=await fetch("/api/finance/combos"); const p=await r.json(); if(r.ok)setCombos(p.combos??[]);}; // eslint-disable-next-line react-hooks/set-state-in-effect
- useEffect(()=>{void load();},[]);
- async function save(e:React.FormEvent){e.preventDefault(); const r=await fetch("/api/finance/combos",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(form)}); const p=await r.json(); if(!r.ok){notify(p.error??"NÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o foi possÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­vel criar o combo.");return;} notify("Combo criado.");setOpen(false);void load();}
- async function toggle(c:Combo){await fetch(`/api/finance/combos/${c.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({active:!c.active})});void load();}
- async function confirmApply(){if(!applyCombo||!applyAthlete||!startDate||!firstDueDate)return;setApplying(true);const r=await fetch("/api/finance/combos/apply",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({comboId:applyCombo.id,athleteId:applyAthlete,startDate,firstDueDate})});const p=await r.json();setApplying(false);if(!r.ok){notify(p.error??"NÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o foi possÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­vel aplicar o combo.");return;}notify("Combo aplicado ao aluno com sucesso.");setApplyCombo(null);}
- return <div className="finance-page-content"><div className="section-heading finance-heading"><div><span className="eyebrow">FINANCEIRO</span><h1>Combos</h1><p>Crie pacotes e condiÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âµes especiais para os alunos.</p></div><button className="primary-button" onClick={()=>setOpen(true)}><Plus size={16}/> Novo Combo</button></div><div className="finance-metrics"><div className="card metric-card"><WalletCards size={18}/><span>Combos ativos</span><strong>{combos.filter(c=>c.active).length}</strong></div><div className="card metric-card"><span>Valor final cadastrado</span><strong>{money(combos.reduce((s,c)=>s+c.finalAmountCents,0))}</strong></div></div><div className="combo-grid">{combos.map(c=><article className="card combo-card" key={c.id}><div className="combo-card-head"><div><span className="eyebrow">{c.comboType.toUpperCase()}</span><h3>{c.name}</h3></div><span className={c.active?"finance-ready":"finance-loading"}>{c.active?"Ativo":"Inativo"}</span></div><p>{c.durationMonths} {c.durationMonths===1?"mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âªs":"meses"} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· {c.billingMode==="upfront"?"ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ vista":`${c.installmentCount} parcelas`}</p><strong className="combo-price">{money(c.finalAmountCents)}</strong><small>Normal: {money(c.baseAmountCents)} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· desconto {c.discountType==="percent"?`${c.discountValue}%`:money(c.discountValue)}</small><div className="combo-card-actions"><button onClick={()=>setApplyCombo(c)}>Aplicar a aluno</button><button onClick={()=>void toggle(c)}><Power size={14}/> {c.active?"Desativar":"Ativar"}</button><button onClick={()=>{setForm({name:`${c.name} (cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³pia)`,comboType:c.comboType,durationMonths:c.durationMonths,baseAmountCents:c.baseAmountCents,discountType:c.discountType,discountValue:c.discountValue,billingMode:c.billingMode,installmentCount:c.installmentCount});setOpen(true);}}><Copy size={14}/> Duplicar</button></div></article>)}</div>{!combos.length&&<div className="card finance-empty"><strong>Nenhum combo cadastrado</strong><small>Crie o primeiro pacote comercial para sua escola.</small></div>}{open&&<div className="modal-backdrop"><form className="modal-card combo-modal" onSubmit={save}><h2>Novo Combo</h2><label>Nome<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label><label>Tipo<select value={form.comboType} onChange={e=>setForm({...form,comboType:e.target.value})}><option value="monthly">Mensal</option><option value="quarterly">Trimestral</option><option value="annual">Anual</option><option value="custom">Personalizado</option></select></label><div className="form-grid combo-form-grid"><label>DuraÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£o (meses)<input type="number" min="1" value={form.durationMonths} onChange={e=>setForm({...form,durationMonths:Number(e.target.value)})}/></label><label>Valor normal (R$)<input inputMode="decimal" placeholder="R$ 0,00" value={money(form.baseAmountCents)} onChange={e=>setForm({...form,baseAmountCents:parseCurrency(e.target.value)})}/></label><label>Desconto<select value={form.discountType} onChange={e=>setForm({...form,discountType:e.target.value})}><option value="none">Sem desconto</option><option value="percent">Percentual</option><option value="fixed">Valor fixo</option></select></label><label>Valor desconto ({form.discountType === "percent" ? "%" : "R$"})<input inputMode="decimal" placeholder={form.discountType === "percent" ? "0%" : "R$ 0,00"} value={form.discountType === "percent" ? String(form.discountValue) : money(form.discountValue)} onChange={e=>setForm({...form,discountValue:form.discountType === "percent" ? parsePercent(e.target.value) : parseCurrency(e.target.value)})}/></label><label>CobranÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§a<select value={form.billingMode} onChange={e=>setForm({...form,billingMode:e.target.value})}><option value="installments">Parcelado</option><option value="upfront">ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ vista</option></select></label><label>Parcelas<input type="number" min="1" value={form.installmentCount} onChange={e=>setForm({...form,installmentCount:Number(e.target.value)})}/></label></div><div className="modal-actions combo-modal-actions"><button type="button" onClick={()=>setOpen(false)}>Cancelar</button><button className="primary-button">Salvar combo</button></div></form></div>}{applyCombo&&<div className="modal-backdrop"><div className="modal-card combo-modal"><h2>Aplicar combo</h2><p>Escolha o aluno e confirme o perÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­odo de cobertura.</p><label>Aluno<select value={applyAthlete} onChange={e=>setApplyAthlete(e.target.value)}><option value="">Selecione o aluno</option>{athletes.filter(a=>a.active!==false).map(a=><option key={a.id} value={a.id}>{a.fullName}</option>)}</select></label><div className="combo-form-grid"><label>Data de inÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­cio<input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></label><label>Primeiro vencimento<input type="date" value={firstDueDate} onChange={e=>setFirstDueDate(e.target.value)}/></label></div>{applyCombo&&<div className="combo-apply-summary"><strong>{applyCombo.name}</strong><span>{applyCombo.durationMonths} meses ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· {applyCombo.billingMode==="upfront"?"1 cobranÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§a":`${applyCombo.installmentCount} parcelas`}</span><strong>{money(applyCombo.finalAmountCents)}</strong></div>}<div className="combo-modal-actions"><button type="button" onClick={()=>setApplyCombo(null)}>Cancelar</button><button className="primary-button" disabled={applying||!applyAthlete||!startDate||!firstDueDate} onClick={()=>void confirmApply()}>{applying?"Aplicando...":"Confirmar combo"}</button></div></div></div>}</div>;
+import { Copy, Power, Plus, UserPlus, WalletCards, X } from "lucide-react";
+
+type Combo = {
+  id: string;
+  name: string;
+  comboType: string;
+  durationMonths: number;
+  baseAmountCents: number;
+  discountType: string;
+  discountValue: number;
+  finalAmountCents: number;
+  billingMode: string;
+  installmentCount: number;
+  active: boolean;
+  planName: string | null;
+};
+
+type Athlete = { id: string; fullName: string; active?: boolean };
+
+const money = (value: number) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value / 100);
+const parseCurrency = (value: string) => Number(value.replace(/\D/g, "")) || 0;
+const parsePercent = (value: string) =>
+  Math.max(0, Math.min(100, Number(value.replace(/\D/g, "")) || 0));
+
+function comboTypeLabel(type: string) {
+  return { monthly: "Mensal", quarterly: "Trimestral", annual: "Anual", custom: "Personalizado" }[type] ?? "Personalizado";
 }
 
+export default function CombosManagement({ notify, athletes }: { notify: (message: string) => void; athletes: Athlete[] }) {
+  const [combos, setCombos] = useState<Combo[]>([]);
+  const [open, setOpen] = useState(false);
+  const [applyCombo, setApplyCombo] = useState<Combo | null>(null);
+  const [applyAthlete, setApplyAthlete] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [firstDueDate, setFirstDueDate] = useState("");
+  const [applying, setApplying] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    comboType: "monthly",
+    durationMonths: 1,
+    baseAmountCents: 0,
+    discountType: "none",
+    discountValue: 0,
+    billingMode: "installments",
+    installmentCount: 1,
+  });
 
+  async function load() {
+    const response = await fetch("/api/finance/combos");
+    const payload = await response.json();
+    if (response.ok) setCombos(payload.combos ?? []);
+  }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void load(); }, []);
 
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    const response = await fetch("/api/finance/combos", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(form),
+    });
+    const payload = await response.json();
+    if (!response.ok) return notify(payload.error ?? "Não foi possível criar o combo.");
+    notify("Combo criado com sucesso.");
+    setOpen(false);
+    await load();
+  }
 
+  async function toggle(combo: Combo) {
+    await fetch(`/api/finance/combos/${combo.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ active: !combo.active }),
+    });
+    await load();
+  }
 
+  function beginApply(combo: Combo) {
+    setApplyCombo(combo);
+    setApplyAthlete("");
+    setStartDate("");
+    setFirstDueDate("");
+  }
 
+  async function confirmApply() {
+    if (!applyCombo || !applyAthlete || !startDate || !firstDueDate) return;
+    setApplying(true);
+    const response = await fetch("/api/finance/combos/apply", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ comboId: applyCombo.id, athleteId: applyAthlete, startDate, firstDueDate }),
+    });
+    const payload = await response.json();
+    setApplying(false);
+    if (!response.ok) return notify(payload.error ?? "Não foi possível aplicar o combo.");
+    notify("Combo aplicado ao aluno com sucesso.");
+    setApplyCombo(null);
+  }
 
+  return (
+    <div className="finance-page-content combos-page">
+      <div className="section-heading finance-heading">
+        <div><span className="eyebrow">FINANCEIRO</span><h1>Combos</h1><p>Crie pacotes e condições especiais para os alunos.</p></div>
+        <button className="primary-button" onClick={() => setOpen(true)}><Plus size={16} /> Novo Combo</button>
+      </div>
+
+      <div className="finance-metrics combos-metrics">
+        <div className="card metric-card"><WalletCards size={18} /><span>Combos ativos</span><strong>{combos.filter((combo) => combo.active).length}</strong></div>
+        <div className="card metric-card"><span>Valor final cadastrado</span><strong>{money(combos.reduce((sum, combo) => sum + combo.finalAmountCents, 0))}</strong></div>
+      </div>
+
+      <div className="combo-grid">
+        {combos.map((combo) => (
+          <article className="card combo-card" key={combo.id}>
+            <div className="combo-card-head">
+              <div><span className="eyebrow">{comboTypeLabel(combo.comboType)}</span><h3>{combo.name}</h3></div>
+              <span className={combo.active ? "combo-status active" : "combo-status inactive"}>{combo.active ? "Ativo" : "Inativo"}</span>
+            </div>
+            <p className="combo-meta">{combo.durationMonths} {combo.durationMonths === 1 ? "mês" : "meses"} · {combo.billingMode === "upfront" ? "À vista" : `${combo.installmentCount} ${combo.installmentCount === 1 ? "parcela" : "parcelas"}`}</p>
+            <strong className="combo-price">{money(combo.finalAmountCents)}</strong>
+            <small className="combo-pricing">Valor normal: {money(combo.baseAmountCents)} · Desconto: {combo.discountType === "percent" ? `${combo.discountValue}%` : money(combo.discountValue)}</small>
+            <div className="combo-card-actions">
+              <button className="combo-action primary" disabled={!combo.active} onClick={() => beginApply(combo)}><UserPlus size={16} /> Aplicar a aluno</button>
+              <button className="combo-action" onClick={() => void toggle(combo)}><Power size={15} /> {combo.active ? "Desativar" : "Ativar"}</button>
+              <button className="combo-action icon" title="Duplicar combo" aria-label="Duplicar combo" onClick={() => { setForm({ name: `${combo.name} (cópia)`, comboType: combo.comboType, durationMonths: combo.durationMonths, baseAmountCents: combo.baseAmountCents, discountType: combo.discountType, discountValue: combo.discountValue, billingMode: combo.billingMode, installmentCount: combo.installmentCount }); setOpen(true); }}><Copy size={16} /></button>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {!combos.length && <div className="card finance-empty"><strong>Nenhum combo cadastrado</strong><small>Crie o primeiro pacote comercial para sua escola.</small></div>}
+
+      {open && <div className="modal-backdrop"><form className="modal-card combo-modal" onSubmit={save}>
+        <header className="combo-modal-header"><div><span className="eyebrow">FINANCEIRO</span><h2>Novo Combo</h2><p>Configure o pacote comercial e as condições de cobrança.</p></div><button type="button" className="combo-modal-close" onClick={() => setOpen(false)}><X size={18} /></button></header>
+        <label>Nome<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
+        <label>Tipo<select value={form.comboType} onChange={(event) => setForm({ ...form, comboType: event.target.value })}><option value="monthly">Mensal</option><option value="quarterly">Trimestral</option><option value="annual">Anual</option><option value="custom">Personalizado</option></select></label>
+        <div className="combo-form-grid">
+          <label>Duração (meses)<input type="number" min="1" value={form.durationMonths} onChange={(event) => setForm({ ...form, durationMonths: Number(event.target.value) })} /></label>
+          <label>Valor normal (R$)<input inputMode="decimal" value={money(form.baseAmountCents)} onChange={(event) => setForm({ ...form, baseAmountCents: parseCurrency(event.target.value) })} /></label>
+          <label>Desconto<select value={form.discountType} onChange={(event) => setForm({ ...form, discountType: event.target.value, discountValue: 0 })}><option value="none">Sem desconto</option><option value="percent">Percentual</option><option value="fixed">Valor fixo</option></select></label>
+          <label>Valor do desconto ({form.discountType === "percent" ? "%" : "R$"})<input disabled={form.discountType === "none"} inputMode="decimal" value={form.discountType === "percent" ? String(form.discountValue) : money(form.discountValue)} onChange={(event) => setForm({ ...form, discountValue: form.discountType === "percent" ? parsePercent(event.target.value) : parseCurrency(event.target.value) })} /></label>
+          <label>Cobrança<select value={form.billingMode} onChange={(event) => setForm({ ...form, billingMode: event.target.value })}><option value="installments">Parcelado</option><option value="upfront">À vista</option></select></label>
+          <label>Parcelas<input type="number" min="1" disabled={form.billingMode === "upfront"} value={form.billingMode === "upfront" ? 1 : form.installmentCount} onChange={(event) => setForm({ ...form, installmentCount: Number(event.target.value) })} /></label>
+        </div>
+        <div className="combo-modal-actions"><button type="button" onClick={() => setOpen(false)}>Cancelar</button><button className="primary-button">Salvar combo</button></div>
+      </form></div>}
+
+      {applyCombo && <div className="modal-backdrop"><div className="modal-card combo-modal apply-combo-modal">
+        <header className="combo-modal-header"><div><span className="eyebrow">CONTRATAÇÃO</span><h2>Aplicar combo</h2><p>Escolha o aluno e confirme o período de cobertura.</p></div><button type="button" className="combo-modal-close" onClick={() => setApplyCombo(null)}><X size={18} /></button></header>
+        <label>Aluno<select value={applyAthlete} onChange={(event) => setApplyAthlete(event.target.value)}><option value="">Selecione o aluno</option>{athletes.filter((athlete) => athlete.active !== false).map((athlete) => <option key={athlete.id} value={athlete.id}>{athlete.fullName}</option>)}</select></label>
+        <div className="combo-form-grid"><label>Data de início<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label>Primeiro vencimento<input type="date" value={firstDueDate} onChange={(event) => setFirstDueDate(event.target.value)} /></label></div>
+        <div className="combo-apply-summary"><span>Combo selecionado</span><strong>{applyCombo.name}</strong><small>{applyCombo.durationMonths} meses · {applyCombo.billingMode === "upfront" ? "1 cobrança" : `${applyCombo.installmentCount} parcelas`}</small><b>{money(applyCombo.finalAmountCents)}</b></div>
+        <div className="combo-modal-actions"><button type="button" onClick={() => setApplyCombo(null)}>Cancelar</button><button className="primary-button" disabled={applying || !applyAthlete || !startDate || !firstDueDate} onClick={() => void confirmApply()}>{applying ? "Aplicando..." : "Confirmar combo"}</button></div>
+      </div></div>}
+    </div>
+  );
+}
