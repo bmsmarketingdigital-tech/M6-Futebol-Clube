@@ -107,8 +107,20 @@ export async function generateMonthlyCharges(
       discountValue: athleteBilling.discountValue,
     })
     .from(athleteBilling)
-    .innerJoin(athletes, eq(athletes.id, athleteBilling.athleteId))
-    .innerJoin(billingPlans, eq(billingPlans.id, athleteBilling.planId))
+    .innerJoin(
+      athletes,
+      and(
+        eq(athletes.id, athleteBilling.athleteId),
+        eq(athletes.organizationId, athleteBilling.organizationId),
+      ),
+    )
+    .innerJoin(
+      billingPlans,
+      and(
+        eq(billingPlans.id, athleteBilling.planId),
+        eq(billingPlans.organizationId, athleteBilling.organizationId),
+      ),
+    )
     .where(
       and(
         eq(athleteBilling.organizationId, organizationId),
@@ -272,7 +284,13 @@ export async function runBillingAutomation(
       dueDate: payments.dueDate,
     })
     .from(payments)
-    .innerJoin(athletes, eq(athletes.id, payments.athleteId))
+    .innerJoin(
+      athletes,
+      and(
+        eq(athletes.id, payments.athleteId),
+        eq(athletes.organizationId, payments.organizationId),
+      ),
+    )
     .where(
       and(
         eq(payments.organizationId, organizationId),
