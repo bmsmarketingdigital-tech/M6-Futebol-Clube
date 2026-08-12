@@ -436,8 +436,7 @@ export async function processNotificationQueue(
   }
   const active = activeBackgroundWorkers.get(organizationId);
   if (active) return active;
-  let operation: Promise<QueueTotals>;
-  operation = runNotificationQueue(organizationId, origin, dependencies).finally(() => {
+  const operation: Promise<QueueTotals> = runNotificationQueue(organizationId, origin, dependencies).finally(() => {
     if (activeBackgroundWorkers.get(organizationId) === operation) {
       activeBackgroundWorkers.delete(organizationId);
     }
