@@ -58,5 +58,12 @@ export async function POST(request: Request) {
   if (overdue) stateUpdate.status = "overdue";
   if (deleted && (current.paidAmountCents ?? 0) === 0) stateUpdate.status = "cancelled";
   await db.update(payments).set(stateUpdate).where(eq(payments.id, current.id));
+  if (stateUpdate.status) {
+    // received/refunded already recompute athletes.financial_status atomically via
+    // the payment_transactions_apply_insert trigger (fired by recordPaymentTransaction
+    // above). overdue/deleted write payments.status directly, bypassing that trigger,
+    // so the athlete's cached financial status would otherwise go stale.
+    await refreshAthleteFinancialStatus(current.organizationId, current.athleteId);
+  }
   return Response.json({ received: true });
 }
