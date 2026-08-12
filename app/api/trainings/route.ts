@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
-import { getDb } from "../../../db";
+import { getD1, getDb } from "../../../db";
 import { teams, trainingDrills, trainingSessions } from "../../../db/schema";
 import { getApiContext } from "../api-auth";
 import { normalizeTraining, type TrainingPayload } from "./training-utils";
@@ -32,10 +32,27 @@ export async function POST(request: Request) {
     const db = getDb(); const organizationId = context.membership.organizationId;
     const [team] = await db.select({ id: teams.id }).from(teams).where(and(eq(teams.id, normalized.value.teamId), eq(teams.organizationId, organizationId), eq(teams.active, true))).limit(1);
     if (!team) return Response.json({ error: "Turma não encontrada." }, { status: 404 });
-    const id = crypto.randomUUID(); const now = new Date();
+    const id = crypto.randomUUID(); const now = Math.floor(Date.now() / 1000);
     const { drills, ...session } = normalized.value;
-    await db.insert(trainingSessions).values({ id, organizationId, ...session, createdBy: context.user.displayName || context.user.email, createdAt: now, updatedAt: now });
-    await db.insert(trainingDrills).values(drills.map((drill) => ({ id: crypto.randomUUID(), sessionId: id, ...drill })));
+    const d1 = getD1();
+    // Session + drills must be created atomically: a session without its drills is an invalid,
+    // orphaned record (see P0-TRAIN-001).
+    await d1.batch([
+      d1.prepare(
+        `INSERT INTO training_sessions
+          (id, organization_id, team_id, title, objective, session_date, duration_minutes, status, notes, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        id, organizationId, session.teamId, session.title, session.objective, session.sessionDate,
+        session.durationMinutes, session.status, session.notes, context.user.displayName || context.user.email, now, now,
+      ),
+      ...drills.map((drill) =>
+        d1.prepare(
+          `INSERT INTO training_drills (id, session_id, position, name, focus, duration_minutes, description)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(crypto.randomUUID(), id, drill.position, drill.name, drill.focus, drill.durationMinutes, drill.description),
+      ),
+    ]);
     return Response.json({ id }, { status: 201 });
   } catch (error) {
     console.error("Failed to create training", error);
