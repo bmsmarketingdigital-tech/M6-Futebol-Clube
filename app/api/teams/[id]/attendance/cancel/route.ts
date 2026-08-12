@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne, notExists, sql } from "drizzle-orm";
 import { getDb } from "../../../../../../db";
 import {
   athletes,
@@ -75,13 +75,48 @@ export async function POST(
       .limit(1);
 
     if (payload.canceled) {
+      const reason = payload.reason?.trim().slice(0, 240) || "Chuva";
+      const now = new Date();
+
       if (session) {
-        const [existingRecord] = await db
-          .select({ id: attendanceRecords.id })
-          .from(attendanceRecords)
-          .where(eq(attendanceRecords.sessionId, session.id))
-          .limit(1);
-        if (existingRecord) {
+        // Atomic conditional UPDATE: only cancels if no attendance_records exist
+        // for this session at the instant the statement runs. SQLite serializes
+        // writers, so the NOT EXISTS subquery and the write happen as one step —
+        // a concurrent POST /attendance can never sneak a record in between a
+        // check and this write (that was the P1-ATT TOCTOU race).
+        const [updated] = await db
+          .update(attendanceSessions)
+          .set({
+            status: "canceled",
+            canceledAt: now,
+            canceledBy: context.user.email,
+            cancelReason: reason,
+          })
+          .where(
+            and(
+              eq(attendanceSessions.id, session.id),
+              eq(attendanceSessions.teamId, id),
+              ne(attendanceSessions.status, "canceled"),
+              notExists(
+                db
+                  .select({ one: sql`1` })
+                  .from(attendanceRecords)
+                  .where(eq(attendanceRecords.sessionId, attendanceSessions.id)),
+              ),
+            ),
+          )
+          .returning();
+
+        if (!updated) {
+          const [current] = await db
+            .select({ status: attendanceSessions.status })
+            .from(attendanceSessions)
+            .where(eq(attendanceSessions.id, session.id))
+            .limit(1);
+          if (current?.status === "canceled") {
+            // Already canceled (idempotent repeat call) — no-op, don't resend.
+            return Response.json({ canceled: true, date, reason: session.cancelReason ?? reason, notified: 0 });
+          }
           return Response.json(
             {
               error:
@@ -90,34 +125,44 @@ export async function POST(
             { status: 409 },
           );
         }
-      }
-
-      const reason = payload.reason?.trim().slice(0, 240) || "Chuva";
-      const now = new Date();
-
-      if (session) {
-        await db
-          .update(attendanceSessions)
-          .set({
+      } else {
+        try {
+          await db.insert(attendanceSessions).values({
+            id: crypto.randomUUID(),
+            organizationId,
+            teamId: id,
+            sessionDate: date,
+            recordedBy: context.user.email,
             status: "canceled",
             canceledAt: now,
             canceledBy: context.user.email,
             cancelReason: reason,
-          })
-          .where(eq(attendanceSessions.id, session.id));
-      } else {
-        await db.insert(attendanceSessions).values({
-          id: crypto.randomUUID(),
-          organizationId,
-          teamId: id,
-          sessionDate: date,
-          recordedBy: context.user.email,
-          status: "canceled",
-          canceledAt: now,
-          canceledBy: context.user.email,
-          cancelReason: reason,
-          createdAt: now,
-        });
+            createdAt: now,
+          });
+        } catch {
+          // Unique (team_id, session_date) lost the race to a concurrent request
+          // (either another cancel or the first attendance POST for the day).
+          const [race] = await db
+            .select({ status: attendanceSessions.status })
+            .from(attendanceSessions)
+            .where(
+              and(
+                eq(attendanceSessions.teamId, id),
+                eq(attendanceSessions.sessionDate, date),
+              ),
+            )
+            .limit(1);
+          if (race?.status === "canceled") {
+            return Response.json({ canceled: true, date, reason, notified: 0 });
+          }
+          return Response.json(
+            {
+              error:
+                "Já existe chamada registrada nesta data. Apague os registros antes de cancelar.",
+            },
+            { status: 409 },
+          );
+        }
       }
 
       const roster = await db

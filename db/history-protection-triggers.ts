@@ -61,4 +61,16 @@ export const HISTORY_PROTECTION_TRIGGER_SQL = [
   `CREATE TRIGGER IF NOT EXISTS expenses_validate_money_update
    BEFORE UPDATE OF amount_cents ON expenses WHEN NEW.amount_cents<=0
    BEGIN SELECT RAISE(ABORT,'O valor da despesa deve ser positivo e em centavos.'); END`,
+  `CREATE TRIGGER IF NOT EXISTS attendance_records_block_canceled_session_insert
+   BEFORE INSERT ON attendance_records WHEN
+     EXISTS(SELECT 1 FROM attendance_sessions WHERE id=NEW.session_id AND status='canceled')
+   BEGIN
+     SELECT RAISE(ABORT,'Não é possível registrar presença em uma aula cancelada.');
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS attendance_records_block_canceled_session_update
+   BEFORE UPDATE ON attendance_records WHEN
+     EXISTS(SELECT 1 FROM attendance_sessions WHERE id=NEW.session_id AND status='canceled')
+   BEGIN
+     SELECT RAISE(ABORT,'Não é possível registrar presença em uma aula cancelada.');
+   END`,
 ] as const;

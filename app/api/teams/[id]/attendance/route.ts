@@ -210,42 +210,83 @@ export async function POST(
     }
 
     if (!session) {
-      [session] = await db
-        .insert(attendanceSessions)
-        .values({
-          id: crypto.randomUUID(),
-          organizationId: authorized.context.membership.organizationId,
-          teamId: id,
-          sessionDate: date,
-          recordedBy: authorized.context.user.email,
-          createdAt: new Date(),
-        })
-        .returning();
+      try {
+        [session] = await db
+          .insert(attendanceSessions)
+          .values({
+            id: crypto.randomUUID(),
+            organizationId: authorized.context.membership.organizationId,
+            teamId: id,
+            sessionDate: date,
+            recordedBy: authorized.context.user.email,
+            createdAt: new Date(),
+          })
+          .returning();
+      } catch {
+        // Unique (team_id, session_date) lost the race to a concurrent request
+        // that created the session first (P3-ATT) — reload instead of 500ing.
+        [session] = await db
+          .select()
+          .from(attendanceSessions)
+          .where(
+            and(
+              eq(attendanceSessions.teamId, id),
+              eq(attendanceSessions.sessionDate, date),
+            ),
+          )
+          .limit(1);
+        if (!session) throw new Error("Falha ao criar a chamada.");
+      }
+      if (session.status === "canceled") {
+        return Response.json(
+          {
+            error:
+              "Esta data está marcada como aula cancelada. Reabra a aula antes de fazer a chamada.",
+          },
+          { status: 409 },
+        );
+      }
     }
 
-    for (const athlete of roster) {
-      const record = submitted.get(athlete.id) ?? {
-        present: true,
-        note: null,
-      };
-      await db
-        .insert(attendanceRecords)
-        .values({
-          sessionId: session.id,
-          athleteId: athlete.id,
-          present: record.present,
-          note: record.note,
-        })
-        .onConflictDoUpdate({
-          target: [
-            attendanceRecords.sessionId,
-            attendanceRecords.athleteId,
-          ],
-          set: {
+    try {
+      for (const athlete of roster) {
+        const record = submitted.get(athlete.id) ?? {
+          present: true,
+          note: null,
+        };
+        await db
+          .insert(attendanceRecords)
+          .values({
+            sessionId: session.id,
+            athleteId: athlete.id,
             present: record.present,
             note: record.note,
+          })
+          .onConflictDoUpdate({
+            target: [
+              attendanceRecords.sessionId,
+              attendanceRecords.athleteId,
+            ],
+            set: {
+              present: record.present,
+              note: record.note,
+            },
+          });
+      }
+    } catch (error) {
+      // The session may have been canceled concurrently (P1-ATT): a DB trigger
+      // blocks writing attendance_records into a canceled session, which
+      // surfaces here as an insert/update failure rather than a plain 500.
+      if (error instanceof Error && error.message.includes("aula cancelada")) {
+        return Response.json(
+          {
+            error:
+              "Esta data foi marcada como aula cancelada durante o registro. Reabra a aula antes de fazer a chamada.",
           },
-        });
+          { status: 409 },
+        );
+      }
+      throw error;
     }
 
     const d1 = getD1();
