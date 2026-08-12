@@ -67,23 +67,30 @@ export async function PATCH(
   }
 
   const now = Date.now();
-  await getD1().batch([
-    getD1()
-      .prepare(
-        "UPDATE sports_categories SET name = ?, updated_at = ? WHERE id = ? AND organization_id = ?",
-      )
-      .bind(name, now, id, organizationId),
-    getD1()
-      .prepare(
-        "UPDATE athletes SET category = ?, updated_at = ? WHERE organization_id = ? AND category = ?",
-      )
-      .bind(name, now, organizationId, category.name),
-    getD1()
-      .prepare(
-        "UPDATE teams SET category = ? WHERE organization_id = ? AND category = ?",
-      )
-      .bind(name, organizationId, category.name),
-  ]);
+  try {
+    await getD1().batch([
+      getD1()
+        .prepare(
+          "UPDATE sports_categories SET name = ?, updated_at = ? WHERE id = ? AND organization_id = ?",
+        )
+        .bind(name, now, id, organizationId),
+      getD1()
+        .prepare(
+          "UPDATE athletes SET category = ?, updated_at = ? WHERE organization_id = ? AND category = ?",
+        )
+        .bind(name, now, organizationId, category.name),
+      getD1()
+        .prepare(
+          "UPDATE teams SET category = ? WHERE organization_id = ? AND category = ?",
+        )
+        .bind(name, organizationId, category.name),
+    ]);
+  } catch {
+    return Response.json(
+      { error: "Já existe uma categoria com esse nome." },
+      { status: 409 },
+    );
+  }
 
   return Response.json({
     category: { id, name, sortOrder: category.sortOrder },
@@ -170,14 +177,40 @@ export async function DELETE(
     );
   }
 
-  await db
-    .delete(sportsCategories)
-    .where(
-      and(
-        eq(sportsCategories.id, id),
-        eq(sportsCategories.organizationId, organizationId),
-      ),
+  // The reads above are best-effort for a friendly error message only. The DELETE
+  // itself re-checks "not in use" and "not the last category" atomically, so a
+  // concurrent athlete/team assignment between the check and the write can never
+  // leave an athlete/team pointing at a category that no longer exists (P0-CAT-001).
+  const d1 = getD1();
+  const result = await d1
+    .prepare(
+      `DELETE FROM sports_categories
+       WHERE id = ? AND organization_id = ? AND active = 1
+         AND NOT EXISTS (
+           SELECT 1 FROM athletes a
+           WHERE a.organization_id = ? AND a.category = sports_categories.name AND a.active = 1
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM teams t
+           WHERE t.organization_id = ? AND t.category = sports_categories.name AND t.active = 1
+         )
+         AND (
+           SELECT COUNT(*) FROM sports_categories sc2
+           WHERE sc2.organization_id = ? AND sc2.active = 1
+         ) > 1`,
+    )
+    .bind(id, organizationId, organizationId, organizationId, organizationId)
+    .run();
+
+  if ((result.meta.changes ?? 0) !== 1) {
+    return Response.json(
+      {
+        error:
+          "Essa categoria está em uso ou é a única cadastrada. Atualize os vínculos e tente novamente.",
+      },
+      { status: 409 },
     );
+  }
 
   return Response.json({ deleted: true, id });
 }
