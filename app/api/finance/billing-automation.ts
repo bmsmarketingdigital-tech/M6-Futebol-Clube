@@ -1,9 +1,7 @@
 import { and, eq, inArray, lt } from "drizzle-orm";
-import { getDb } from "../../../db";
+import { getD1, getDb } from "../../../db";
 import {
   athleteBilling,
-  athleteComboCoverage,
-  athleteCombos,
   athletes,
   billingNotificationSettings,
   billingPlans,
@@ -132,53 +130,66 @@ export async function generateMonthlyCharges(
       ),
     );
 
-  const covered = await db
-    .select({ athleteId: athleteCombos.athleteId })
-    .from(athleteComboCoverage)
-    .innerJoin(athleteCombos, eq(athleteCombos.id, athleteComboCoverage.athleteComboId))
-    .where(and(eq(athleteComboCoverage.organizationId, organizationId), eq(athleteComboCoverage.referenceMonth, month), eq(athleteComboCoverage.active, true), eq(athleteCombos.status, "active")));
-  const coveredAthletes = new Set(covered.map((row) => row.athleteId));
-
   let createdCount = 0;
   const now = new Date();
+  const nowSeconds = Math.floor(now.getTime() / 1000);
+  const d1 = getD1();
   for (const configuration of configurations) {
-    if (coveredAthletes.has(configuration.athleteId)) continue;
-    const created = await db
-      .insert(payments)
-      .values({
-        id: crypto.randomUUID(),
-        organizationId,
-        athleteId: configuration.athleteId,
-        referenceMonth: month,
-        amountCents: calculateCharge(
-          configuration.amountCents,
-          configuration.discountType,
-          configuration.discountValue,
-        ),
-        dueDate: dueDateForMonth(
-          month,
-          configuration.customDueDay ?? configuration.planDueDay,
-        ),
-        planName: configuration.planName,
-        status: "open",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .onConflictDoNothing({
-        target: [payments.athleteId, payments.referenceMonth],
-      })
-      .returning({ id: payments.id });
-    if (created.length > 0) {
-      createdCount += 1;
-      await db
-        .update(athletes)
-        .set({ financialStatus: "pending", updatedAt: now })
-        .where(
-          and(
-            eq(athletes.id, configuration.athleteId),
-            eq(athletes.organizationId, organizationId),
+    const paymentId = crypto.randomUUID();
+    const reservationId = crypto.randomUUID();
+    try {
+      await d1.batch([
+        d1
+          .prepare(
+            "INSERT INTO athlete_billing_month_reservations (id,organization_id,athlete_id,reference_month,source_type,source_id,created_at) VALUES (?,?,?,?, 'monthly', ?,?)",
+          )
+          .bind(
+            reservationId,
+            organizationId,
+            configuration.athleteId,
+            month,
+            paymentId,
+            nowSeconds,
           ),
-        );
+        d1
+          .prepare(
+            "INSERT INTO payments (id,organization_id,athlete_id,reference_month,amount_cents,due_date,plan_name,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'open',?,?)",
+          )
+          .bind(
+            paymentId,
+            organizationId,
+            configuration.athleteId,
+            month,
+            calculateCharge(
+              configuration.amountCents,
+              configuration.discountType,
+              configuration.discountValue,
+            ),
+            dueDateForMonth(
+              month,
+              configuration.customDueDay ?? configuration.planDueDay,
+            ),
+            configuration.planName,
+            nowSeconds,
+            nowSeconds,
+          ),
+        d1
+          .prepare(
+            "UPDATE athletes SET financial_status='pending',updated_at=? WHERE id=? AND organization_id=?",
+          )
+          .bind(nowSeconds, configuration.athleteId, organizationId),
+      ]);
+      createdCount += 1;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        /athlete_billing_month_reservation_unique|payments_athlete_month_unique|UNIQUE constraint failed: athlete_billing_month_reservations|UNIQUE constraint failed: payments\.athlete_id, payments\.reference_month/i.test(
+          error.message,
+        )
+      ) {
+        continue;
+      }
+      throw error;
     }
   }
 

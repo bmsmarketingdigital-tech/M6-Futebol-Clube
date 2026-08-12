@@ -147,6 +147,20 @@ export async function POST(request: Request) {
     statements.push(
       d1
         .prepare(
+          "INSERT INTO athlete_billing_month_reservations (id,organization_id,athlete_id,reference_month,source_type,source_id,created_at) VALUES (?,?,?,?, 'combo', ?,?)",
+        )
+        .bind(
+          crypto.randomUUID(),
+          organizationId,
+          athlete.id,
+          month,
+          athleteComboId,
+          now,
+        ),
+    );
+    statements.push(
+      d1
+        .prepare(
           "INSERT INTO athlete_combo_coverage (id,organization_id,athlete_id,athlete_combo_id,reference_month,active,created_at,released_at) VALUES (?,?,?,?,?,1,?,NULL)",
         )
         .bind(
@@ -208,7 +222,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (
       error instanceof Error &&
-      /unique|athlete_combo_coverage_active_unique/i.test(error.message)
+      /unique|athlete_combo_coverage_active_unique|athlete_billing_month_reservation_unique/i.test(error.message)
     ) {
       return Response.json(
         { error: "O atleta já possui um combo ativo em uma ou mais competências selecionadas." },

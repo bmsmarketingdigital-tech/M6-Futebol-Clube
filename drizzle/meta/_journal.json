@@ -148,6 +148,13 @@
       "when": 1786533000000,
       "tag": "0020_p0_combo_coverage_overlap",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1786619000000,
+      "tag": "0021_p0_combo_monthly_competency_reservation",
+      "breakpoints": true
     }
   ]
 }

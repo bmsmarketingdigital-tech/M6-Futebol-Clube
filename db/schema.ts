@@ -592,6 +592,34 @@ export const athleteComboCoverage = sqliteTable(
   ],
 );
 
+export const athleteBillingMonthReservations = sqliteTable(
+  "athlete_billing_month_reservations",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    athleteId: text("athlete_id")
+      .notNull()
+      .references(() => athletes.id, { onDelete: "cascade" }),
+    referenceMonth: text("reference_month").notNull(),
+    sourceType: text("source_type", { enum: ["monthly", "combo"] }).notNull(),
+    sourceId: text("source_id").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("athlete_billing_month_reservation_unique").on(
+      table.organizationId,
+      table.athleteId,
+      table.referenceMonth,
+    ),
+    index("athlete_billing_month_reservation_source_idx").on(
+      table.sourceType,
+      table.sourceId,
+    ),
+  ],
+);
+
 export const payments = sqliteTable(
   "payments",
   {

@@ -16,10 +16,12 @@ test("parcelamento inteiro distribui o resto sem perder centavos", () => {
   assert.deepEqual(values, [34, 33, 33]); assert.equal(values.reduce((a, b) => a + b, 0), total);
 });
 
-test("mensalidade normal consulta cobertura de combo", async () => {
+test("mensalidade normal reserva competência e cria payment no mesmo lote", async () => {
   const automation = await readFile(new URL("../app/api/finance/billing-automation.ts", import.meta.url), "utf8");
-  assert.match(automation, /athleteComboCoverage/); assert.match(automation, /coveredAthletes/);
-  assert.match(automation, /eq\(athleteComboCoverage\.active, true\)/);
+  assert.match(automation, /athlete_billing_month_reservations/);
+  assert.match(automation, /source_type,source_id/);
+  assert.match(automation, /'monthly'/);
+  assert.match(automation, /await d1\.batch/);
 });
 
 test("aplicação rejeita cobertura ativa e grava a identidade do atleta no lote atômico", async () => {
@@ -29,6 +31,8 @@ test("aplicação rejeita cobertura ativa e grava a identidade do atleta no lote
   assert.match(route, /conflictingMonths/);
   assert.match(route, /organization_id,athlete_id,athlete_combo_id,reference_month,active,created_at,released_at/);
   assert.match(route, /await d1\.batch\(statements\)/);
+  assert.match(route, /athlete_billing_month_reservations/);
+  assert.match(route, /'combo'/);
   assert.match(route, /status: 409/);
 });
 
