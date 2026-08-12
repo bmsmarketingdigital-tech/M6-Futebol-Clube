@@ -93,6 +93,13 @@ type FinanceOverview = {
   collectionRate: number;
 };
 
+type DashboardSummary = {
+  revenueLast12Months: { month: string; receivedCents: number }[];
+  evaluations: { total: number; lastEvaluationDate: string | null };
+  nextCommunication: { title: string; scheduledAt: string | null } | null;
+  documents: { total: number };
+};
+
 const navItems: { label: Section; icon: LucideIcon }[] = [
   { label: "Visão geral", icon: HomeIcon },
   { label: "Atletas", icon: Users },
@@ -122,8 +129,6 @@ const sectionPageClasses: Record<Exclude<Section, "Visão geral">, string> = {
   Comunicação: "communications-page",
   "Usuários e permissões": "users-page",
 };
-
-const financeBars = [52, 68, 58, 76, 64, 84, 73, 92, 78, 96, 88, 100];
 
 function initials(name: string) {
   return name
@@ -185,6 +190,12 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
   const [newAthleteCategory, setNewAthleteCategory] = useState("");
   const [loadError, setLoadError] = useState("");
   const [loadingTeams, setLoadingTeams] = useState(true);
+  const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary>({
+    revenueLast12Months: [],
+    evaluations: { total: 0, lastEvaluationDate: null },
+    nextCommunication: null,
+    documents: { total: 0 },
+  });
   const [financeOverview, setFinanceOverview] = useState<FinanceOverview>({
     receivedCents: 0,
     pendingCents: 0,
@@ -289,6 +300,23 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
     }
   }, []);
 
+  const loadDashboardSummary = useCallback(async () => {
+    try {
+      const response = await fetch("/api/dashboard/summary");
+      const payload = (await response.json()) as Partial<DashboardSummary>;
+      if (response.ok) {
+        setDashboardSummary({
+          revenueLast12Months: payload.revenueLast12Months ?? [],
+          evaluations: payload.evaluations ?? { total: 0, lastEvaluationDate: null },
+          nextCommunication: payload.nextCommunication ?? null,
+          documents: payload.documents ?? { total: 0 },
+        });
+      }
+    } catch {
+      // Painel mostra estado vazio quando a agregação falha; não há fallback fictício.
+    }
+  }, []);
+
   const checkReminders = useCallback(async () => {
     try {
       await fetch("/api/reminders", { method: "GET" });
@@ -303,9 +331,10 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
       void loadTeams();
       void loadCategories();
       if (user.role === "admin") void loadFinanceOverview();
+      void loadDashboardSummary();
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [loadAthletes, loadCategories, loadFinanceOverview, loadTeams, user.role]);
+  }, [loadAthletes, loadCategories, loadDashboardSummary, loadFinanceOverview, loadTeams, user.role]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void checkReminders(), 0);
@@ -668,7 +697,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
               }}
               onOpenAthlete={setProfileAthlete}
               finance={financeOverview}
-              notify={notify}
+              summary={dashboardSummary}
               canViewFinance={user.role === "admin"}
               userName={user.displayName}
             />
@@ -915,7 +944,7 @@ function Dashboard({
   onOpenTeam,
   onOpenAthlete,
   finance,
-  notify,
+  summary,
   canViewFinance,
   userName,
 }: {
@@ -926,7 +955,7 @@ function Dashboard({
   onOpenTeam: (team: TeamRecord) => void;
   onOpenAthlete: (athlete: Athlete) => void;
   finance: FinanceOverview;
-  notify: (message: string) => void;
+  summary: DashboardSummary;
   canViewFinance: boolean;
   userName: string;
 }) {
@@ -953,6 +982,28 @@ function Dashboard({
   })
     .format(new Date())
     .toLocaleUpperCase("pt-BR");
+
+  const revenueMonths = summary.revenueLast12Months;
+  const maxReceivedCents = Math.max(1, ...revenueMonths.map((entry) => entry.receivedCents));
+  const hasRevenueData = revenueMonths.some((entry) => entry.receivedCents > 0);
+  const monthDate = (key: string) => {
+    const [year, month] = key.split("-").map(Number);
+    return new Date(year, month - 1, 1);
+  };
+  const monthShortLabel = (key: string) =>
+    new Intl.DateTimeFormat("pt-BR", { month: "short" })
+      .format(monthDate(key))
+      .replace(".", "")
+      .toUpperCase();
+  const monthTooltip = (key: string) => {
+    const label = new Intl.DateTimeFormat("pt-BR", { month: "short", year: "numeric" }).format(monthDate(key));
+    return `${label.charAt(0).toUpperCase()}${label.slice(1)}`;
+  };
+  const formatDateBR = (value: string | null) => {
+    if (!value) return "";
+    const [year, month, day] = value.split("-");
+    return `${day}/${month}/${year}`;
+  };
 
   return (
     <div className="dashboard-screen">
@@ -998,10 +1049,31 @@ function Dashboard({
         {canViewFinance && <div className="card finance-card">
           <CardHeader title="Receita mensal" subtitle="Comparativo últimos 12 meses" action="Detalhes" onAction={() => setSection("Mensalidades")} />
           <div className="chart-head"><div><strong>{formatMoney(finance.receivedCents)}</strong><span>mês atual</span></div><small>Previsto: {formatMoney(finance.expectedCents)}</small></div>
-          <div className="bar-chart" aria-label="Gráfico de receita mensal">
-            {financeBars.map((height, index) => <span key={index} className={index === 11 ? "current" : ""} style={{ height: `${height}%` }} />)}
-          </div>
-          <div className="chart-labels"><span>AGO</span><span>OUT</span><span>DEZ</span><span>FEV</span><span>ABR</span><span>JUN</span><b>JUL</b></div>
+          {hasRevenueData ? (
+            <>
+              <div className="bar-chart" aria-label="Gráfico de receita mensal">
+                {revenueMonths.map((entry, index) => (
+                  <span
+                    key={entry.month}
+                    className={index === revenueMonths.length - 1 ? "current" : ""}
+                    title={`${monthTooltip(entry.month)}: ${formatMoney(entry.receivedCents)}`}
+                    style={{ height: `${Math.max(2, Math.round((entry.receivedCents / maxReceivedCents) * 100))}%` }}
+                  />
+                ))}
+              </div>
+              <div className="chart-labels">
+                {revenueMonths.map((entry, index) =>
+                  index === revenueMonths.length - 1 ? (
+                    <b key={entry.month}>{monthShortLabel(entry.month)}</b>
+                  ) : index % 2 === 0 ? (
+                    <span key={entry.month}>{monthShortLabel(entry.month)}</span>
+                  ) : null,
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="agenda-empty"><strong>Nenhuma receita registrada</strong><small>Assim que houver pagamentos recebidos, o comparativo mensal aparece aqui.</small></div>
+          )}
           <div className="finance-summary">
             <div><span className="legend received" /><p><small>RECEBIDO</small><strong>{formatMoney(finance.receivedCents)}</strong></p></div>
             <div><span className="legend pending" /><p><small>EM ABERTO</small><strong>{finance.openCount} · {formatMoney(finance.openCents)}</strong></p></div>
@@ -1041,9 +1113,25 @@ function Dashboard({
           <CardHeader title="Precisa de atenção" subtitle="Ações importantes para hoje" />
           {canViewFinance && <button onClick={() => setSection("Mensalidades")}><span className="attention-icon red"><AlertTriangle size={15} strokeWidth={1.75} /></span><p><strong>{finance.totalOverdueCount} mensalidade(s) vencida(s)</strong><small>{formatMoney(finance.totalOverdueCents)} em atraso no histórico completo</small></p><b>›</b></button>}
           {canViewFinance && finance.dueTodayCount > 0 && <button onClick={() => setSection("Mensalidades")}><span className="attention-icon orange"><Wallet size={15} strokeWidth={1.75} /></span><p><strong>{finance.dueTodayCount} mensalidade(s) vencem hoje</strong><small>{formatMoney(finance.dueTodayCents)} aguardando pagamento</small></p><b>›</b></button>}
-          <button onClick={() => setSection("Avaliações")}><span className="attention-icon orange"><TrendingUp size={15} strokeWidth={1.75} /></span><p><strong>5 avaliações pendentes</strong><small>Prazo até 31 de julho</small></p><b>›</b></button>
-          <button onClick={() => notify("Comunicado aberto para revisão.")}><span className="attention-icon blue"><MessageCircle size={15} strokeWidth={1.75} /></span><p><strong>Comunicado agendado</strong><small>Festival interno · Amanhã, 9h</small></p><b>›</b></button>
-          <div className="all-good"><span><CheckCircle2 size={15} strokeWidth={1.75} /></span><p><strong>Documentação em dia</strong><small>Nenhuma pendência cadastral</small></p></div>
+          <button onClick={() => setSection("Avaliações")}>
+            <span className="attention-icon orange"><TrendingUp size={15} strokeWidth={1.75} /></span>
+            {summary.evaluations.total > 0 ? (
+              <p><strong>{summary.evaluations.total} avaliação(ões) registrada(s)</strong><small>{summary.evaluations.lastEvaluationDate ? `Última em ${formatDateBR(summary.evaluations.lastEvaluationDate)}` : "Sem data de referência"}</small></p>
+            ) : (
+              <p><strong>Nenhuma avaliação registrada</strong><small>Cadastre a primeira avaliação da turma</small></p>
+            )}
+            <b>›</b>
+          </button>
+          <button onClick={() => setSection("Comunicação")}>
+            <span className="attention-icon blue"><MessageCircle size={15} strokeWidth={1.75} /></span>
+            {summary.nextCommunication ? (
+              <p><strong>Próximo comunicado</strong><small>{summary.nextCommunication.title} · {summary.nextCommunication.scheduledAt ?? "sem horário definido"}</small></p>
+            ) : (
+              <p><strong>Nenhum comunicado agendado</strong><small>Agende um comunicado para as famílias</small></p>
+            )}
+            <b>›</b>
+          </button>
+          <div className="all-good"><span><CheckCircle2 size={15} strokeWidth={1.75} /></span><p><strong>{summary.documents.total} documento(s) cadastrado(s)</strong><small>Documentos enviados por atletas nesta organização</small></p></div>
         </div>
       </section>
     </div>
