@@ -2507,6 +2507,9 @@ body {
 .combo-apply-summary span { font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
 .combo-apply-summary strong { color:var(--text-primary); font-size:18px; }
 .combo-apply-summary b { color:var(--text-primary); font-size:25px; margin-top:5px; }
+.combo-cancel-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px; padding:14px; border:1px solid var(--border); border-radius:12px; background:#fff; color:var(--text-secondary); font-size:13px; }
+.combo-cancel-summary span { display:flex; flex-direction:column; gap:4px; }
+.combo-cancel-summary strong { color:var(--text-primary); font-size:14px; word-break:break-word; }
 @media (max-width: 760px) { .combo-card-actions { grid-template-columns:1fr 1fr; }.combo-card-actions .combo-action.primary { grid-column:1 / -1; }.combo-card-actions .combo-action.icon { width:auto; } }
 @media (max-width: 640px) { .combo-form-grid { grid-template-columns:1fr; } .combo-modal { padding:22px 18px 18px; } }
 .modal, .profile-modal, .team-modal, .attendance-panel, .evaluation-modal,

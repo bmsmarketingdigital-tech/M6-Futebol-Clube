@@ -63,6 +63,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "Combo inválido ou inativo." }, { status: 409 });
   }
 
+  if (combo.finalAmountCents <= 0) {
+    return Response.json({ error: "O valor final do Combo deve ser maior que zero." }, { status: 400 });
+  }
+
   const startDate = body.startDate ?? "";
   const firstDueDate = body.firstDueDate ?? startDate;
   if (

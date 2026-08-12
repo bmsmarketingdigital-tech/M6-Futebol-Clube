@@ -662,10 +662,9 @@ export const payments = sqliteTable(
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   },
   (table) => [
-    uniqueIndex("payments_athlete_month_unique").on(
-      table.athleteId,
-      table.referenceMonth,
-    ),
+    uniqueIndex("payments_athlete_month_unique")
+      .on(table.organizationId, table.athleteId, table.referenceMonth)
+      .where(sql`${table.status} != 'cancelled'`),
     index("payments_organization_status_idx").on(
       table.organizationId,
       table.status,

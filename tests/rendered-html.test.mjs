@@ -54,9 +54,9 @@ test("protects persisted APIs and keeps the complete migration history", async (
   const migrations = (await readdir(new URL("drizzle/", root)))
     .filter((file) => /^\d{4}_.+\.sql$/.test(file))
     .sort();
-  assert.equal(migrations.length, 22);
+  assert.equal(migrations.length, 23);
   assert.match(migrations[0], /^0000_/);
-  assert.match(migrations.at(-1) ?? "", /^0021_/);
+  assert.match(migrations.at(-1) ?? "", /^0022_/);
 });
 
 test("keeps monthly billing automation configurable and idempotent", async () => {
