@@ -476,7 +476,7 @@ export function ensureDatabase() {
           "CREATE INDEX IF NOT EXISTS athlete_billing_plan_idx ON athlete_billing (plan_id)",
         ),
         d1.prepare(
-          "CREATE UNIQUE INDEX IF NOT EXISTS payments_athlete_month_unique ON payments (athlete_id, reference_month)",
+          "CREATE UNIQUE INDEX IF NOT EXISTS payments_athlete_month_unique ON payments (organization_id, athlete_id, reference_month) WHERE status != 'cancelled'",
         ),
       d1.prepare(
         "CREATE INDEX IF NOT EXISTS payments_organization_status_idx ON payments (organization_id, status)",
@@ -520,6 +520,111 @@ export function ensureDatabase() {
         d1.prepare(
           "CREATE INDEX IF NOT EXISTS expenses_organization_status_idx ON expenses (organization_id, status)",
         ),
+      // P0-INSTALL-COMBO-001: combo tables (final shape, post drizzle/0019+0020+0021 —
+      // ensureDatabase() must reproduce that final state, not the 0019 intermediate one).
+      d1.prepare(`CREATE TABLE IF NOT EXISTS billing_combos (
+        id TEXT PRIMARY KEY NOT NULL,
+        organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        combo_type TEXT NOT NULL DEFAULT 'custom',
+        duration_months INTEGER NOT NULL,
+        description TEXT,
+        base_plan_id TEXT REFERENCES billing_plans(id),
+        base_amount_cents INTEGER NOT NULL,
+        discount_type TEXT NOT NULL DEFAULT 'none',
+        discount_value INTEGER NOT NULL DEFAULT 0,
+        final_amount_cents INTEGER NOT NULL,
+        billing_mode TEXT NOT NULL DEFAULT 'installments',
+        installment_count INTEGER NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`),
+      d1.prepare(
+        "CREATE INDEX IF NOT EXISTS billing_combos_organization_idx ON billing_combos (organization_id)",
+      ),
+      d1.prepare(`CREATE TABLE IF NOT EXISTS athlete_combos (
+        id TEXT PRIMARY KEY NOT NULL,
+        organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+        combo_id TEXT NOT NULL REFERENCES billing_combos(id),
+        combo_name_snapshot TEXT NOT NULL,
+        duration_months INTEGER NOT NULL,
+        base_amount_cents INTEGER NOT NULL,
+        discount_type TEXT NOT NULL,
+        discount_value INTEGER NOT NULL,
+        final_amount_cents INTEGER NOT NULL,
+        installment_count INTEGER NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`),
+      d1.prepare(
+        "CREATE INDEX IF NOT EXISTS athlete_combos_organization_idx ON athlete_combos (organization_id)",
+      ),
+      d1.prepare(
+        "CREATE INDEX IF NOT EXISTS athlete_combos_athlete_idx ON athlete_combos (athlete_id)",
+      ),
+      d1.prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS athlete_combos_active_athlete_unique ON athlete_combos (athlete_id, start_date)",
+      ),
+      d1.prepare(`CREATE TABLE IF NOT EXISTS athlete_combo_installments (
+        id TEXT PRIMARY KEY NOT NULL,
+        organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        athlete_combo_id TEXT NOT NULL REFERENCES athlete_combos(id) ON DELETE CASCADE,
+        installment_number INTEGER NOT NULL,
+        installment_total INTEGER NOT NULL,
+        reference_month TEXT NOT NULL,
+        due_date TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        payment_id TEXT REFERENCES payments(id),
+        created_at INTEGER NOT NULL
+      )`),
+      d1.prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS athlete_combo_installment_unique ON athlete_combo_installments (athlete_combo_id, installment_number)",
+      ),
+      d1.prepare(
+        "CREATE INDEX IF NOT EXISTS athlete_combo_installments_organization_idx ON athlete_combo_installments (organization_id)",
+      ),
+      // Final shape per drizzle/0020_p0_combo_coverage_overlap.sql (post-rebuild), not
+      // the original 0019 version — this is what protects against overlapping combo
+      // coverage for the same athlete/month.
+      d1.prepare(`CREATE TABLE IF NOT EXISTS athlete_combo_coverage (
+        id TEXT PRIMARY KEY NOT NULL,
+        organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+        athlete_combo_id TEXT NOT NULL REFERENCES athlete_combos(id) ON DELETE CASCADE,
+        reference_month TEXT NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        released_at INTEGER
+      )`),
+      d1.prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS athlete_combo_coverage_contract_month_unique ON athlete_combo_coverage (athlete_combo_id, reference_month)",
+      ),
+      d1.prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS athlete_combo_coverage_active_unique ON athlete_combo_coverage (organization_id, athlete_id, reference_month) WHERE active=1",
+      ),
+      // Final shape per drizzle/0021_p0_combo_monthly_competency_reservation.sql — the
+      // single source of truth for "this athlete/month slot is already claimed",
+      // shared between monthly payments and combo coverage.
+      d1.prepare(`CREATE TABLE IF NOT EXISTS athlete_billing_month_reservations (
+        id TEXT PRIMARY KEY NOT NULL,
+        organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        athlete_id TEXT NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+        reference_month TEXT NOT NULL,
+        source_type TEXT NOT NULL CHECK (source_type IN ('monthly','combo')),
+        source_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )`),
+      d1.prepare(
+        "CREATE UNIQUE INDEX IF NOT EXISTS athlete_billing_month_reservation_unique ON athlete_billing_month_reservations (organization_id, athlete_id, reference_month)",
+      ),
+      d1.prepare(
+        "CREATE INDEX IF NOT EXISTS athlete_billing_month_reservation_source_idx ON athlete_billing_month_reservations (source_type, source_id)",
+      ),
       ])
       .then(async () => {
         const memberColumns = await d1
@@ -721,6 +826,18 @@ export function ensureDatabase() {
           [
             "updated_at",
             "ALTER TABLE payments ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0",
+          ],
+          [
+            "athlete_combo_id",
+            "ALTER TABLE payments ADD COLUMN athlete_combo_id TEXT REFERENCES athlete_combos(id)",
+          ],
+          [
+            "combo_installment_number",
+            "ALTER TABLE payments ADD COLUMN combo_installment_number INTEGER",
+          ],
+          [
+            "combo_installment_total",
+            "ALTER TABLE payments ADD COLUMN combo_installment_total INTEGER",
           ],
         ] as const;
 
