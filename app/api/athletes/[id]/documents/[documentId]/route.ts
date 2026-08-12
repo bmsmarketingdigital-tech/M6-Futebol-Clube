@@ -92,9 +92,12 @@ export async function DELETE(
       );
     }
 
-    await getFilesBucket().delete(authorized.document.objectKey);
+    // Delete the DB record first: if this fails, the document simply stays listed
+    // (safe, self-healing on retry). Deleting the storage object first and having the
+    // DB delete fail afterwards would instead leave an orphaned metadata row pointing
+    // at a file that no longer exists, with no way to clean it up (see P0-DOC-001).
     const db = getDb();
-    await db
+    const [deletedRow] = await db
       .delete(athleteDocuments)
       .where(
         and(
@@ -104,7 +107,16 @@ export async function DELETE(
             authorized.context.membership.organizationId,
           ),
         ),
+      )
+      .returning({ id: athleteDocuments.id });
+    if (!deletedRow) {
+      return Response.json(
+        { error: "Documento não encontrado." },
+        { status: 404 },
       );
+    }
+
+    await getFilesBucket().delete(authorized.document.objectKey);
 
     return Response.json({ deleted: true });
   } catch (error) {
