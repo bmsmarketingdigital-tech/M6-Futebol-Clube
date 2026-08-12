@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { ensureDatabase, getDb } from "./index";
+import { ensureDatabase, getD1, getDb } from "./index";
 import { licenseState } from "./schema";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -7,6 +7,7 @@ const DEFAULT_GRACE_DAYS = 3;
 const TRIAL_DAYS_FIRST_INSTALL = 30;
 const MAX_TRACKED_NONCES = 60;
 const LICENSE_ROW_ID = "default";
+const MAX_ACTIVATE_ATTEMPTS = 5;
 
 const EMBEDDED_PUBLIC_KEY_PEM = `
 -----BEGIN PUBLIC KEY-----
@@ -98,7 +99,7 @@ async function verifyLicenseToken(token: string): Promise<VerifiedToken | Reject
   if (!token || typeof token !== "string") return { ok: false, reason: "Token vazio" };
 
   const parts = token.trim().split(".");
-  if (parts.length !== 2) return { ok: false, reason: "Formato inválido" };
+  if (parts.length !== 2) return { ok: false, reason: "Formato invalido" };
 
   let payloadBytes: Uint8Array;
   let signatureBytes: Uint8Array;
@@ -106,14 +107,14 @@ async function verifyLicenseToken(token: string): Promise<VerifiedToken | Reject
     payloadBytes = base64urlToBytes(parts[0]);
     signatureBytes = base64urlToBytes(parts[1]);
   } catch {
-    return { ok: false, reason: "Base64 inválido" };
+    return { ok: false, reason: "Base64 invalido" };
   }
 
   let payload: LicenseTokenPayload;
   try {
     payload = JSON.parse(new TextDecoder().decode(payloadBytes));
   } catch {
-    return { ok: false, reason: "Payload inválido" };
+    return { ok: false, reason: "Payload invalido" };
   }
 
   if (!payload?.installId || !payload?.daysToAdd || !payload?.issuedAt || !payload?.nonce) {
@@ -128,7 +129,7 @@ async function verifyLicenseToken(token: string): Promise<VerifiedToken | Reject
     payloadBytes,
   );
 
-  if (!valid) return { ok: false, reason: "Assinatura inválida" };
+  if (!valid) return { ok: false, reason: "Assinatura invalida" };
 
   return { ok: true, payload };
 }
@@ -147,7 +148,7 @@ function computeStatus(row: LicenseRow): LicenseStatus {
       graceDays,
       blocked: true,
       daysLeft: 0,
-      message: "Licença não ativada.",
+      message: "Licenca nao ativada.",
     };
   }
 
@@ -161,7 +162,7 @@ function computeStatus(row: LicenseRow): LicenseStatus {
       graceDays,
       blocked: true,
       daysLeft: 0,
-      message: "Licença expirada. Contate o suporte para renovar.",
+      message: "Licenca expirada. Contate o suporte para renovar.",
     };
   }
 
@@ -175,7 +176,7 @@ function computeStatus(row: LicenseRow): LicenseStatus {
       blocked: false,
       daysLeft: 0,
       graceLeftDays,
-      message: `Licença expirada. Carência: ${graceLeftDays} dia(s).`,
+      message: `Licenca expirada. Carencia: ${graceLeftDays} dia(s).`,
     };
   }
 
@@ -189,7 +190,7 @@ function computeStatus(row: LicenseRow): LicenseStatus {
       graceDays,
       blocked: false,
       daysLeft,
-      message: `Licença expira em ${daysLeft} dia(s).`,
+      message: `Licenca expira em ${daysLeft} dia(s).`,
     };
   }
 
@@ -200,7 +201,7 @@ function computeStatus(row: LicenseRow): LicenseStatus {
     graceDays,
     blocked: false,
     daysLeft,
-    message: "Licença ativa.",
+    message: "Licenca ativa.",
   };
 }
 
@@ -232,28 +233,38 @@ async function loadOrCreateRow(): Promise<LicenseRow> {
   const installId = crypto.randomUUID();
   const expiresAt = now + TRIAL_DAYS_FIRST_INSTALL * DAY_MS;
 
-  await db.insert(licenseState).values({
-    id: LICENSE_ROW_ID,
-    installId,
-    expiresAt: new Date(expiresAt),
-    graceDays: DEFAULT_GRACE_DAYS,
-    lastSeenAt: new Date(now),
-    lastIssuedAt: null,
-    usedNonces: "[]",
-    createdAt: new Date(now),
-    updatedAt: new Date(now),
-  });
+  await db
+    .insert(licenseState)
+    .values({
+      id: LICENSE_ROW_ID,
+      installId,
+      expiresAt: new Date(expiresAt),
+      graceDays: DEFAULT_GRACE_DAYS,
+      lastSeenAt: new Date(now),
+      lastIssuedAt: null,
+      usedNonces: "[]",
+      createdAt: new Date(now),
+      updatedAt: new Date(now),
+    })
+    .onConflictDoNothing();
+
+  const [row] = await db
+    .select()
+    .from(licenseState)
+    .where(eq(licenseState.id, LICENSE_ROW_ID))
+    .limit(1);
+  if (!row) throw new Error("Nao foi possivel carregar a licenca.");
 
   return {
-    id: LICENSE_ROW_ID,
-    installId,
-    expiresAt,
-    graceDays: DEFAULT_GRACE_DAYS,
-    lastSeenAt: now,
-    lastIssuedAt: null,
-    usedNonces: "[]",
-    createdAt: now,
-    updatedAt: now,
+    id: row.id,
+    installId: row.installId,
+    expiresAt: row.expiresAt ? row.expiresAt.getTime() : null,
+    graceDays: row.graceDays,
+    lastSeenAt: row.lastSeenAt.getTime(),
+    lastIssuedAt: row.lastIssuedAt ? row.lastIssuedAt.getTime() : null,
+    usedNonces: row.usedNonces,
+    createdAt: row.createdAt.getTime(),
+    updatedAt: row.updatedAt.getTime(),
   };
 }
 
@@ -274,6 +285,49 @@ async function persistRow(row: LicenseRow): Promise<void> {
     .where(eq(licenseState.id, LICENSE_ROW_ID));
 }
 
+// Compare-and-swap write used for activation: re-affirms the exact snapshot that was
+// read before overwriting it. Without this, two concurrent activation calls (for
+// example a network retry resubmitting the same token) both read the row before
+// either writes, so the second write silently clobbers the first write expiresAt and
+// usedNonces -- either losing days from a legitimate activation or double-applying a
+// single token, since neither read saw the concurrent nonce as used yet
+// (see P0-LICENSE-001).
+async function persistRowCas(previous: LicenseRow, next: LicenseRow): Promise<boolean> {
+  const d1 = getD1();
+  const toSeconds = (ms: number | null) => (ms === null ? null : Math.floor(ms / 1000));
+  const result = await d1
+    .prepare(
+      `UPDATE license_state
+       SET install_id = ?, expires_at = ?, grace_days = ?, last_seen_at = ?,
+           last_issued_at = ?, used_nonces = ?, updated_at = ?
+       WHERE id = ?
+         AND install_id = ?
+         AND COALESCE(expires_at, -1) = COALESCE(?, -1)
+         AND grace_days = ?
+         AND last_seen_at = ?
+         AND COALESCE(last_issued_at, -1) = COALESCE(?, -1)
+         AND used_nonces = ?`,
+    )
+    .bind(
+      next.installId,
+      toSeconds(next.expiresAt),
+      next.graceDays,
+      toSeconds(next.lastSeenAt),
+      toSeconds(next.lastIssuedAt),
+      next.usedNonces,
+      toSeconds(Date.now()),
+      LICENSE_ROW_ID,
+      previous.installId,
+      toSeconds(previous.expiresAt),
+      previous.graceDays,
+      toSeconds(previous.lastSeenAt),
+      toSeconds(previous.lastIssuedAt),
+      previous.usedNonces,
+    )
+    .run();
+  return (result.meta.changes ?? 0) === 1;
+}
+
 export async function getLicenseStatus(): Promise<LicenseStatus> {
   const row = await loadOrCreateRow();
   row.lastSeenAt = Math.max(Date.now(), row.lastSeenAt);
@@ -287,8 +341,6 @@ export type ActivateLicenseResult =
   | { ok: false; code: string; reason: string };
 
 export async function activateLicense(token: string): Promise<ActivateLicenseResult> {
-  const row = await loadOrCreateRow();
-
   const verified = await verifyLicenseToken(token);
   if (!verified.ok) {
     return { ok: false, code: "LICENSE_TOKEN_INVALID", reason: verified.reason };
@@ -296,54 +348,68 @@ export async function activateLicense(token: string): Promise<ActivateLicenseRes
 
   const { installId, daysToAdd, issuedAt, nonce } = verified.payload;
 
-  if (String(installId) !== String(row.installId)) {
-    return {
-      ok: false,
-      code: "LICENSE_INSTALL_MISMATCH",
-      reason: "Este código não pertence a esta instalação.",
-    };
-  }
-
   const days = Number(daysToAdd);
   if (!Number.isFinite(days) || days <= 0 || days > 3650) {
-    return { ok: false, code: "LICENSE_DAYS_INVALID", reason: "Dias inválidos." };
+    return { ok: false, code: "LICENSE_DAYS_INVALID", reason: "Dias invalidos." };
   }
 
   const issued = Number(issuedAt);
   if (!Number.isFinite(issued) || issued < 0) {
-    return { ok: false, code: "LICENSE_ISSUED_INVALID", reason: "issuedAt inválido." };
+    return { ok: false, code: "LICENSE_ISSUED_INVALID", reason: "issuedAt invalido." };
   }
 
-  let usedNonces: string[];
-  try {
-    usedNonces = JSON.parse(row.usedNonces);
-    if (!Array.isArray(usedNonces)) usedNonces = [];
-  } catch {
-    usedNonces = [];
+  await ensureDatabase();
+
+  for (let attempt = 0; attempt < MAX_ACTIVATE_ATTEMPTS; attempt++) {
+    const row = await loadOrCreateRow();
+
+    if (String(installId) !== String(row.installId)) {
+      return {
+        ok: false,
+        code: "LICENSE_INSTALL_MISMATCH",
+        reason: "Este codigo nao pertence a esta instalacao.",
+      };
+    }
+
+    let usedNonces: string[];
+    try {
+      usedNonces = JSON.parse(row.usedNonces);
+      if (!Array.isArray(usedNonces)) usedNonces = [];
+    } catch {
+      usedNonces = [];
+    }
+
+    if (usedNonces.includes(String(nonce))) {
+      return { ok: false, code: "LICENSE_TOKEN_REUSED", reason: "Token ja utilizado." };
+    }
+
+    const lastIssued = Number(row.lastIssuedAt || 0);
+    if (issued < lastIssued) {
+      return { ok: false, code: "LICENSE_ISSUED_OLD", reason: "Token antigo." };
+    }
+
+    const now = Date.now();
+    const base = Math.max(Number(row.expiresAt || 0), now);
+    const next: LicenseRow = {
+      ...row,
+      expiresAt: base + days * DAY_MS,
+      graceDays: DEFAULT_GRACE_DAYS,
+      lastSeenAt: Math.max(now, row.lastSeenAt),
+      lastIssuedAt: issued,
+      usedNonces: JSON.stringify([...usedNonces, String(nonce)].slice(-MAX_TRACKED_NONCES)),
+    };
+
+    const applied = await persistRowCas(row, next);
+    if (applied) {
+      return { ok: true, status: computeStatus(next) };
+    }
   }
 
-  if (usedNonces.includes(String(nonce))) {
-    return { ok: false, code: "LICENSE_TOKEN_REUSED", reason: "Token já utilizado." };
-  }
-
-  const lastIssued = Number(row.lastIssuedAt || 0);
-  if (issued < lastIssued) {
-    return { ok: false, code: "LICENSE_ISSUED_OLD", reason: "Token antigo." };
-  }
-
-  const now = Date.now();
-  const base = Math.max(Number(row.expiresAt || 0), now);
-  row.expiresAt = base + days * DAY_MS;
-  row.graceDays = DEFAULT_GRACE_DAYS;
-  row.lastSeenAt = Math.max(now, row.lastSeenAt);
-  row.lastIssuedAt = issued;
-
-  usedNonces.push(String(nonce));
-  row.usedNonces = JSON.stringify(usedNonces.slice(-MAX_TRACKED_NONCES));
-
-  await persistRow(row);
-
-  return { ok: true, status: computeStatus(row) };
+  return {
+    ok: false,
+    code: "LICENSE_CONCURRENT_UPDATE",
+    reason: "Outra ativacao esta em andamento. Tente novamente.",
+  };
 }
 
 export async function isLicenseBlocked(): Promise<boolean> {
