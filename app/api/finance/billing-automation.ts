@@ -136,7 +136,7 @@ export async function generateMonthlyCharges(
     .select({ athleteId: athleteCombos.athleteId })
     .from(athleteComboCoverage)
     .innerJoin(athleteCombos, eq(athleteCombos.id, athleteComboCoverage.athleteComboId))
-    .where(and(eq(athleteComboCoverage.organizationId, organizationId), eq(athleteComboCoverage.referenceMonth, month), eq(athleteCombos.status, "active")));
+    .where(and(eq(athleteComboCoverage.organizationId, organizationId), eq(athleteComboCoverage.referenceMonth, month), eq(athleteComboCoverage.active, true), eq(athleteCombos.status, "active")));
   const coveredAthletes = new Set(covered.map((row) => row.athleteId));
 
   let createdCount = 0;

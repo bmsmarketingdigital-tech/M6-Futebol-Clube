@@ -1,4 +1,5 @@
 import { index, integer, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
 export const organizations = sqliteTable("organizations", {
   id: text("id").primaryKey(),
@@ -576,10 +577,19 @@ export const athleteComboCoverage = sqliteTable(
   {
     id: text("id").primaryKey(),
     organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    athleteId: text("athlete_id").notNull().references(() => athletes.id, { onDelete: "cascade" }),
     athleteComboId: text("athlete_combo_id").notNull().references(() => athleteCombos.id, { onDelete: "cascade" }),
     referenceMonth: text("reference_month").notNull(),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    releasedAt: integer("released_at", { mode: "timestamp" }),
   },
-  (table) => [uniqueIndex("athlete_combo_coverage_unique").on(table.athleteComboId, table.referenceMonth)],
+  (table) => [
+    uniqueIndex("athlete_combo_coverage_contract_month_unique").on(table.athleteComboId, table.referenceMonth),
+    uniqueIndex("athlete_combo_coverage_active_unique")
+      .on(table.organizationId, table.athleteId, table.referenceMonth)
+      .where(sql`${table.active} = 1`),
+  ],
 );
 
 export const payments = sqliteTable(

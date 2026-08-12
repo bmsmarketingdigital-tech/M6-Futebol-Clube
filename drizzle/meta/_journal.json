@@ -141,6 +141,13 @@
       "when": 1786532000000,
       "tag": "0019_financial_combos",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786533000000,
+      "tag": "0020_p0_combo_coverage_overlap",
+      "breakpoints": true
     }
   ]
 }
