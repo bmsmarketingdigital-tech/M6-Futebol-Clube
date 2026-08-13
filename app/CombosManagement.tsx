@@ -200,8 +200,8 @@ export default function CombosManagement({ notify, athletes }: { notify: (messag
         {!contracts.length && <div className="card finance-empty"><strong>Nenhum contrato de Combo aplicado</strong><small>Quando um Combo for aplicado a um aluno, ele aparecera aqui.</small></div>}
       </section>
 
-      {open && <div className="modal-backdrop"><form className="modal-card combo-modal" onSubmit={save}>
-        <header className="combo-modal-header"><div><span className="eyebrow">FINANCEIRO</span><h2>Novo Combo</h2><p>Configure o pacote comercial e as condições de cobrança.</p></div><button type="button" className="combo-modal-close" onClick={() => setOpen(false)}><X size={18} /></button></header>
+      {open && <div className="modal-backdrop"><form className="modal-card combo-modal" role="dialog" aria-modal="true" aria-labelledby="combo-form-modal-title" onSubmit={save}>
+        <header className="combo-modal-header"><div><span className="eyebrow">FINANCEIRO</span><h2 id="combo-form-modal-title">Novo Combo</h2><p>Configure o pacote comercial e as condições de cobrança.</p></div><button type="button" className="combo-modal-close" onClick={() => setOpen(false)} aria-label="Fechar"><X size={18} /></button></header>
         <label>Nome<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
         <label>Tipo<select value={form.comboType} onChange={(event) => setForm({ ...form, comboType: event.target.value })}><option value="monthly">Mensal</option><option value="quarterly">Trimestral</option><option value="annual">Anual</option><option value="custom">Personalizado</option></select></label>
         <div className="combo-form-grid">
@@ -215,16 +215,16 @@ export default function CombosManagement({ notify, athletes }: { notify: (messag
         <div className="combo-modal-actions"><button type="button" onClick={() => setOpen(false)}>Cancelar</button><button className="primary-button">Salvar combo</button></div>
       </form></div>}
 
-      {applyCombo && <div className="modal-backdrop"><div className="modal-card combo-modal apply-combo-modal">
-        <header className="combo-modal-header"><div><span className="eyebrow">CONTRATAÇÃO</span><h2>Aplicar combo</h2><p>Escolha o aluno e confirme o período de cobertura.</p></div><button type="button" className="combo-modal-close" onClick={() => setApplyCombo(null)}><X size={18} /></button></header>
+      {applyCombo && <div className="modal-backdrop"><div className="modal-card combo-modal apply-combo-modal" role="dialog" aria-modal="true" aria-labelledby="combo-apply-modal-title">
+        <header className="combo-modal-header"><div><span className="eyebrow">CONTRATAÇÃO</span><h2 id="combo-apply-modal-title">Aplicar combo</h2><p>Escolha o aluno e confirme o período de cobertura.</p></div><button type="button" className="combo-modal-close" onClick={() => setApplyCombo(null)} aria-label="Fechar"><X size={18} /></button></header>
         <label>Aluno<select value={applyAthlete} onChange={(event) => setApplyAthlete(event.target.value)}><option value="">Selecione o aluno</option>{athletes.filter((athlete) => athlete.active !== false).map((athlete) => <option key={athlete.id} value={athlete.id}>{athlete.fullName}</option>)}</select></label>
         <div className="combo-form-grid"><label>Data de início<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label>Primeiro vencimento<input type="date" value={firstDueDate} onChange={(event) => setFirstDueDate(event.target.value)} /></label></div>
         <div className="combo-apply-summary"><span>Combo selecionado</span><strong>{applyCombo.name}</strong><small>{applyCombo.durationMonths} meses · {applyCombo.billingMode === "upfront" ? "1 cobrança" : `${applyCombo.installmentCount} parcelas`}</small><b>{money(applyCombo.finalAmountCents)}</b></div>
         <div className="combo-modal-actions"><button type="button" onClick={() => setApplyCombo(null)}>Cancelar</button><button className="primary-button" disabled={applying || !applyAthlete || !startDate || !firstDueDate} onClick={() => void confirmApply()}>{applying ? "Aplicando..." : "Confirmar combo"}</button></div>
       </div></div>}
 
-      {cancelContract && <div className="modal-backdrop"><div className="modal-card combo-modal apply-combo-modal">
-        <header className="combo-modal-header"><div><span className="eyebrow">CANCELAMENTO</span><h2>Cancelar contrato de Combo</h2><p>Competencias passadas e a competencia atual permanecem preservadas. Somente competencias futuras elegiveis serao liberadas.</p></div><button type="button" className="combo-modal-close" onClick={() => setCancelContract(null)}><X size={18} /></button></header>
+      {cancelContract && <div className="modal-backdrop"><div className="modal-card combo-modal apply-combo-modal" role="dialog" aria-modal="true" aria-labelledby="combo-cancel-modal-title">
+        <header className="combo-modal-header"><div><span className="eyebrow">CANCELAMENTO</span><h2 id="combo-cancel-modal-title">Cancelar contrato de Combo</h2><p>Competencias passadas e a competencia atual permanecem preservadas. Somente competencias futuras elegiveis serao liberadas.</p></div><button type="button" className="combo-modal-close" onClick={() => setCancelContract(null)} aria-label="Fechar"><X size={18} /></button></header>
         <div className="combo-apply-summary"><span>Contrato selecionado</span><strong>{cancelContract.comboNameSnapshot}</strong><small>{cancelContract.athleteName} · {cancelContract.startDate} ate {cancelContract.endDate}</small><b>{money(cancelContract.finalAmountCents)}</b></div>
         <div className="combo-cancel-summary">
           <span>Parcelas pagas: <strong>{cancelContract.paidInstallments ?? 0}</strong></span>

@@ -192,14 +192,14 @@ export function UserManagement({
 
       {modalOpen && (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setModalOpen(false)}>
-          <form className="user-modal" onSubmit={saveUser} onMouseDown={(event) => event.stopPropagation()}>
+          <form className="user-modal" role="dialog" aria-modal="true" aria-labelledby="user-modal-title" onSubmit={saveUser} onMouseDown={(event) => event.stopPropagation()}>
             <header>
               <div>
                 <span className="eyebrow">{editing ? "EDITAR ACESSO" : "NOVO ACESSO"}</span>
-                <h2>{editing ? "Usuário e permissões" : "Criar usuário"}</h2>
+                <h2 id="user-modal-title">{editing ? "Usuário e permissões" : "Criar usuário"}</h2>
                 <p>Defina os dados de entrada e o nível de acesso.</p>
               </div>
-              <button type="button" className="modal-close" onClick={() => setModalOpen(false)}><X size={18} strokeWidth={1.75} /></button>
+              <button type="button" className="modal-close" onClick={() => setModalOpen(false)} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button>
             </header>
             <div className="user-modal-body">
               <label>Nome completo<input name="displayName" required minLength={3} defaultValue={editing?.displayName ?? ""} placeholder="Ex.: João da Silva" /></label>

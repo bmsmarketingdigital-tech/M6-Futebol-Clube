@@ -73,8 +73,8 @@ function TrainingModal({ teams, training, onClose, onSaved }: { teams: TeamRecor
       const payload = (await response.json()) as { error?: string }; if (!response.ok) throw new Error(payload.error); onSaved();
     } catch (error) { window.alert(error instanceof Error ? error.message : "Não foi possível salvar."); } finally { setSaving(false); }
   }
-  return <div className="modal-backdrop" onMouseDown={onClose}><div className="training-modal" onMouseDown={(event) => event.stopPropagation()}>
-    <header><div><span className="eyebrow">PLANEJAMENTO DE SESSÃO</span><h2>{training ? "Editar treino" : "Novo treino"}</h2><p>Organize objetivo, duração e sequência metodológica.</p></div><button className="modal-close" onClick={onClose}><X size={18} strokeWidth={1.75} /></button></header>
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="training-modal" role="dialog" aria-modal="true" aria-labelledby="training-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+    <header><div><span className="eyebrow">PLANEJAMENTO DE SESSÃO</span><h2 id="training-modal-title">{training ? "Editar treino" : "Novo treino"}</h2><p>Organize objetivo, duração e sequência metodológica.</p></div><button className="modal-close" onClick={onClose} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button></header>
     <form onSubmit={submit}>
       <div className="form-row"><label>Turma<select name="teamId" required defaultValue={training?.teamId ?? ""}><option value="" disabled>Selecione</option>{teams.map((team) => <option key={team.id} value={team.id}>{team.name} · {team.category}</option>)}</select></label><label>Data<input name="sessionDate" type="date" required defaultValue={training?.sessionDate ?? new Date().toISOString().slice(0, 10)} /></label></div>
       <label>Título<input name="title" required defaultValue={training?.title ?? ""} placeholder="Ex.: Domínio e progressão" /></label>

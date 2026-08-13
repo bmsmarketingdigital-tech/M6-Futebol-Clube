@@ -127,8 +127,8 @@ function EvaluationModal({ athletes, evaluation, onClose, onSaved }: { athletes:
       window.alert(error instanceof Error ? error.message : "Não foi possível salvar.");
     } finally { setSaving(false); }
   }
-  return <div className="modal-backdrop" onMouseDown={onClose}><div className="evaluation-modal" onMouseDown={(event) => event.stopPropagation()}>
-    <header><div><span className="eyebrow">AVALIAÇÃO ESPORTIVA</span><h2>{evaluation ? "Editar avaliação" : "Nova avaliação"}</h2><p>Use a escala de 1 (inicial) a 5 (excelente).</p></div><button className="modal-close" onClick={onClose}><X size={18} strokeWidth={1.75} /></button></header>
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="evaluation-modal" role="dialog" aria-modal="true" aria-labelledby="evaluation-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+    <header><div><span className="eyebrow">AVALIAÇÃO ESPORTIVA</span><h2 id="evaluation-modal-title">{evaluation ? "Editar avaliação" : "Nova avaliação"}</h2><p>Use a escala de 1 (inicial) a 5 (excelente).</p></div><button className="modal-close" onClick={onClose} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button></header>
     <form onSubmit={submit}>
       <div className="form-row"><label>Atleta<select name="athleteId" required defaultValue={evaluation?.athleteId ?? ""}><option value="" disabled>Selecione</option>{athletes.map((athlete) => <option key={athlete.id} value={athlete.id}>{athlete.name} · {athlete.category}</option>)}</select></label><label>Data<input name="evaluationDate" type="date" required defaultValue={evaluation?.evaluationDate ?? new Date().toISOString().slice(0, 10)} /></label></div>
       <div className="score-grid">{(["technicalScore", "physicalScore", "tacticalScore", "behavioralScore"] as const).map((name, index) => <label key={name}>{["Técnica", "Física", "Tática", "Comportamento"][index]}<select name={name} defaultValue={evaluation?.[name] ?? 3}>{[1,2,3,4,5].map((score) => <option key={score} value={score}>{score} — {["","Inicial","Em desenvolvimento","Adequado","Muito bom","Excelente"][score]}</option>)}</select></label>)}</div>
