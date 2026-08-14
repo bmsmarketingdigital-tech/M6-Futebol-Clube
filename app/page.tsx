@@ -702,6 +702,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
           {section === "Visão geral" ? (
             <Dashboard
               athletes={filteredAthletes}
+              categories={categories}
               setSection={setSection}
               teams={teams}
               onAttendance={setAttendanceTeam}
@@ -983,6 +984,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
 
 function Dashboard({
   athletes,
+  categories,
   teams,
   setSection,
   onAttendance,
@@ -994,6 +996,7 @@ function Dashboard({
   userName,
 }: {
   athletes: Athlete[];
+  categories: CategoryRecord[];
   teams: TeamRecord[];
   setSection: (section: Section) => void;
   onAttendance: (team: TeamRecord) => void;
@@ -1014,6 +1017,21 @@ function Dashboard({
     (total, team) => total + team.players,
     0,
   );
+  const categoryNames = useMemo(
+    () =>
+      categories.length
+        ? categories.map((category) => category.name)
+        : Array.from(new Set(teams.map((team) => team.category))).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [categories, teams],
+  );
+  const [selectedCategory, setSelectedCategory] = useState(() => categoryNames[0] ?? "");
+  const activeCategory = categoryNames.includes(selectedCategory)
+    ? selectedCategory
+    : categoryNames[0] ?? "";
+  const quickTeams = teams
+    .filter((team) => !activeCategory || team.category === activeCategory)
+    .sort((a, b) => teamScheduleRank(a) - teamScheduleRank(b))
+    .slice(0, 4);
   const formatMoney = (cents: number) =>
     new Intl.NumberFormat("pt-BR", {
       style: "currency",
@@ -1062,14 +1080,71 @@ function Dashboard({
       </div>
 
       <section className={canViewFinance ? "metrics-grid" : "metrics-grid operator-metrics"} aria-label="Indicadores principais">
-        <Metric icon={Users} label="ATLETAS ATIVOS" value={String(athletes.length)} trend="cadastros persistentes" tone="green" />
-        <Metric icon={CheckCircle2} label="FREQUÊNCIA MÉDIA" value={`${averageAttendance}%`} trend="calculada pelas chamadas" tone="blue" />
         {canViewFinance && (
           <>
-            <Metric icon={Wallet} label="RECEITA DO MÊS" value={formatMoney(finance.receivedCents)} trend={`${finance.paidCount} pagamento(s) recebido(s)`} tone="orange" />
-            <Metric icon={AlertTriangle} label="MENSALIDADES VENCIDAS" value={String(finance.totalOverdueCount)} trend={`${formatMoney(finance.totalOverdueCents)} em atraso`} tone="red" negative />
+            <Metric icon={Wallet} label="A RECEBER" value={formatMoney(finance.openCents)} trend={`${finance.openCount} mensalidade(s) em aberto`} tone="orange" />
+            <Metric icon={AlertTriangle} label="ATRASADO" value={formatMoney(finance.totalOverdueCents)} trend={`${finance.totalOverdueCount} mensalidade(s) vencida(s)`} tone="red" negative />
+            <Metric icon={Wallet} label="RECEBIDO NO MÊS" value={formatMoney(finance.receivedCents)} trend={`${finance.paidCount} pagamento(s) recebido(s)`} tone="green" />
           </>
         )}
+        <Metric icon={Users} label="CLIENTES / ATLETAS" value={String(athletes.length)} trend="cadastros ativos" tone="green" />
+        <Metric icon={CheckCircle2} label="FREQUÊNCIA MÉDIA" value={`${averageAttendance}%`} trend="calculada pelas chamadas" tone="blue" />
+      </section>
+
+      <section className="quick-mobile-panel" aria-label="Menu rápido">
+        <button onClick={() => setSection("Atletas")}>
+          <Users size={18} strokeWidth={1.8} />
+          <span><strong>Clientes</strong><small>Ver e cadastrar atletas</small></span>
+        </button>
+        <button onClick={() => setSection("Turmas")}>
+          <LayoutGrid size={18} strokeWidth={1.8} />
+          <span><strong>Categorias</strong><small>Turmas por categoria</small></span>
+        </button>
+        {canViewFinance && (
+          <button onClick={() => setSection("Mensalidades")}>
+            <Wallet size={18} strokeWidth={1.8} />
+            <span><strong>Financeiro</strong><small>Mensalidades e atrasos</small></span>
+          </button>
+        )}
+      </section>
+
+      <section className="card quick-call-card">
+        <CardHeader title="Chamada rápida" subtitle="Selecione a categoria e escolha a turma" action="Ver todas" onAction={() => setSection("Turmas")} />
+        <div className="quick-category-tabs">
+          {categoryNames.map((category) => (
+            <button
+              key={category}
+              type="button"
+              className={category === activeCategory ? "active" : ""}
+              onClick={() => setSelectedCategory(category)}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+        <div className="quick-team-list">
+          {quickTeams.map((team) => (
+            <button
+              key={team.id}
+              type="button"
+              className="quick-team-card"
+              onClick={() => team.players > 0 ? onAttendance(team) : onOpenTeam(team)}
+            >
+              <span className="quick-team-time">{team.startTime}</span>
+              <span className="quick-team-copy">
+                <strong>{team.category} · {team.place}</strong>
+                <small>{team.scheduleDays.join(" · ")} · {team.coachName} · {team.players} atletas</small>
+              </span>
+              <b>{team.players > 0 ? "Chamada" : "Montar"}</b>
+            </button>
+          ))}
+          {quickTeams.length === 0 && (
+            <div className="agenda-empty">
+              <strong>Nenhuma turma nesta categoria</strong>
+              <small>Cadastre ou ajuste uma turma para iniciar chamadas.</small>
+            </div>
+          )}
+        </div>
       </section>
 
       <section className={canViewFinance ? "dashboard-grid" : "dashboard-grid operator-dashboard-grid"}>
