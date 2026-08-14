@@ -1,9 +1,10 @@
 import { createLocalSession, listUserOrganizations, verifyLocalCredentials } from "../../local-auth";
+import { postgresConfigured } from "../../../../db/postgres";
 
 export async function POST(request: Request) {
   try {
     const hostname = new URL(request.url).hostname;
-    if (hostname !== "localhost" && hostname !== "127.0.0.1") {
+    if (hostname !== "localhost" && hostname !== "127.0.0.1" && !postgresConfigured()) {
       return Response.json({ error: "Login local indisponível." }, { status: 403 });
     }
 
