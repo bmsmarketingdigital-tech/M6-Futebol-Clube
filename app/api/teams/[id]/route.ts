@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getD1, getDb } from "../../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../../db/postgres";
 import { athletes, teamAthletes, teams } from "../../../../db/schema";
 import { getApiContext } from "../../api-auth";
 import { isValidCategory } from "../../categories/category-utils";
@@ -40,8 +41,126 @@ export async function PATCH(
         { status: 400 },
       );
     }
-    const db = getDb();
     const organizationId = context.membership.organizationId;
+    if (postgresConfigured()) {
+      const sql = getPostgresClient();
+      const [current] = await sql<{
+        id: string;
+        name: string;
+        category: string;
+        coach_name: string | null;
+        schedule_days: string;
+        start_time: string;
+        end_time: string;
+        place: string;
+        capacity: number;
+      }[]>`
+        SELECT id, name, category, coach_name, schedule_days,
+               start_time, end_time, place, capacity
+        FROM teams
+        WHERE id = ${id}
+          AND organization_id = ${organizationId}
+          AND active = 1
+        LIMIT 1
+      `;
+      if (!current) {
+        return Response.json({ error: "Turma nÃ£o encontrada." }, { status: 404 });
+      }
+
+      if (value.athleteIds.length > 0) {
+        const validAthletes = await sql<{ id: string; category: string }[]>`
+          SELECT id, category
+          FROM athletes
+          WHERE organization_id = ${organizationId}
+            AND active = 1
+            AND id = ANY(${value.athleteIds})
+        `;
+        if (validAthletes.length !== value.athleteIds.length) {
+          return Response.json(
+            { error: "Um ou mais atletas selecionados nÃ£o sÃ£o vÃ¡lidos." },
+            { status: 400 },
+          );
+        }
+        if (validAthletes.some((athlete) => athlete.category !== value.category)) {
+          return Response.json(
+            {
+              error:
+                "Um ou mais atletas selecionados sÃ£o de categoria diferente da turma.",
+            },
+            { status: 409 },
+          );
+        }
+      }
+
+      const scheduleDays = JSON.stringify(value.scheduleDays);
+      const now = Math.floor(Date.now() / 1000);
+      const updated = await sql.begin(async (transaction) => {
+        const [locked] = await transaction<{ id: string }[]>`
+          SELECT id
+          FROM teams
+          WHERE id = ${id}
+            AND organization_id = ${organizationId}
+            AND active = 1
+          FOR UPDATE
+        `;
+        if (!locked) return null;
+
+        await transaction`
+          UPDATE team_athletes
+          SET active = 0
+          WHERE team_id = ${id}
+            AND organization_id = ${organizationId}
+        `;
+
+        for (const athleteId of value.athleteIds) {
+          await transaction`
+            INSERT INTO team_athletes
+              (organization_id, team_id, athlete_id, active, enrolled_at)
+            VALUES (${organizationId}, ${id}, ${athleteId}, 1, ${now})
+            ON CONFLICT (team_id, athlete_id) DO UPDATE SET
+              organization_id = EXCLUDED.organization_id,
+              active = 1,
+              enrolled_at = EXCLUDED.enrolled_at
+          `;
+        }
+
+        const [row] = await transaction<{
+          id: string;
+          name: string;
+          category: string;
+          coach_name: string | null;
+          schedule_days: string;
+          start_time: string;
+          end_time: string;
+          place: string;
+          capacity: number;
+        }[]>`
+          UPDATE teams
+          SET name = ${value.name},
+              category = ${value.category},
+              coach_name = ${value.coachName},
+              schedule_days = ${scheduleDays},
+              start_time = ${value.startTime},
+              end_time = ${value.endTime},
+              place = ${value.place},
+              capacity = ${value.capacity}
+          WHERE id = ${id}
+            AND organization_id = ${organizationId}
+            AND active = 1
+          RETURNING id, name, category, coach_name, schedule_days,
+                    start_time, end_time, place, capacity
+        `;
+        return row;
+      });
+
+      if (!updated) {
+        return Response.json({ error: "Turma nÃ£o encontrada." }, { status: 404 });
+      }
+
+      return Response.json({ team: teamToDto(updated, value.athleteIds) });
+    }
+
+    const db = getDb();
     const [current] = await db
       .select()
       .from(teams)
@@ -194,6 +313,35 @@ export async function DELETE(
     }
 
     const { id } = await params;
+    const organizationId = context.membership.organizationId;
+    if (postgresConfigured()) {
+      const sql = getPostgresClient();
+      const archived = await sql.begin(async (transaction) => {
+        const [row] = await transaction<{ id: string }[]>`
+          UPDATE teams
+          SET active = 0
+          WHERE id = ${id}
+            AND organization_id = ${organizationId}
+            AND active = 1
+          RETURNING id
+        `;
+        if (!row) return null;
+        await transaction`
+          UPDATE team_athletes
+          SET active = 0
+          WHERE team_id = ${id}
+            AND organization_id = ${organizationId}
+        `;
+        return row;
+      });
+
+      if (!archived) {
+        return Response.json({ error: "Turma nÃ£o encontrada." }, { status: 404 });
+      }
+
+      return Response.json({ archived: true, id: archived.id });
+    }
+
     const db = getDb();
     const [archived] = await db
       .update(teams)
@@ -201,7 +349,7 @@ export async function DELETE(
       .where(
         and(
           eq(teams.id, id),
-          eq(teams.organizationId, context.membership.organizationId),
+          eq(teams.organizationId, organizationId),
           eq(teams.active, true),
         ),
       )
@@ -219,7 +367,7 @@ export async function DELETE(
           eq(teamAthletes.teamId, id),
           eq(
             teamAthletes.organizationId,
-            context.membership.organizationId,
+            organizationId,
           ),
         ),
       );

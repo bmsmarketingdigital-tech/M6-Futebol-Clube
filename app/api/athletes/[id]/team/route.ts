@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getD1, getDb } from "../../../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../../../db/postgres";
 import { athletes, teamAthletes, teams } from "../../../../../db/schema";
 import { getApiContext } from "../../../api-auth";
 
@@ -28,8 +29,121 @@ export async function PATCH(
         ? payload.teamId.trim()
         : null;
 
-    const db = getDb();
     const organizationId = context.membership.organizationId;
+    if (postgresConfigured()) {
+      const sql = getPostgresClient();
+      const [athlete] = await sql<{ id: string; category: string }[]>`
+        SELECT id, category
+        FROM athletes
+        WHERE id = ${id}
+          AND organization_id = ${organizationId}
+          AND active = 1
+        LIMIT 1
+      `;
+      if (!athlete) {
+        return Response.json({ error: "Atleta nÃ£o encontrado." }, { status: 404 });
+      }
+
+      const [currentMembership] = await sql<{ team_id: string }[]>`
+        SELECT team_id
+        FROM team_athletes
+        WHERE athlete_id = ${id}
+          AND organization_id = ${organizationId}
+          AND active = 1
+        LIMIT 1
+      `;
+      const currentTeamId = currentMembership?.team_id ?? null;
+
+      if (currentTeamId === requestedTeamId) {
+        return Response.json({ teamId: currentTeamId });
+      }
+
+      if (!requestedTeamId) {
+        await sql`
+          UPDATE team_athletes
+          SET active = 0
+          WHERE athlete_id = ${id}
+            AND organization_id = ${organizationId}
+            AND active = 1
+        `;
+        return Response.json({ teamId: null });
+      }
+
+      const result = await sql.begin(async (transaction) => {
+        const [targetTeam] = await transaction<{
+          id: string;
+          category: string;
+          capacity: number;
+        }[]>`
+          SELECT id, category, capacity
+          FROM teams
+          WHERE id = ${requestedTeamId}
+            AND organization_id = ${organizationId}
+            AND active = 1
+          FOR UPDATE
+        `;
+        if (!targetTeam) return { error: "NOT_FOUND" as const };
+        if (targetTeam.category !== athlete.category) {
+          return { error: "CATEGORY_MISMATCH" as const };
+        }
+
+        const [currentEnrollments] = await transaction<{ value: number }[]>`
+          SELECT COUNT(*)::int AS value
+          FROM team_athletes
+          WHERE team_id = ${requestedTeamId}
+            AND organization_id = ${organizationId}
+            AND active = 1
+        `;
+        if ((currentEnrollments?.value ?? 0) >= targetTeam.capacity) {
+          return { error: "CAPACITY" as const };
+        }
+
+        const now = Math.floor(Date.now() / 1000);
+        if (currentTeamId) {
+          await transaction`
+            UPDATE team_athletes
+            SET active = 0
+            WHERE athlete_id = ${id}
+              AND organization_id = ${organizationId}
+              AND team_id = ${currentTeamId}
+              AND active = 1
+          `;
+        }
+        await transaction`
+          INSERT INTO team_athletes
+            (organization_id, team_id, athlete_id, active, enrolled_at)
+          VALUES (${organizationId}, ${requestedTeamId}, ${id}, 1, ${now})
+          ON CONFLICT (team_id, athlete_id) DO UPDATE SET
+            organization_id = EXCLUDED.organization_id,
+            active = 1,
+            enrolled_at = EXCLUDED.enrolled_at
+        `;
+        return { teamId: requestedTeamId };
+      });
+
+      if ("error" in result) {
+        if (result.error === "NOT_FOUND") {
+          return Response.json({ error: "Turma nÃ£o encontrada." }, { status: 404 });
+        }
+        if (result.error === "CATEGORY_MISMATCH") {
+          return Response.json(
+            {
+              error:
+                "A turma selecionada Ã© de categoria diferente da categoria atual do atleta.",
+            },
+            { status: 409 },
+          );
+        }
+        return Response.json(
+          { error: "A turma selecionada atingiu a capacidade." },
+          { status: 409 },
+        );
+      }
+
+      return Response.json({ teamId: result.teamId });
+    }
+
+    const db = getDb();
 
     const [athlete] = await db
       .select({ id: athletes.id, category: athletes.category })

@@ -89,12 +89,36 @@ export function normalizeTeamPayload(payload: TeamPayload) {
 }
 
 export function teamToDto(
-  team: typeof teams.$inferSelect,
+  team: typeof teams.$inferSelect | {
+    id: string;
+    name: string;
+    category: string;
+    coach_name: string | null;
+    schedule_days: string;
+    start_time: string;
+    end_time: string;
+    place: string;
+    capacity: number;
+  },
   athleteIds: string[],
 ) {
+  const normalized =
+    "scheduleDays" in team
+      ? team
+      : {
+          id: team.id,
+          name: team.name,
+          category: team.category,
+          coachName: team.coach_name,
+          scheduleDays: team.schedule_days,
+          startTime: team.start_time,
+          endTime: team.end_time,
+          place: team.place,
+          capacity: team.capacity,
+        };
   let scheduleDays: string[] = [];
   try {
-    const parsed = JSON.parse(team.scheduleDays) as unknown;
+    const parsed = JSON.parse(normalized.scheduleDays) as unknown;
     if (Array.isArray(parsed)) {
       scheduleDays = parsed.filter((day): day is string => typeof day === "string");
     }
@@ -113,16 +137,16 @@ export function teamToDto(
 
   return {
     id: team.id,
-    name: team.name,
-    category: team.category,
-    coachName: team.coachName ?? "",
+    name: normalized.name,
+    category: normalized.category,
+    coachName: normalized.coachName ?? "",
     scheduleDays,
-    startTime: team.startTime,
-    endTime: team.endTime,
-    place: team.place,
-    capacity: team.capacity,
+    startTime: normalized.startTime,
+    endTime: normalized.endTime,
+    place: normalized.place,
+    capacity: normalized.capacity,
     athleteIds,
     players: athleteIds.length,
-    color: colorByCategory[team.category] ?? "green",
+    color: colorByCategory[normalized.category] ?? "green",
   };
 }
