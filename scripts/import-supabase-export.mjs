@@ -28,6 +28,7 @@ if (payload.format !== "m6-supabase-export-v1") {
 }
 
 const sql = postgres(requireEnv("DATABASE_URL"), {
+  connect_timeout: 15,
   max: 1,
   prepare: false,
   ssl: "require",
@@ -38,10 +39,15 @@ const summary = {};
 
 try {
   await sql.begin(async (tx) => {
+    await tx`set local statement_timeout = '15s'`;
     for (const table of payload.tableOrder) {
       const rows = payload.tables[table] || [];
       summary[table] = { expected: rows.length, inserted: 0 };
-      if (!rows.length) continue;
+      console.error(`[supabase:import] ${dryRun ? "dry-run " : ""}tabela ${table}: ${rows.length} registro(s)`);
+      if (!rows.length) {
+        console.error(`[supabase:import] tabela ${table}: vazia, pulando`);
+        continue;
+      }
 
       const columns = Object.keys(rows[0]);
       const columnSql = columns.map(quoteIdentifier).join(", ");
@@ -52,6 +58,7 @@ try {
         await tx.unsafe(statement, columns.map((column) => row[column]));
         summary[table].inserted += 1;
       }
+      console.error(`[supabase:import] tabela ${table}: ${summary[table].inserted}/${rows.length}`);
     }
 
     if (dryRun) {
