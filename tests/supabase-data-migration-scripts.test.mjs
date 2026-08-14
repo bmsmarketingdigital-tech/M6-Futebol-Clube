@@ -35,6 +35,12 @@ test("import script requires DATABASE_URL and uses a transaction", () => {
   assert.match(source, /ssl:\s*"require"/);
 });
 
+test("import dry-run executes inside the transaction and then rolls back", () => {
+  const source = read("scripts/import-supabase-export.mjs");
+  assert.doesNotMatch(source, /if\s*\(!dryRun\)\s*{\s*await tx\.unsafe/s);
+  assert.match(source, /__M6_DRY_RUN_ROLLBACK__/);
+});
+
 test("package scripts expose controlled Supabase export/import commands", () => {
   const pkg = JSON.parse(read("package.json"));
   assert.equal(pkg.scripts["supabase:export"], "node scripts/export-sqlite-for-supabase.mjs");

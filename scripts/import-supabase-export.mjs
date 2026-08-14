@@ -49,9 +49,7 @@ try {
       const statement = `INSERT INTO ${quoteIdentifier(table)} (${columnSql}) VALUES (${valuesSql}) ON CONFLICT DO NOTHING`;
 
       for (const row of rows) {
-        if (!dryRun) {
-          await tx.unsafe(statement, columns.map((column) => row[column]));
-        }
+        await tx.unsafe(statement, columns.map((column) => row[column]));
         summary[table].inserted += 1;
       }
     }
