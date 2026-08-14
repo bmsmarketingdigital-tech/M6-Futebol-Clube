@@ -1,14 +1,14 @@
-import { env } from "cloudflare:workers";
 import { getDb } from "../../../../../db";
 import { organizations } from "../../../../../db/schema";
 import { runBillingAutomation } from "../../../finance/billing-automation";
 import { NotificationOrigin } from "../../../notifications/outbox";
 import { processClassReminders } from "../../../reminders/service";
+import { getRuntimeEnv } from "../../../runtime-env";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const runtime = env as unknown as Record<string, string | undefined>;
+  const runtime = getRuntimeEnv();
   const authorization = request.headers.get("authorization");
   if (
     !runtime.WHATSAPP_BRIDGE_TOKEN ||

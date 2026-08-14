@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import { getD1 } from "../../../../db";
 import { getApiContext } from "../../api-auth";
 import {
@@ -17,6 +16,7 @@ import {
   validateFinancialTestRequest,
 } from "../financial-test";
 import { enqueueNotification, processNotificationQueue } from "../outbox";
+import { getRuntimeEnv } from "../../runtime-env";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     runId?: unknown;
     confirmation?: unknown;
   };
-  const runtime = env as unknown as Record<string, string | undefined>;
+  const runtime = getRuntimeEnv();
   const validation = validateFinancialTestRequest({
     ...body,
     configuration: readFinancialTestConfiguration(runtime),

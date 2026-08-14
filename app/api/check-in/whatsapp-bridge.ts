@@ -1,10 +1,10 @@
-import { env } from "cloudflare:workers";
 import {
   evolutionConfigured,
   sendEvolutionWhatsAppMessage,
 } from "./evolution-provider";
+import { getRuntimeEnv } from "../runtime-env";
 
-const runtime = env as unknown as Record<string, string | undefined>;
+const runtime = getRuntimeEnv();
 
 class WhatsAppBridgeError extends Error {
   constructor(message: string, readonly deliveryUnknown: boolean) {

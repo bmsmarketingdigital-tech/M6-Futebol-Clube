@@ -1,11 +1,23 @@
-import { env } from "cloudflare:workers";
+type FilesBucket = {
+  get: (key: string) => Promise<unknown>;
+  put: (key: string, value: unknown, options?: unknown) => Promise<unknown>;
+  delete: (key: string) => Promise<unknown>;
+};
 
-export function getFilesBucket(): R2Bucket {
-  const runtimeEnv = env as typeof env & { FILES?: R2Bucket };
-  if (!runtimeEnv.FILES) {
+function readRuntimeFilesBucket() {
+  if (typeof globalThis === "undefined") return undefined;
+  const runtime = globalThis as typeof globalThis & {
+    __env?: { FILES?: FilesBucket };
+  };
+  return runtime.__env?.FILES;
+}
+
+export function getFilesBucket(): FilesBucket {
+  const bucket = readRuntimeFilesBucket();
+  if (!bucket) {
     throw new Error(
-      "O armazenamento local de arquivos está indisponível. Reinicie o sistema e tente novamente.",
+      "O armazenamento de arquivos ainda nÃ£o estÃ¡ configurado neste ambiente.",
     );
   }
-  return runtimeEnv.FILES;
+  return bucket;
 }

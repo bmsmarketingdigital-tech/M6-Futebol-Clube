@@ -1,9 +1,9 @@
-import { env } from "cloudflare:workers";
 import { getD1 } from "../../../db";
 import {
   getWhatsAppBridgeStatus,
   sendWhatsAppMessage,
 } from "../check-in/whatsapp-bridge";
+import { getRuntimeEnv } from "../runtime-env";
 
 export type NotificationOrigin =
   | "startup"
@@ -64,7 +64,7 @@ function boundedInteger(value: string | undefined, fallback: number, minimum: nu
 }
 
 export function readFinancialDispatchPolicy(
-  runtime = env as unknown as Record<string, string | undefined>,
+  runtime = getRuntimeEnv(),
 ) {
   return {
     maxPerRun: boundedInteger(runtime.WHATSAPP_FINANCIAL_MAX_PER_RUN, DEFAULT_MAX_PER_RUN, 1, ABSOLUTE_MAX_BATCH),

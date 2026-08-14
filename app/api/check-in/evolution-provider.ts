@@ -1,6 +1,6 @@
-import { env } from "cloudflare:workers";
+import { getRuntimeEnv } from "../runtime-env";
 
-const runtime = env as unknown as Record<string, string | undefined>;
+const runtime = getRuntimeEnv();
 
 type EvolutionConfig = {
   apiKey: string;

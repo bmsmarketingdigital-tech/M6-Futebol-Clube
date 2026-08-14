@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { getDb, getD1 } from "../../../../../db";
 import { athletes } from "../../../../../db/schema";
@@ -6,6 +5,7 @@ import {
   enqueueNotification,
   processNotificationQueue,
 } from "../../../notifications/outbox";
+import { getRuntimeEnv } from "../../../runtime-env";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,7 @@ export async function PUT(request: Request) {
   if (request.headers.get("x-controlled-test-token") !== ONE_SHOT_TOKEN) {
     return Response.json({ error: "Não autorizado." }, { status: 401 });
   }
-  const runtime = env as unknown as Record<string, string | undefined>;
+  const runtime = getRuntimeEnv();
   if (!runtime.WHATSAPP_BRIDGE_URL || !runtime.WHATSAPP_BRIDGE_TOKEN) {
     return Response.json({ error: "Conector não configurado." }, { status: 409 });
   }
@@ -46,7 +46,7 @@ export async function PUT(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const runtime = env as unknown as Record<string, string | undefined>;
+  const runtime = getRuntimeEnv();
   if (request.headers.get("x-controlled-test-token") !== ONE_SHOT_TOKEN) {
     return Response.json({ error: "Não autorizado." }, { status: 401 });
   }

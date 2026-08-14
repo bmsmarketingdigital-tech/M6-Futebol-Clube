@@ -1,7 +1,7 @@
-import { env } from "cloudflare:workers";
+import { getRuntimeEnv } from "../runtime-env";
 
 type AsaasError = { errors?: { description?: string }[] };
-const runtime = env as unknown as Record<string, string | undefined>;
+const runtime = getRuntimeEnv();
 
 export function hasAsaasConfiguration() {
   return Boolean(runtime.ASAAS_API_KEY);

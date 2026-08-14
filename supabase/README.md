@@ -5,8 +5,10 @@ Esta pasta inicia a evolução do sistema M6 Futebol Clube para Vercel + Supabas
 Estado atual:
 
 - O runtime principal ainda usa SQLite/D1 local.
+- A migration base para Postgres/Supabase está em `supabase/migrations/0001_initial_schema.sql`.
+- A primeira base de runtime em nuvem existe em `db/postgres.ts`.
+- O endpoint `GET /api/cloud/health` valida configuração Supabase/Evolution sem expor segredos.
 - Esta migration não deve ser aplicada automaticamente pelo app local.
-- O objetivo é preparar o banco Postgres/Supabase antes de trocar o runtime.
 - O envio WhatsApp em nuvem será feito via Evolution API, mantendo a fila segura `notification_outbox` + `notification_attempts`.
 
 Ordem segura recomendada:
@@ -15,7 +17,7 @@ Ordem segura recomendada:
 2. Exportar dados do SQLite oficial.
 3. Importar dados no Supabase em ambiente de teste.
 4. Validar contagens e invariantes financeiros.
-5. Criar uma camada de acesso a banco selecionável por ambiente.
+5. Migrar as rotas do backend de `getD1()`/Drizzle SQLite para Postgres/Supabase por grupos funcionais.
 6. Rodar o sistema web contra Supabase em modo staging.
 7. Configurar `EVOLUTION_API_URL`, `EVOLUTION_API_KEY` e `EVOLUTION_API_INSTANCE` na Vercel.
 8. Fazer preflight sem envio.
@@ -25,6 +27,9 @@ Variáveis esperadas na Vercel:
 
 ```txt
 DATABASE_URL=
+SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
 EVOLUTION_API_URL=
 EVOLUTION_API_KEY=
 EVOLUTION_API_INSTANCE=
@@ -35,6 +40,13 @@ WHATSAPP_FINANCIAL_MAX_PER_RUN=5
 WHATSAPP_FINANCIAL_MIN_INTERVAL_MS=3000
 ```
 
+Não exponha `DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `EVOLUTION_API_KEY`,
+`ASAAS_API_KEY` nem `ASAAS_WEBHOOK_TOKEN` no frontend. Use somente variáveis
+server-side, exceto `NEXT_PUBLIC_SUPABASE_URL`, que não é segredo.
+
 Observação importante:
 
-O schema mantém campos de data operacional como `bigint` quando hoje são `integer` Unix timestamp no SQLite. Isso evita conversão prematura e reduz risco na primeira migração. Uma limpeza posterior pode transformar esses campos em `timestamptz`, mas não é o primeiro passo seguro.
+O schema mantém campos de data operacional como `bigint` quando hoje são
+`integer` Unix timestamp no SQLite. Isso evita conversão prematura e reduz
+risco na primeira migração. Uma limpeza posterior pode transformar esses campos
+em `timestamptz`, mas não é o primeiro passo seguro.
