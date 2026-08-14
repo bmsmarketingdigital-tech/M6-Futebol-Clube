@@ -23,6 +23,19 @@ Ordem segura recomendada:
 8. Fazer preflight sem envio.
 9. Só depois liberar envio real.
 
+Comandos locais de migração:
+
+```powershell
+npm run supabase:export
+$env:DATABASE_URL="postgresql://..."
+npm run supabase:import -- --input=backups/supabase-export/m6-supabase-export.json
+npm run supabase:verify -- --input=backups/supabase-export/m6-supabase-export.json
+```
+
+Use `supabase:verify` imediatamente depois da importação. Ele compara as
+contagens exportadas com as contagens no Postgres e destaca tabelas financeiras
+e de notificação como críticas.
+
 Variáveis esperadas na Vercel:
 
 ```txt

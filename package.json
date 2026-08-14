@@ -17,6 +17,7 @@
     "db:generate": "drizzle-kit generate",
     "supabase:export": "node scripts/export-sqlite-for-supabase.mjs",
     "supabase:import": "node scripts/import-supabase-export.mjs",
+    "supabase:verify": "node scripts/verify-supabase-import.mjs",
     "desktop": "electron .",
     "desktop:dir": "npm run build && electron-builder --dir --win",
     "desktop:build": "npm run build && electron-builder --win nsis"
