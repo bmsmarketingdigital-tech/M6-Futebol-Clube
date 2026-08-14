@@ -1,4 +1,5 @@
 import vinext from "vinext";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 const LOCAL_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
@@ -39,6 +40,11 @@ const localBindingConfig = {
 };
 
 export default defineConfig(async () => {
+  const isVercelBuild = Boolean(process.env.VERCEL || process.env.NITRO_PRESET);
+  if (isVercelBuild) {
+    process.env.NITRO_PRESET ??= "vercel";
+  }
+
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
   process.env.WRANGLER_WRITE_LOGS ??= "false";
@@ -46,10 +52,19 @@ export default defineConfig(async () => {
   process.env.MINIFLARE_REGISTRY_PATH ??= ".wrangler/registry";
 
   // Wrangler snapshots its log path while the Cloudflare plugin is imported.
-  const { cloudflare } = await import("@cloudflare/vite-plugin");
+  // Vercel builds use Nitro and must not load Cloudflare's D1 runtime module.
+  const cloudflarePlugin = isVercelBuild ? null : await import("@cloudflare/vite-plugin");
+  const nitroPlugin = isVercelBuild ? await import("nitro/vite") : null;
 
   return {
     cacheDir: process.env.BASEFORTE_CACHE_DIR,
+    resolve: {
+      alias: isVercelBuild
+        ? {
+            "cloudflare:workers": "/db/cloudflare-workers-stub.ts",
+          }
+        : {},
+    },
     server: {
       watch: {
         // O estado local do D1/R2 (Wrangler/Miniflare) fica em .wrangler/state
@@ -63,14 +78,17 @@ export default defineConfig(async () => {
       },
     },
     plugins: [
+      tailwindcss(),
       vinext(),
-      cloudflare({
-        persistState: desktopStatePath
-          ? { path: desktopStatePath }
-          : undefined,
-        viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
-        config: localBindingConfig,
-      }),
+      isVercelBuild
+        ? nitroPlugin!.nitro()
+        : cloudflarePlugin!.cloudflare({
+            persistState: desktopStatePath
+              ? { path: desktopStatePath }
+              : undefined,
+            viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
+            config: localBindingConfig,
+          }),
     ],
   };
 });
