@@ -16,6 +16,7 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "supabase:export": "node scripts/export-sqlite-for-supabase.mjs",
+    "supabase:check-schema": "node scripts/check-supabase-schema-compat.mjs",
     "supabase:import": "node scripts/import-supabase-export.mjs",
     "supabase:verify": "node scripts/verify-supabase-import.mjs",
     "desktop": "electron .",
