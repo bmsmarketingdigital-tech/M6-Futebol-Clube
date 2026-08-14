@@ -377,6 +377,77 @@ select option { background: #ffffff; color: #1a1917; }
 .login-card > button:disabled { opacity: .65; cursor: wait; }
 .login-error { margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: var(--danger-subtle); color: var(--danger); font-size: 13px; font-weight: 700; }
 .login-card footer { margin-top: 18px; color: var(--text-tertiary); font-size: 11px; text-align: center; }
+.unit-picker-card {
+  width: min(520px, 100%);
+}
+.unit-card-grid {
+  display: grid;
+  gap: 13px;
+}
+.unit-card {
+  width: 100%;
+  min-height: 92px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(248, 42, 54, .12), transparent 54%),
+    var(--surface-2);
+  color: var(--text-primary);
+  text-align: left;
+  box-shadow: var(--shadow-xs);
+  transition:
+    transform var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+.unit-card:hover,
+.unit-card:focus-visible {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+}
+.unit-card:disabled {
+  opacity: .7;
+  cursor: wait;
+}
+.unit-card-icon {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: var(--green);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 900;
+  box-shadow: 0 14px 34px rgba(217, 15, 42, .22);
+}
+.unit-card strong,
+.unit-card small {
+  display: block;
+}
+.unit-card strong {
+  font-size: 17px;
+  letter-spacing: -.25px;
+}
+.unit-card small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.login-card > .unit-back-button {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  box-shadow: none;
+}
 
 .sidebar-profile { position: relative; }
 .profile-menu {

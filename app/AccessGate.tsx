@@ -18,6 +18,30 @@ type AccessState =
   | { status: "anonymous"; user: null; needsSetup: boolean }
   | { status: "authenticated"; user: SessionUser; needsSetup: false };
 
+type LoginOrganization = { id: string; name: string };
+type PendingLogin = {
+  username: string;
+  password: string;
+  rememberMe: boolean;
+};
+
+function unitCardTitle(organization: LoginOrganization, index: number) {
+  const normalized = organization.name
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+  if (normalized.includes("tenis")) return "Unidade Tênis Clube";
+  if (normalized.includes("condominio") || normalized.includes("condom")) return "Unidade Condomínio";
+  return index === 0 ? "Unidade Tênis Clube" : index === 1 ? "Unidade Condomínio" : organization.name;
+}
+
+function unitCardHint(organization: LoginOrganization, index: number) {
+  const title = unitCardTitle(organization, index);
+  if (title.includes("Tênis")) return "Alunos, turmas e financeiro da unidade Tênis Clube.";
+  if (title.includes("Condomínio")) return "Alunos, turmas e financeiro da unidade Condomínio.";
+  return "Acessar os cadastros separados desta unidade.";
+}
+
 export function AccessGate({
   children,
 }: {
@@ -34,7 +58,8 @@ export function AccessGate({
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [recoveryError, setRecoveryError] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
-  const [organizations, setOrganizations] = useState<{ id: string; name: string }[]>([]);
+  const [organizations, setOrganizations] = useState<LoginOrganization[]>([]);
+  const [pendingLogin, setPendingLogin] = useState<PendingLogin | null>(null);
   const [savedUsername, setSavedUsername] = useState(() =>
     typeof window === "undefined"
       ? ""
@@ -85,6 +110,8 @@ export function AccessGate({
       ? "/api/auth/setup"
       : "/api/auth/login";
     const username = String(form.get("username") || "").trim();
+    const password = String(form.get("password") || "");
+    const shouldRemember = form.get("rememberMe") === "on";
     try {
       const response = await fetch(endpoint, {
         method: "POST",
@@ -92,9 +119,8 @@ export function AccessGate({
         body: JSON.stringify({
           displayName: String(form.get("displayName") || ""),
           username,
-          password: String(form.get("password") || ""),
-          rememberMe: form.get("rememberMe") === "on",
-          organizationId: String(form.get("organizationId") || "") || undefined,
+          password,
+          rememberMe: shouldRemember,
         }),
       });
       const responseText = await response.text();
@@ -106,15 +132,16 @@ export function AccessGate({
       }
       if (payload.requiresOrganization && payload.organizations?.length) {
         setOrganizations(payload.organizations);
-        setError("Selecione a organização que deseja acessar.");
+        setPendingLogin({ username, password, rememberMe: shouldRemember });
+        setError("");
         return;
       }
       if (!response.ok || !payload.user) throw new Error(payload.error || "Não foi possível entrar.");
-      if (form.get("rememberMe") === "on") {
+      if (shouldRemember) {
         window.localStorage.setItem("m6_remembered_username", username);
-        window.localStorage.setItem("m6_remembered_password", String(form.get("password") || ""));
+        window.localStorage.setItem("m6_remembered_password", password);
         setSavedUsername(username);
-        setSavedPassword(String(form.get("password") || ""));
+        setSavedPassword(password);
       } else {
         window.localStorage.removeItem("m6_remembered_username");
         window.localStorage.removeItem("m6_remembered_password");
@@ -129,8 +156,60 @@ export function AccessGate({
     }
   }
 
+  async function chooseOrganization(organizationId: string) {
+    if (!pendingLogin) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: pendingLogin.username,
+          password: pendingLogin.password,
+          rememberMe: pendingLogin.rememberMe,
+          organizationId,
+        }),
+      });
+      const responseText = await response.text();
+      let payload: { user?: SessionUser; error?: string } = {};
+      try {
+        payload = responseText ? (JSON.parse(responseText) as typeof payload) : {};
+      } catch {
+        throw new Error(`O servidor retornou uma resposta inválida (${response.status}).`);
+      }
+      if (!response.ok || !payload.user) throw new Error(payload.error || "Não foi possível entrar nesta unidade.");
+      if (pendingLogin.rememberMe) {
+        window.localStorage.setItem("m6_remembered_username", pendingLogin.username);
+        window.localStorage.setItem("m6_remembered_password", pendingLogin.password);
+        setSavedUsername(pendingLogin.username);
+        setSavedPassword(pendingLogin.password);
+      } else {
+        window.localStorage.removeItem("m6_remembered_username");
+        window.localStorage.removeItem("m6_remembered_password");
+        setSavedUsername("");
+        setSavedPassword("");
+      }
+      setOrganizations([]);
+      setPendingLogin(null);
+      setAccess({ status: "authenticated", user: payload.user, needsSetup: false });
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Não foi possível entrar nesta unidade.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function backToLogin() {
+    setOrganizations([]);
+    setPendingLogin(null);
+    setError("");
+  }
+
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });
+    setOrganizations([]);
+    setPendingLogin(null);
     setAccess({ status: "anonymous", user: null, needsSetup: false });
   }
 
@@ -182,6 +261,53 @@ export function AccessGate({
 
   if (access.status === "anonymous") {
     const setup = access.needsSetup;
+    if (!setup && pendingLogin && organizations.length > 0) {
+      return (
+        <main className="login-screen">
+          <section className="login-visual" aria-hidden="true" />
+          <section className="login-panel">
+            <div className="login-card unit-picker-card">
+              <header>
+                <span className="login-logo">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/logo.jpeg" alt="M6 Futebol Clube" />
+                </span>
+                <div>
+                  <small>M6 FUTEBOL CLUBE</small>
+                  <strong>Gestão Esportiva</strong>
+                </div>
+              </header>
+              <div className="login-heading">
+                <span>ESCOLHA A UNIDADE</span>
+                <h2>Onde você vai trabalhar agora?</h2>
+                <p>Cada unidade tem seus próprios alunos, turmas e financeiro. O fluxo do sistema é o mesmo.</p>
+              </div>
+              <div className="unit-card-grid">
+                {organizations.map((organization, index) => (
+                  <button
+                    key={organization.id}
+                    type="button"
+                    className="unit-card"
+                    disabled={submitting}
+                    onClick={() => void chooseOrganization(organization.id)}
+                  >
+                    <span className="unit-card-icon">{index + 1}</span>
+                    <span>
+                      <strong>{unitCardTitle(organization, index)}</strong>
+                      <small>{unitCardHint(organization, index)}</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {error && <div className="login-error">{error}</div>}
+              <button type="button" className="unit-back-button" onClick={backToLogin} disabled={submitting}>
+                Voltar para o login
+              </button>
+            </div>
+          </section>
+        </main>
+      );
+    }
     return (
       <main className="login-screen">
         <section className="login-visual" aria-hidden="true" />
@@ -250,7 +376,6 @@ export function AccessGate({
                 </button>
               </span>
             </label>
-            {organizations.length > 0 && <label>Organização<select name="organizationId" required defaultValue=""><option value="">Selecione a organização</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>}
             <label className="login-remember">
               <input
                 name="rememberMe"
