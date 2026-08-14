@@ -662,10 +662,48 @@ select option { background: #ffffff; color: #1a1917; }
 .license-error { margin: 10px 0; color: var(--danger); font-size: 13px; font-weight: 700; }
 
 @media (max-width: 900px) {
+  .system-splash {
+    background-position: 76% center;
+  }
+  .system-splash .splash-shade {
+    background:
+      radial-gradient(circle at 72% 42%, rgba(255, 255, 255, .06), transparent 30%),
+      linear-gradient(0deg, rgba(3, 8, 6, .9) 0%, rgba(3, 8, 6, .25) 48%, rgba(3, 8, 6, .08) 100%);
+  }
+  .system-splash .splash-brand {
+    display: none;
+  }
+  .system-splash .splash-loading {
+    left: 22px;
+    right: 22px;
+    bottom: max(34px, env(safe-area-inset-bottom));
+    width: auto;
+    padding: 18px;
+    border: 1px solid rgba(255, 255, 255, .13);
+    border-radius: 22px;
+    background: rgba(0, 0, 0, .32);
+    box-shadow: 0 22px 70px rgba(0, 0, 0, .35);
+    backdrop-filter: blur(10px);
+  }
+  .system-splash .splash-loading > span {
+    font-size: 20px;
+    line-height: 1.15;
+  }
+  .system-splash .splash-loading small {
+    font-size: 14px;
+    color: rgba(255, 255, 255, .82);
+  }
   .login-screen { grid-template-columns: 1fr; }
   .login-visual { display: none; }
   .login-panel { min-height: 100vh; padding: 22px; }
   .login-card { padding: 28px 24px; }
+}
+
+@media (max-width: 520px) {
+  .system-splash {
+    background-size: auto 100%;
+    background-position: 78% center;
+  }
 }
 
 .app-shell { min-height: 100vh; display: flex; background: var(--bg); }
