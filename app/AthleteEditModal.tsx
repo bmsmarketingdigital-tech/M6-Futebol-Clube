@@ -1,27 +1,64 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import type { AthleteRecord } from "./AthleteProfileModal";
+import { AthleteFinancialSection } from "./AthleteFinancialSection";
 import type { CategoryRecord } from "./CategoryManagerModal";
+import type { TeamRecord } from "./TeamManagement";
 
 export function AthleteEditModal({
   athlete,
   categories,
+  teams,
   onClose,
   onSaved,
   onDeleted,
+  onTeamChanged,
   notify,
 }: {
   athlete: AthleteRecord;
   categories: CategoryRecord[];
+  teams: TeamRecord[];
   onClose: () => void;
   onSaved: (athlete: AthleteRecord) => void;
   onDeleted: (athleteId: string) => void;
+  onTeamChanged: () => void;
   notify: (message: string) => void;
 }) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [category, setCategory] = useState(athlete.category);
+
+  const currentTeam = useMemo(
+    () => teams.find((team) => team.athleteIds.includes(athlete.id)) ?? null,
+    [teams, athlete.id],
+  );
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(
+    currentTeam?.id ?? null,
+  );
+
+  // Só listamos turmas compatíveis com a categoria escolhida no formulário
+  // (não a categoria original do atleta) — a categoria pode ter mudado.
+  const compatibleTeams = useMemo(
+    () => teams.filter((team) => team.category === category),
+    [teams, category],
+  );
+
+  const categoryChangedAwayFromCurrentTeam =
+    currentTeam !== null && currentTeam.category !== category;
+
+  function handleCategoryChange(nextCategory: string) {
+    setCategory(nextCategory);
+    // Se a turma atual não pertence mais à nova categoria, ela deixa de ser
+    // uma opção válida no seletor — a seleção volta para "Sem turma" e o
+    // usuário precisa escolher explicitamente uma turma nova ou confirmar
+    // que o atleta ficará sem turma. Nunca trocamos automaticamente por
+    // outra turma.
+    if (currentTeam && currentTeam.category !== nextCategory) {
+      setSelectedTeamId(null);
+    }
+  }
 
   async function saveAthlete(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,7 +70,7 @@ export function AthleteEditModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: String(form.get("name") || ""),
-          category: String(form.get("category") || ""),
+          category,
           birthDate: String(form.get("birthDate") || ""),
           guardianName: String(form.get("guardianName") || ""),
           guardianDocument: String(form.get("guardianDocument") || ""),
@@ -55,6 +92,22 @@ export function AthleteEditModal({
         throw new Error(payload.error || "Não foi possível salvar o atleta.");
       }
       onSaved(payload.athlete);
+
+      if (selectedTeamId !== (currentTeam?.id ?? null)) {
+        const teamResponse = await fetch(`/api/athletes/${athlete.id}/team`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ teamId: selectedTeamId }),
+        });
+        const teamPayload = (await teamResponse.json()) as { error?: string };
+        if (!teamResponse.ok) {
+          throw new Error(
+            teamPayload.error || "Não foi possível atualizar a turma do atleta.",
+          );
+        }
+        onTeamChanged();
+      }
+
       notify("Dados do atleta atualizados.");
       onClose();
     } catch (error) {
@@ -134,14 +187,56 @@ export function AthleteEditModal({
           </label>
           <label>
             Categoria
-            <select name="category" defaultValue={athlete.category}>
-              {categories.map((category) => (
-                <option key={category.id} value={category.name}>
-                  {category.name}
+            <select
+              name="category"
+              value={category}
+              onChange={(event) => handleCategoryChange(event.target.value)}
+            >
+              {categories.map((option) => (
+                <option key={option.id} value={option.name}>
+                  {option.name}
                 </option>
               ))}
             </select>
           </label>
+
+          <label className="wide">
+            Turma
+            <select
+              name="teamId"
+              value={selectedTeamId ?? ""}
+              onChange={(event) => setSelectedTeamId(event.target.value || null)}
+            >
+              <option value="">Sem turma</option>
+              {compatibleTeams.map((team) => {
+                const isCurrent = team.id === currentTeam?.id;
+                const isFull = team.players >= team.capacity && !isCurrent;
+                return (
+                  <option key={team.id} value={team.id} disabled={isFull}>
+                    {team.name} · {team.scheduleDays.join("/")} {team.startTime}
+                    –{team.endTime} · {team.players}/{team.capacity} ocupadas
+                    {isFull ? " (cheia)" : ""}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+
+          {categoryChangedAwayFromCurrentTeam && currentTeam && (
+            <p className="wide form-warning">
+              A turma atual pertence à categoria {currentTeam.category}. Ao
+              alterar o atleta para {category}, ele precisará sair dessa
+              turma. Selecione uma turma compatível com {category} acima ou
+              mantenha &quot;Sem turma&quot;.
+            </p>
+          )}
+
+          <AthleteFinancialSection
+            athleteId={athlete.id}
+            athleteCategory={category}
+            notify={notify}
+          />
+
           <label>
             Nome do responsável
             <input

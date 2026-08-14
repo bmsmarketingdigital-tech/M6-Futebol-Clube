@@ -59,7 +59,7 @@ export async function PATCH(
 
     if (value.athleteIds.length > 0) {
       const validAthletes = await db
-        .select({ id: athletes.id })
+        .select({ id: athletes.id, category: athletes.category })
         .from(athletes)
         .where(
           and(
@@ -72,6 +72,15 @@ export async function PATCH(
         return Response.json(
           { error: "Um ou mais atletas selecionados não são válidos." },
           { status: 400 },
+        );
+      }
+      if (validAthletes.some((athlete) => athlete.category !== value.category)) {
+        return Response.json(
+          {
+            error:
+              "Um ou mais atletas selecionados são de categoria diferente da turma.",
+          },
+          { status: 409 },
         );
       }
     }

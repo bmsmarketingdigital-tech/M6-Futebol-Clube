@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { getDb } from "../../../../db";
+import { getD1, getDb } from "../../../../db";
 import { athletes } from "../../../../db/schema";
 import { getApiContext } from "../../api-auth";
 import { isValidCategory } from "../../categories/category-utils";
@@ -119,7 +119,7 @@ export async function PATCH(
 
     const db = getDb();
     const [existingAthlete] = await db
-      .select({ birthYear: athletes.birthYear })
+      .select({ birthYear: athletes.birthYear, category: athletes.category })
       .from(athletes)
       .where(
         and(
@@ -133,6 +133,7 @@ export async function PATCH(
     if (!existingAthlete) {
       return Response.json({ error: "Atleta não encontrado." }, { status: 404 });
     }
+    const categoryChanged = existingAthlete.category !== category;
 
     let birthYear = existingAthlete.birthYear;
     if (birthDate) {
@@ -154,34 +155,60 @@ export async function PATCH(
       birthYear = parsed.getFullYear();
     }
 
-    const [updated] = await db
-      .update(athletes)
-      .set({
-        fullName: name,
-        category,
-        birthYear,
-        birthDate,
-        guardianName,
-        guardianDocument: guardianDocument || null,
-        guardianPhone,
-        guardianEmail: payload.guardianEmail?.trim().toLowerCase() || null,
-        emergencyName: payload.emergencyName?.trim() || null,
-        emergencyPhone: payload.emergencyPhone?.trim() || null,
-        allergies: payload.allergies?.trim() || null,
-        medications: payload.medications?.trim() || null,
-        medicalNotes: payload.medicalNotes?.trim() || null,
-        imageAuthorized: Boolean(payload.imageAuthorized),
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(athletes.id, id),
-          eq(athletes.organizationId, context.membership.organizationId),
-          eq(athletes.active, true),
+    const organizationId = context.membership.organizationId;
+    const d1 = getD1();
+    const now = Math.floor(Date.now() / 1000);
+    const statements = [
+      d1
+        .prepare(
+          `UPDATE athletes SET
+             full_name = ?, category = ?, birth_year = ?, birth_date = ?,
+             guardian_name = ?, guardian_document = ?, guardian_phone = ?,
+             guardian_email = ?, emergency_name = ?, emergency_phone = ?,
+             allergies = ?, medications = ?, medical_notes = ?,
+             image_authorized = ?, updated_at = ?
+           WHERE id = ? AND organization_id = ? AND active = 1`,
+        )
+        .bind(
+          name, category, birthYear, birthDate,
+          guardianName, guardianDocument || null, guardianPhone,
+          payload.guardianEmail?.trim().toLowerCase() || null,
+          payload.emergencyName?.trim() || null,
+          payload.emergencyPhone?.trim() || null,
+          payload.allergies?.trim() || null,
+          payload.medications?.trim() || null,
+          payload.medicalNotes?.trim() || null,
+          Boolean(payload.imageAuthorized) ? 1 : 0,
+          now, id, organizationId,
         ),
-      )
-      .returning();
+    ];
+    // Mudança de categoria: turmas antigas incompatíveis não podem seguir
+    // com o vínculo ativo — a vaga é liberada, mas o histórico é preservado
+    // (soft-deactivate; nenhuma linha de team_athletes é apagada).
+    if (categoryChanged) {
+      statements.push(
+        d1
+          .prepare(
+            `UPDATE team_athletes SET active = 0
+             WHERE athlete_id = ? AND organization_id = ? AND active = 1
+               AND EXISTS (
+                 SELECT 1 FROM teams t
+                 WHERE t.id = team_athletes.team_id AND t.category != ?
+               )`,
+          )
+          .bind(id, organizationId, category),
+      );
+    }
+    const results = await d1.batch(statements);
+    if ((results[0].meta.changes ?? 0) !== 1) {
+      return Response.json({ error: "Atleta não encontrado." }, { status: 404 });
+    }
 
+    const [updated] = await db
+      .select()
+      .from(athletes)
+      .where(and(eq(athletes.id, id), eq(athletes.organizationId, organizationId)))
+      .limit(1);
     if (!updated) {
       return Response.json({ error: "Atleta não encontrado." }, { status: 404 });
     }

@@ -188,6 +188,8 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
   const [loadingAthletes, setLoadingAthletes] = useState(true);
   const [savingAthlete, setSavingAthlete] = useState(false);
   const [newAthleteCategory, setNewAthleteCategory] = useState("");
+  const [newAthleteTeamId, setNewAthleteTeamId] = useState("");
+  const [teamPreview, setTeamPreview] = useState<TeamRecord | null>(null);
   const [loadError, setLoadError] = useState("");
   const [loadingTeams, setLoadingTeams] = useState(true);
   const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary>({
@@ -367,6 +369,18 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
     () => teams.filter((team) => team.category === currentNewAthleteCategory),
     [currentNewAthleteCategory, teams],
   );
+  const selectedNewAthleteTeamId = compatibleNewAthleteTeams.some(
+    (team) => team.id === newAthleteTeamId,
+  )
+    ? newAthleteTeamId
+    : compatibleNewAthleteTeams[0]?.id || "";
+  const selectedNewAthleteTeam =
+    compatibleNewAthleteTeams.find((team) => team.id === selectedNewAthleteTeamId) || null;
+
+  function closeAthleteModal() {
+    setShowAthleteModal(false);
+    setTeamPreview(null);
+  }
 
   function notify(message: string) {
     setToast(message);
@@ -418,7 +432,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
         );
       }
       formElement.reset();
-      setShowAthleteModal(false);
+      closeAthleteModal();
       setQrAthlete(payload.athlete);
       notify(`${name} foi cadastrado e o QR Code individual já está pronto.`);
     } catch (error) {
@@ -756,9 +770,25 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
       </section>
 
       {showAthleteModal && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowAthleteModal(false)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeAthleteModal}>
           <div className="modal" role="dialog" aria-modal="true" aria-labelledby="new-athlete-title" onMouseDown={(event) => event.stopPropagation()}>
-            <button className="modal-close" onClick={() => setShowAthleteModal(false)} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button>
+            <button className="modal-close" onClick={closeAthleteModal} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button>
+            {teamPreview && (
+              <div className="modal-backdrop" role="presentation" onMouseDown={() => setTeamPreview(null)}>
+                <div className="modal team-preview-modal" role="dialog" aria-modal="true" aria-labelledby="team-preview-title" onMouseDown={(event) => event.stopPropagation()}>
+                  <button className="modal-close" onClick={() => setTeamPreview(null)} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button>
+                  <span className="eyebrow">{teamPreview.category}</span>
+                  <h2 id="team-preview-title">{teamPreview.name}</h2>
+                  <div className="team-preview-details">
+                    <p><strong>Dias:</strong> {teamPreview.scheduleDays.join(", ") || "—"}</p>
+                    <p><strong>Horário:</strong> {teamPreview.startTime} às {teamPreview.endTime}</p>
+                    <p><strong>Local:</strong> {teamPreview.place || "—"}</p>
+                    <p><strong>Professor:</strong> {teamPreview.coachName || "—"}</p>
+                    <p><strong>Vagas:</strong> {teamPreview.players}/{teamPreview.capacity}</p>
+                  </div>
+                </div>
+              </div>
+            )}
             <span className="eyebrow">NOVO CADASTRO</span>
             <h2 id="new-athlete-title">Adicionar atleta</h2>
             <p>Comece com os dados essenciais. O responsável poderá completar o perfil depois.</p>
@@ -793,17 +823,29 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
                 </label>
               </div>
               {compatibleNewAthleteTeams.length > 0 ? (
-                <label>
-                  Turma
+                <label className="category-field">
+                  <span className="category-label">
+                    Turma
+                    <button
+                      type="button"
+                      className="category-settings-button"
+                      onClick={() => selectedNewAthleteTeam && setTeamPreview(selectedNewAthleteTeam)}
+                      disabled={!selectedNewAthleteTeam}
+                      aria-label="Ver horários e vagas da turma"
+                      title="Ver horários e vagas da turma"
+                    >
+                      <Plus size={14} strokeWidth={1.75} />
+                    </button>
+                  </span>
                   <select
-                    key={currentNewAthleteCategory}
                     name="teamId"
                     required
-                    defaultValue={compatibleNewAthleteTeams[0]?.id}
+                    value={selectedNewAthleteTeamId}
+                    onChange={(event) => setNewAthleteTeamId(event.target.value)}
                   >
                     {compatibleNewAthleteTeams.map((team) => (
                       <option key={team.id} value={team.id}>
-                        {team.name} · {team.startTime}
+                        {team.name} · {team.startTime} · {team.players}/{team.capacity} vagas
                       </option>
                     ))}
                   </select>
@@ -828,6 +870,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
           key={editingAthlete.id}
           athlete={editingAthlete}
           categories={categories}
+          teams={teams}
           onClose={() => setEditingAthlete(null)}
           onSaved={(updated) => {
             setAthletes((current) =>
@@ -841,6 +884,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
               current.filter((athlete) => athlete.id !== athleteId),
             );
           }}
+          onTeamChanged={() => void loadTeams()}
           notify={notify}
         />
       )}
@@ -883,6 +927,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
           team={editingTeam}
           athletes={athletes}
           categories={categories}
+          teams={teams}
           onClose={() => {
             setTeamModalOpen(false);
             setEditingTeam(null);

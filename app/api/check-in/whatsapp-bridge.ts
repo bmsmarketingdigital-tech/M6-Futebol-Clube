@@ -1,4 +1,8 @@
 import { env } from "cloudflare:workers";
+import {
+  evolutionConfigured,
+  sendEvolutionWhatsAppMessage,
+} from "./evolution-provider";
 
 const runtime = env as unknown as Record<string, string | undefined>;
 
@@ -26,7 +30,7 @@ export type WhatsAppBridgeStatus = {
 };
 
 export function whatsappBridgeConfigured() {
-  return Boolean(runtime.WHATSAPP_BRIDGE_URL);
+  return Boolean(runtime.WHATSAPP_BRIDGE_URL) || evolutionConfigured(runtime);
 }
 
 async function bridgeRequest<T>(path: string, init?: RequestInit) {
@@ -69,6 +73,17 @@ async function bridgeRequest<T>(path: string, init?: RequestInit) {
 }
 
 export async function getWhatsAppBridgeStatus(): Promise<WhatsAppBridgeStatus> {
+  if (!runtime.WHATSAPP_BRIDGE_URL && evolutionConfigured(runtime)) {
+    return {
+      configured: true,
+      status: "connected",
+      qrCodeDataUrl: "",
+      connectedPhone: "",
+      lastError: "",
+      lastMessage: "Evolution API configurada para envio em nuvem.",
+      updatedAt: new Date().toISOString(),
+    };
+  }
   if (!whatsappBridgeConfigured()) {
     return {
       configured: false,
@@ -99,6 +114,9 @@ export async function getWhatsAppBridgeStatus(): Promise<WhatsAppBridgeStatus> {
 }
 
 export async function controlWhatsAppBridge(action: "connect" | "disconnect") {
+  if (!runtime.WHATSAPP_BRIDGE_URL && evolutionConfigured(runtime)) {
+    return getWhatsAppBridgeStatus();
+  }
   return bridgeRequest<Omit<WhatsAppBridgeStatus, "configured">>(`/${action}`, {
     method: "POST",
   });
@@ -118,6 +136,9 @@ export async function validateWhatsAppTestMode(phone: string, message: string) {
 }
 
 export async function sendWhatsAppMessage(phone: string, message: string) {
+  if (!runtime.WHATSAPP_BRIDGE_URL && evolutionConfigured(runtime)) {
+    return sendEvolutionWhatsAppMessage(phone, message);
+  }
   if (!whatsappBridgeConfigured()) {
     return {
       status: "pending" as const,

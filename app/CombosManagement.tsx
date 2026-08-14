@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Copy, Power, Plus, UserPlus, WalletCards, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Copy, Power, Plus, UserPlus, WalletCards, X } from "lucide-react";
+import { filterAthletesForQuery, getEligibleAthletes } from "./combo-athlete-search";
 
 type Combo = {
   id: string;
@@ -18,7 +19,7 @@ type Combo = {
   planName: string | null;
 };
 
-type Athlete = { id: string; fullName: string; active?: boolean };
+type Athlete = { id: string; name: string; active?: boolean };
 type ComboContract = {
   id: string;
   athleteName: string;
@@ -44,6 +45,7 @@ function comboTypeLabel(type: string) {
   return { monthly: "Mensal", quarterly: "Trimestral", annual: "Anual", custom: "Personalizado" }[type] ?? "Personalizado";
 }
 
+
 export default function CombosManagement({ notify, athletes }: { notify: (message: string) => void; athletes: Athlete[] }) {
   const [combos, setCombos] = useState<Combo[]>([]);
   const [contracts, setContracts] = useState<ComboContract[]>([]);
@@ -51,6 +53,10 @@ export default function CombosManagement({ notify, athletes }: { notify: (messag
   const [applyCombo, setApplyCombo] = useState<Combo | null>(null);
   const [cancelContract, setCancelContract] = useState<ComboContract | null>(null);
   const [applyAthlete, setApplyAthlete] = useState("");
+  const [athleteQuery, setAthleteQuery] = useState("");
+  const [athleteDropdownOpen, setAthleteDropdownOpen] = useState(false);
+  const [athleteHighlight, setAthleteHighlight] = useState(0);
+  const athleteComboboxRef = useRef<HTMLDivElement | null>(null);
   const [startDate, setStartDate] = useState("");
   const [firstDueDate, setFirstDueDate] = useState("");
   const [applying, setApplying] = useState(false);
@@ -115,9 +121,89 @@ export default function CombosManagement({ notify, athletes }: { notify: (messag
   function beginApply(combo: Combo) {
     setApplyCombo(combo);
     setApplyAthlete("");
+    setAthleteQuery("");
+    setAthleteDropdownOpen(false);
+    setAthleteHighlight(0);
     setStartDate("");
     setFirstDueDate("");
   }
+
+  // Mesma regra de elegibilidade de sempre: apenas alunos ativos.
+  // Única fonte de verdade da busca: athleteQuery. Recalculado a cada
+  // render via useMemo — nunca filtramos usando um valor "guardado" à
+  // parte, para não ficar um caractere atrasado em relação ao input.
+  // athleteMatches é o único array que o dropdown pode desenhar — vem
+  // sempre da função pura importada de combo-athlete-search.ts, a mesma
+  // que os testes executam de verdade (sem duplicar a lógica em teste).
+  const eligibleAthletes = useMemo(() => getEligibleAthletes(athletes), [athletes]);
+  const athleteMatches = useMemo(
+    () => filterAthletesForQuery(athletes, athleteQuery),
+    [athletes, athleteQuery],
+  );
+  const selectedAthleteRecord = useMemo(
+    () => eligibleAthletes.find((athlete) => athlete.id === applyAthlete) ?? null,
+    [eligibleAthletes, applyAthlete],
+  );
+
+  // O índice destacado precisa sempre apontar para dentro da lista filtrada
+  // atual — clampado no próprio render (sem efeito) para nunca ficar
+  // apontando para um item que já saiu da lista após a query mudar.
+  const safeAthleteHighlight =
+    athleteMatches.length === 0 ? 0 : Math.min(athleteHighlight, athleteMatches.length - 1);
+
+  function selectAthlete(athlete: Athlete) {
+    setApplyAthlete(athlete.id);
+    setAthleteQuery(athlete.name);
+    setAthleteDropdownOpen(false);
+  }
+
+  function clearAthleteSelection() {
+    setApplyAthlete("");
+    setAthleteQuery("");
+    setAthleteHighlight(0);
+    setAthleteDropdownOpen(true);
+    athleteComboboxRef.current?.querySelector("input")?.focus();
+  }
+
+  function handleAthleteQueryChange(value: string) {
+    setAthleteQuery(value);
+    setApplyAthlete("");
+    setAthleteHighlight(0);
+    setAthleteDropdownOpen(true);
+  }
+
+  function handleAthleteKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (!athleteDropdownOpen) { setAthleteDropdownOpen(true); return; }
+      setAthleteHighlight((index) => Math.min(index + 1, athleteMatches.length - 1));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setAthleteHighlight((index) => Math.max(index - 1, 0));
+    } else if (event.key === "Enter") {
+      if (athleteDropdownOpen && athleteMatches[safeAthleteHighlight]) {
+        event.preventDefault();
+        selectAthlete(athleteMatches[safeAthleteHighlight]);
+      }
+    } else if (event.key === "Escape") {
+      if (athleteDropdownOpen) {
+        event.preventDefault();
+        setAthleteDropdownOpen(false);
+      }
+    }
+  }
+
+  // Fecha a lista ao clicar fora, sem descartar uma seleção já confirmada.
+  useEffect(() => {
+    if (!athleteDropdownOpen) return;
+    function handlePointerDown(event: MouseEvent) {
+      if (!athleteComboboxRef.current?.contains(event.target as Node)) {
+        setAthleteDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [athleteDropdownOpen]);
 
   async function confirmApply() {
     if (!applyCombo || !applyAthlete || !startDate || !firstDueDate) return;
@@ -217,7 +303,63 @@ export default function CombosManagement({ notify, athletes }: { notify: (messag
 
       {applyCombo && <div className="modal-backdrop"><div className="modal-card combo-modal apply-combo-modal" role="dialog" aria-modal="true" aria-labelledby="combo-apply-modal-title">
         <header className="combo-modal-header"><div><span className="eyebrow">CONTRATAÇÃO</span><h2 id="combo-apply-modal-title">Aplicar combo</h2><p>Escolha o aluno e confirme o período de cobertura.</p></div><button type="button" className="combo-modal-close" onClick={() => setApplyCombo(null)} aria-label="Fechar"><X size={18} /></button></header>
-        <label>Aluno<select value={applyAthlete} onChange={(event) => setApplyAthlete(event.target.value)}><option value="">Selecione o aluno</option>{athletes.filter((athlete) => athlete.active !== false).map((athlete) => <option key={athlete.id} value={athlete.id}>{athlete.fullName}</option>)}</select></label>
+        <label>Aluno
+          <div className="combo-athlete-combobox" ref={athleteComboboxRef}>
+            <div className="combo-athlete-input-wrap">
+              <input
+                type="text"
+                role="combobox"
+                aria-expanded={athleteDropdownOpen}
+                aria-controls="combo-athlete-listbox"
+                aria-autocomplete="list"
+                aria-activedescendant={
+                  athleteDropdownOpen && athleteMatches[safeAthleteHighlight]
+                    ? `combo-athlete-option-${athleteMatches[safeAthleteHighlight].id}`
+                    : undefined
+                }
+                placeholder="Buscar ou selecionar aluno..."
+                value={athleteQuery}
+                onChange={(event) => handleAthleteQueryChange(event.target.value)}
+                onFocus={() => setAthleteDropdownOpen(true)}
+                onKeyDown={handleAthleteKeyDown}
+                aria-label="Buscar ou selecionar aluno"
+              />
+              {athleteQuery ? (
+                <button
+                  type="button"
+                  className="combo-athlete-clear"
+                  aria-label="Limpar seleção do aluno"
+                  onClick={clearAthleteSelection}
+                >
+                  <X size={14} />
+                </button>
+              ) : (
+                <ChevronDown size={16} className="combo-athlete-chevron" />
+              )}
+            </div>
+            {athleteDropdownOpen && (
+              <ul className="combo-athlete-options" role="listbox" id="combo-athlete-listbox">
+                {athleteMatches.length ? (
+                  athleteMatches.map((athlete, index) => (
+                    <li
+                      key={athlete.id}
+                      id={`combo-athlete-option-${athlete.id}`}
+                      role="option"
+                      aria-selected={athlete.id === selectedAthleteRecord?.id}
+                      className={index === safeAthleteHighlight ? "highlighted" : ""}
+                      onMouseEnter={() => setAthleteHighlight(index)}
+                      onMouseDown={(event) => { event.preventDefault(); selectAthlete(athlete); }}
+                    >
+                      {athlete.name}
+                    </li>
+                  ))
+                ) : (
+                  <li className="combo-athlete-empty">Nenhum aluno encontrado</li>
+                )}
+              </ul>
+            )}
+          </div>
+        </label>
         <div className="combo-form-grid"><label>Data de início<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label>Primeiro vencimento<input type="date" value={firstDueDate} onChange={(event) => setFirstDueDate(event.target.value)} /></label></div>
         <div className="combo-apply-summary"><span>Combo selecionado</span><strong>{applyCombo.name}</strong><small>{applyCombo.durationMonths} meses · {applyCombo.billingMode === "upfront" ? "1 cobrança" : `${applyCombo.installmentCount} parcelas`}</small><b>{money(applyCombo.finalAmountCents)}</b></div>
         <div className="combo-modal-actions"><button type="button" onClick={() => setApplyCombo(null)}>Cancelar</button><button className="primary-button" disabled={applying || !applyAthlete || !startDate || !firstDueDate} onClick={() => void confirmApply()}>{applying ? "Aplicando..." : "Confirmar combo"}</button></div>

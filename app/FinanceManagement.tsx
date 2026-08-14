@@ -12,11 +12,10 @@ import {
   Equal,
   Plus,
   Search,
-  ChevronUp,
-  ChevronDown,
   X,
 } from "lucide-react";
 import type { AthleteRecord } from "./AthleteProfileModal";
+import { planCategoryCompatible, suggestPlanForCategory } from "./athlete-financial-plan";
 
 type Plan = {
   id: string;
@@ -413,6 +412,7 @@ export function FinanceManagement({
 
   const [billingQuery, setBillingQuery] = useState("");
   const [showArchivedPlans, setShowArchivedPlans] = useState(false);
+  const [connectionModalOpen, setConnectionModalOpen] = useState(false);
   const visibleBillingAthletes = useMemo(() => {
     const query = billingQuery.trim().toLowerCase();
     if (!query) return athletes;
@@ -880,6 +880,7 @@ export function FinanceManagement({
           <BillingModal
             athlete={billingAthlete}
             plans={data.plans}
+            archivedPlans={data.archivedPlans}
             current={billingByAthlete.get(billingAthlete.id)}
             notify={notify}
             onClose={() => setBillingAthlete(null)}
@@ -978,6 +979,14 @@ export function FinanceManagement({
           <p>Controle cobranças, recebimentos, vencimentos e inadimplência em um só painel.</p>
         </div>
         <div className="finance-heading-actions">
+          <button
+            type="button"
+            className={`filter-button billing-connection-button ${notifications.overview.whatsapp.connected ? "online" : "offline"}`}
+            onClick={() => setConnectionModalOpen(true)}
+          >
+            <span className="billing-whatsapp-dot" aria-hidden="true" />
+            Conexão
+          </button>
           <label>
             <span>Mês de referência</span>
             <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
@@ -1118,14 +1127,17 @@ export function FinanceManagement({
         )}
       </section>
 
-      <BillingNotificationPanel
-        key="billing-notification-panel"
-        data={notifications}
-        working={working}
-        onSave={saveNotificationSettings}
-        onRun={runNotificationsNow}
-        onResend={resendNotification}
-      />
+      {connectionModalOpen && (
+        <BillingNotificationPanel
+          key="billing-notification-panel"
+          data={notifications}
+          working={working}
+          onSave={saveNotificationSettings}
+          onRun={runNotificationsNow}
+          onResend={resendNotification}
+          onClose={() => setConnectionModalOpen(false)}
+        />
+      )}
 
       <div className="card finance-charges">
         <div className="card-header">
@@ -1822,21 +1834,41 @@ function ChargeActionModal({
   );
 }
 
+// Mascara o número conectado, mantendo só os últimos 4 dígitos visíveis
+// (ex.: "+55 11 99999-8787" -> "*********8787"). Puramente de exibição —
+// não altera o valor armazenado/enviado em nenhum lugar.
+function maskPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length <= 4) return digits;
+  return "*".repeat(digits.length - 4) + digits.slice(-4);
+}
+
+const whatsappStatusLabels: Record<string, string> = {
+  connected: "Conectado",
+  disconnected: "Desconectado",
+  starting: "Conectando",
+  authenticated: "Conectando",
+  qr: "QR necessário",
+  error: "Erro",
+  unavailable: "Indisponível",
+};
+
 function BillingNotificationPanel({
   data,
   working,
   onSave,
   onRun,
   onResend,
+  onClose,
 }: {
   data: NotificationPayload;
   working: boolean;
   onSave: (settings: NotificationSettings) => Promise<void>;
   onRun: () => Promise<void>;
   onResend: (id: string) => Promise<void>;
+  onClose: () => void;
 }) {
   const [draft, setDraft] = useState(data.settings);
-  const [expanded, setExpanded] = useState(false);
 
   const eventLabels = {
     before_due: "Antes do vencimento",
@@ -1853,20 +1885,15 @@ function BillingNotificationPanel({
   };
 
   return (
-    <section className={`card billing-notification-card${expanded ? " expanded" : ""}`}>
-      <button
-        type="button"
-        id="billing-notification-toggle"
-        className="billing-notification-toggle"
-        aria-expanded={expanded}
-        aria-controls="billing-notification-panel"
-        onClick={() => setExpanded((current) => !current)}
-      >
+    <Modal onClose={onClose} role="dialog" className="modal billing-notification-modal" labelledBy="billing-notification-title">
+      <ModalClose onClick={onClose} />
+      <span className="eyebrow">CONEXÃO</span>
+      <h2 id="billing-notification-title">Conexão e notificações</h2>
+      <div className="billing-notification-card">
       <span className="billing-notification-icon" aria-hidden="true">
         <MessageCircle size={20} strokeWidth={1.75} />
       </span>
       <span className="billing-notification-text">
-        <span className="billing-notification-heading" role="heading" aria-level="2">Cobrança Automática · WhatsApp</span>
         <span className="billing-notification-desc">
           Lembretes de mensalidade pelo WhatsApp — o sistema gera o mês, acompanha
           vencimentos e envia cada aviso uma única vez.
@@ -1874,16 +1901,16 @@ function BillingNotificationPanel({
       </span>
       <span className={`billing-whatsapp-state ${data.overview.whatsapp.connected ? "online" : "offline"}`}>
         <span className="billing-whatsapp-dot" />
-        <strong>{data.overview.whatsapp.connected ? "Conectado" : "Desconectado"}</strong>
+        <strong>{whatsappStatusLabels[data.overview.whatsapp.status] ?? (data.overview.whatsapp.connected ? "Conectado" : "Desconectado")}</strong>
         <small>
-          {data.overview.whatsapp.connectedPhone ||
-            "Conecte em Cartões QR → WhatsApp"}
+          {data.overview.whatsapp.connectedPhone
+            ? maskPhone(data.overview.whatsapp.connectedPhone)
+            : "Conecte em Cartões QR → WhatsApp"}
         </small>
       </span>
-      <span className="billing-notification-chevron">{expanded ? <ChevronUp size={14} strokeWidth={1.75} /> : <ChevronDown size={14} strokeWidth={1.75} />}</span>
-      </button>
+      </div>
 
-      {expanded && <div id="billing-notification-panel" role="region" aria-labelledby="billing-notification-toggle">
+      {<div id="billing-notification-panel" role="region" aria-labelledby="billing-notification-title" className="billing-notification-body">
       <div className="billing-automation-switch">
         <label>
           <input
@@ -1908,89 +1935,101 @@ function BillingNotificationPanel({
 
       <div className={draft.enabled ? "billing-reminder-flow" : "billing-reminder-flow disabled"}>
         <label>
-          <span className="flow-number">1</span>
-          <input
-            type="checkbox"
-            checked={draft.beforeDueEnabled}
-            disabled={!draft.enabled}
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                beforeDueEnabled: event.target.checked,
-              }))
-            }
-          />
-          <span>
-            <strong>Mensalidade prestes a vencer</strong>
-            <small>Enviar quando faltar até</small>
+          <span className="flow-head">
+            <span className="flow-number">1</span>
+            <input
+              type="checkbox"
+              checked={draft.beforeDueEnabled}
+              disabled={!draft.enabled}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  beforeDueEnabled: event.target.checked,
+                }))
+              }
+            />
+            <span className="flow-copy">
+              <strong>Mensalidade prestes a vencer</strong>
+              <small>Enviar quando faltar até</small>
+            </span>
           </span>
-          <input
-            className="flow-days"
-            type="number"
-            min="1"
-            max="30"
-            value={draft.beforeDueDays}
-            disabled={!draft.enabled || !draft.beforeDueEnabled}
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                beforeDueDays: Number(event.target.value),
-              }))
-            }
-          />
-          <b>dias</b>
+          <span className="flow-value">
+            <input
+              className="flow-days"
+              type="number"
+              min="1"
+              max="30"
+              value={draft.beforeDueDays}
+              disabled={!draft.enabled || !draft.beforeDueEnabled}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  beforeDueDays: Number(event.target.value),
+                }))
+              }
+            />
+            <b>dias</b>
+          </span>
         </label>
         <label>
-          <span className="flow-number">2</span>
-          <input
-            type="checkbox"
-            checked={draft.dueTodayEnabled}
-            disabled={!draft.enabled}
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                dueTodayEnabled: event.target.checked,
-              }))
-            }
-          />
-          <span>
-            <strong>Vencimento hoje</strong>
-            <small>Aviso no próprio dia do vencimento</small>
+          <span className="flow-head">
+            <span className="flow-number">2</span>
+            <input
+              type="checkbox"
+              checked={draft.dueTodayEnabled}
+              disabled={!draft.enabled}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  dueTodayEnabled: event.target.checked,
+                }))
+              }
+            />
+            <span className="flow-copy">
+              <strong>Vencimento hoje</strong>
+              <small>Aviso no próprio dia do vencimento</small>
+            </span>
           </span>
-          <b>no dia</b>
+          <span className="flow-value">
+            <b>No vencimento</b>
+          </span>
         </label>
         <label>
-          <span className="flow-number">3</span>
-          <input
-            type="checkbox"
-            checked={draft.overdueEnabled}
-            disabled={!draft.enabled}
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                overdueEnabled: event.target.checked,
-              }))
-            }
-          />
-          <span>
-            <strong>Mensalidade consta em aberto</strong>
-            <small>Enviar depois de</small>
+          <span className="flow-head">
+            <span className="flow-number">3</span>
+            <input
+              type="checkbox"
+              checked={draft.overdueEnabled}
+              disabled={!draft.enabled}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  overdueEnabled: event.target.checked,
+                }))
+              }
+            />
+            <span className="flow-copy">
+              <strong>Mensalidade consta em aberto</strong>
+              <small>Enviar depois de</small>
+            </span>
           </span>
-          <input
-            className="flow-days"
-            type="number"
-            min="1"
-            max="90"
-            value={draft.overdueDays}
-            disabled={!draft.enabled || !draft.overdueEnabled}
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                overdueDays: Number(event.target.value),
-              }))
-            }
-          />
-          <b>dias</b>
+          <span className="flow-value">
+            <input
+              className="flow-days"
+              type="number"
+              min="1"
+              max="90"
+              value={draft.overdueDays}
+              disabled={!draft.enabled || !draft.overdueEnabled}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  overdueDays: Number(event.target.value),
+                }))
+              }
+            />
+            <b>dias</b>
+          </span>
         </label>
       </div>
 
@@ -2027,32 +2066,36 @@ function BillingNotificationPanel({
 
       {data.overview.recent.length > 0 && (
         <div className="billing-notification-recent">
-          <strong>Últimos avisos</strong>
-          {data.overview.recent.map((item) => (
-            <span key={item.id}>
-              <i className={item.status} />
-              <b>{item.athleteName}</b>
-              <small>{eventLabels[item.type]}</small>
-              <small>{item.phone} · {item.attemptCount} tentativa(s)</small>
-              <em title={item.lastError || undefined}>
-                {statusLabels[item.status]}
-                {item.origin ? ` · ${item.origin}` : ""}
-                {item.manualResendCount ? ` · ${item.manualResendCount} reenvio(s)` : ""}
-              </em>
-              <button
-                type="button"
-                className="filter-button"
-                disabled={working || item.status === "processing"}
-                onClick={() => void onResend(item.id)}
-              >
-                Reenviar
-              </button>
-            </span>
-          ))}
+          <strong className="billing-notification-recent-title">Últimos avisos</strong>
+          <div className="billing-notification-recent-grid">
+            {data.overview.recent.map((item) => (
+              <span key={item.id} className={`billing-notification-recent-item ${item.status}`}>
+                <span className="recent-item-head">
+                  <i className={item.status} />
+                  <b title={item.athleteName}>{item.athleteName}</b>
+                </span>
+                <small>{eventLabels[item.type]}</small>
+                <small>{item.phone} · {item.attemptCount} tentativa(s)</small>
+                <em title={item.lastError || undefined}>
+                  {statusLabels[item.status]}
+                  {item.origin ? ` · ${item.origin}` : ""}
+                  {item.manualResendCount ? ` · ${item.manualResendCount} reenvio(s)` : ""}
+                </em>
+                <button
+                  type="button"
+                  className="filter-button"
+                  disabled={working || item.status === "processing"}
+                  onClick={() => void onResend(item.id)}
+                >
+                  Reenviar
+                </button>
+              </span>
+            ))}
+          </div>
         </div>
       )}
       </div>}
-    </section>
+    </Modal>
   );
 }
 
@@ -2180,6 +2223,7 @@ function PlanModal({
 function BillingModal({
   athlete,
   plans,
+  archivedPlans,
   current,
   notify,
   onClose,
@@ -2187,12 +2231,32 @@ function BillingModal({
 }: {
   athlete: AthleteRecord;
   plans: Plan[];
+  archivedPlans: Plan[];
   current?: Billing;
   notify: (message: string) => void;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [saving, setSaving] = useState(false);
+
+  // Mesma regra de compatibilidade de categoria usada no bloco Financeiro do
+  // cadastro/edição do atleta (app/athlete-financial-plan.ts) — reaproveitada
+  // aqui em vez de duplicada, para as duas telas nunca divergirem.
+  const compatiblePlans = plans.filter((plan) => planCategoryCompatible(plan.category, athlete.category));
+  const currentPlan = current
+    ? plans.find((plan) => plan.id === current.planId) ?? archivedPlans.find((plan) => plan.id === current.planId)
+    : undefined;
+  const currentPlanCategory = currentPlan?.category ?? null;
+  const currentIncompatible = Boolean(current) && !planCategoryCompatible(currentPlanCategory, athlete.category);
+
+  // Mesma regra de sugestão do bloco Financeiro do atleta: só pré-seleciona
+  // quando existe exatamente um plano ativo compatível — com 2+, o operador
+  // precisa escolher explicitamente (nunca decidimos por ele).
+  const suggestion = suggestPlanForCategory(
+    compatiblePlans.map((plan) => ({ ...plan, active: true })),
+    athlete.category,
+  );
+  const defaultPlanId = !currentIncompatible && current ? current.planId : suggestion.plan?.id;
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -2226,25 +2290,29 @@ function BillingModal({
       <span className="eyebrow">COBRANÇA DO ATLETA</span>
       <h2 id="billing-modal-title">{athlete.name}</h2>
         <p>Personalize plano, desconto ou vencimento. Cobranças já geradas não mudam.</p>
-        {plans.length === 0 ? (
-          <div className="finance-empty small"><strong>Crie um plano antes de continuar.</strong></div>
+        {currentIncompatible && (
+          <p className="form-warning">
+            O plano financeiro atual pertence à categoria {currentPlanCategory}. Revise a configuração deste atleta.
+          </p>
+        )}
+        {compatiblePlans.length === 0 ? (
+          <div className="finance-empty small">
+            <strong>Nenhum plano ativo compatível com a categoria {athlete.category}. Crie um plano para essa categoria (ou um plano geral) antes de continuar.</strong>
+          </div>
         ) : (
           <form onSubmit={submit}>
             <label>
               Plano
-              <select
-                name="planId"
-                required
-                defaultValue={current?.planId ?? plans.find((plan) => plan.category === athlete.category)?.id ?? plans[0]?.id}
-              >
-                {plans.map((plan) => (
+              <select name="planId" required defaultValue={defaultPlanId ?? ""}>
+                {!defaultPlanId && <option value="">Selecionar plano</option>}
+                {compatiblePlans.map((plan) => (
                   <option key={plan.id} value={plan.id}>
                     {plan.name}{plan.category ? ` · ${plan.category}` : ""} · {money(plan.amountCents)}
                   </option>
                 ))}
               </select>
             </label>
-            {!current && plans.some((plan) => plan.category === athlete.category) && (
+            {!current && compatiblePlans.some((plan) => plan.category === athlete.category) && (
               <p className="field-hint">Sugerimos o plano da categoria {athlete.category} — troque se preferir outro.</p>
             )}
             <div className="form-row">

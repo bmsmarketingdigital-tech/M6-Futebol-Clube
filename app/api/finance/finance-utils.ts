@@ -2,6 +2,21 @@ export function validateMonth(value: string | null | undefined) {
   return value && /^\d{4}-(0[1-9]|1[0-2])$/.test(value) ? value : null;
 }
 
+// Competência (referenceMonth) do momento atual, no fuso America/Sao_Paulo —
+// mesma abordagem já usada pelo dashboard (app/api/dashboard/summary/route.ts)
+// para converter timestamps em chave YYYY-MM. Fonte única para "mês atual"
+// ao decidir, no bloco Financeiro do atleta, se já existe mensalidade gerada
+// para a competência vigente.
+export function currentReferenceMonth(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}`;
+}
+
 export function parseMoneyToCents(value: unknown) {
   if (typeof value !== "string" && typeof value !== "number") return null;
   const normalized = String(value).trim().replace(",", ".");

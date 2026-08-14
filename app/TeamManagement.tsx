@@ -24,6 +24,7 @@ export function TeamModal({
   team,
   athletes,
   categories,
+  teams,
   onClose,
   onSaved,
   onArchived,
@@ -32,6 +33,7 @@ export function TeamModal({
   team: TeamRecord | null;
   athletes: AthleteRecord[];
   categories: CategoryRecord[];
+  teams: TeamRecord[];
   onClose: () => void;
   onSaved: (team: TeamRecord) => void;
   onArchived: (teamId: string) => void;
@@ -48,9 +50,23 @@ export function TeamModal({
   const [rosterQuery, setRosterQuery] = useState("");
   const [rosterOpen, setRosterOpen] = useState(false);
 
+  const enrolledElsewhereIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const otherTeam of teams) {
+      if (otherTeam.id === team?.id) continue;
+      for (const athleteId of otherTeam.athleteIds) ids.add(athleteId);
+    }
+    return ids;
+  }, [teams, team]);
+
   const categoryAthletes = useMemo(
-    () => athletes.filter((athlete) => athlete.category === category),
-    [athletes, category],
+    () =>
+      athletes.filter(
+        (athlete) =>
+          athlete.category === category &&
+          (selectedAthletes.has(athlete.id) || !enrolledElsewhereIds.has(athlete.id)),
+      ),
+    [athletes, category, enrolledElsewhereIds, selectedAthletes],
   );
   const visibleAthletes = useMemo(() => {
     const query = rosterQuery.trim().toLocaleLowerCase("pt-BR");
@@ -70,7 +86,11 @@ export function TeamModal({
     setCategory(nextCategory);
     const allowedIds = new Set(
       athletes
-        .filter((athlete) => athlete.category === nextCategory)
+        .filter(
+          (athlete) =>
+            athlete.category === nextCategory &&
+            (selectedAthletes.has(athlete.id) || !enrolledElsewhereIds.has(athlete.id)),
+        )
         .map((athlete) => athlete.id),
     );
     setSelectedAthletes(
