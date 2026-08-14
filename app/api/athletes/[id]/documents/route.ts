@@ -1,6 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "../../../../../db";
-import { getFilesBucket } from "../../../../../db/storage";
+import { getPostgresClient, postgresConfigured } from "../../../../../db/postgres";
+import { getConfiguredFilesBucket } from "../../../../../db/storage";
 import { athleteDocuments, athletes } from "../../../../../db/schema";
 import { getApiContext } from "../../../api-auth";
 
@@ -18,6 +19,19 @@ const maxFileSize = 5 * 1024 * 1024;
 async function authorizeAthlete(request: Request, athleteId: string) {
   const context = await getApiContext(request);
   if (!context) return null;
+
+  if (postgresConfigured()) {
+    const sql = getPostgresClient();
+    const [athlete] = await sql<{ id: string }[]>`
+      SELECT id
+      FROM athletes
+      WHERE id = ${athleteId}
+        AND organization_id = ${context.membership.organizationId}
+        AND active = 1
+      LIMIT 1
+    `;
+    return athlete ? context : null;
+  }
 
   const db = getDb();
   const [athlete] = await db
@@ -44,6 +58,36 @@ export async function GET(
     const context = await authorizeAthlete(request, id);
     if (!context) {
       return Response.json({ error: "Atleta não encontrado." }, { status: 404 });
+    }
+
+    if (postgresConfigured()) {
+      const sql = getPostgresClient();
+      const rows = await sql<{
+        id: string;
+        file_name: string;
+        content_type: string;
+        size_bytes: number;
+        kind: string;
+        created_at: number;
+      }[]>`
+        SELECT id, file_name, content_type, size_bytes, kind, created_at
+        FROM athlete_documents
+        WHERE athlete_id = ${id}
+          AND organization_id = ${context.membership.organizationId}
+        ORDER BY created_at DESC
+      `;
+
+      return Response.json({
+        documents: rows.map((row) => ({
+          id: row.id,
+          fileName: row.file_name,
+          contentType: row.content_type,
+          sizeBytes: row.size_bytes,
+          kind: row.kind,
+          createdAt: new Date(row.created_at * 1000).toISOString(),
+          downloadUrl: `/api/athletes/${id}/documents/${row.id}`,
+        })),
+      });
     }
 
     const db = getDb();
@@ -124,13 +168,52 @@ export async function POST(
           ? "png"
           : "jpg";
     const objectKey = `${context.membership.organizationId}/${id}/${documentId}.${extension}`;
-    const bucket = getFilesBucket();
+    const bucket = getConfiguredFilesBucket();
 
     await bucket.put(objectKey, file.stream(), {
       httpMetadata: { contentType: file.type },
     });
 
     try {
+      if (postgresConfigured()) {
+        const sql = getPostgresClient();
+        const createdAt = Math.floor(Date.now() / 1000);
+        const [created] = await sql<{
+          id: string;
+          file_name: string;
+          content_type: string;
+          size_bytes: number;
+          kind: string;
+          created_at: number;
+        }[]>`
+          INSERT INTO athlete_documents (
+            id, organization_id, athlete_id, object_key, file_name,
+            content_type, size_bytes, kind, uploaded_by, created_at
+          )
+          VALUES (
+            ${documentId}, ${context.membership.organizationId}, ${id},
+            ${objectKey}, ${file.name.slice(0, 180)}, ${file.type},
+            ${file.size}, ${kind}, ${context.user.email}, ${createdAt}
+          )
+          RETURNING id, file_name, content_type, size_bytes, kind, created_at
+        `;
+
+        return Response.json(
+          {
+            document: {
+              id: created.id,
+              fileName: created.file_name,
+              contentType: created.content_type,
+              sizeBytes: created.size_bytes,
+              kind: created.kind,
+              createdAt: new Date(created.created_at * 1000).toISOString(),
+              downloadUrl: `/api/athletes/${id}/documents/${created.id}`,
+            },
+          },
+          { status: 201 },
+        );
+      }
+
       const db = getDb();
       const [created] = await db
         .insert(athleteDocuments)
