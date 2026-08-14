@@ -1,5 +1,6 @@
 import { and, eq, inArray, lt } from "drizzle-orm";
 import { getD1, getDb } from "../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../db/postgres";
 import {
   athleteBilling,
   athletes,
@@ -71,6 +72,33 @@ function formatMoney(cents: number) {
 export async function getBillingNotificationSettings(
   organizationId: string,
 ): Promise<BillingNotificationSettings> {
+  if (postgresConfigured()) {
+    const sql = getPostgresClient();
+    const [row] = await sql<{
+      enabled: number | boolean;
+      before_due_enabled: number | boolean;
+      before_due_days: number;
+      due_today_enabled: number | boolean;
+      overdue_enabled: number | boolean;
+      overdue_days: number;
+    }[]>`
+      SELECT enabled, before_due_enabled, before_due_days,
+             due_today_enabled, overdue_enabled, overdue_days
+      FROM billing_notification_settings
+      WHERE organization_id = ${organizationId}
+      LIMIT 1
+    `;
+    if (!row) return defaultBillingNotificationSettings;
+    return {
+      enabled: Boolean(row.enabled),
+      beforeDueEnabled: Boolean(row.before_due_enabled),
+      beforeDueDays: row.before_due_days,
+      dueTodayEnabled: Boolean(row.due_today_enabled),
+      overdueEnabled: Boolean(row.overdue_enabled),
+      overdueDays: row.overdue_days,
+    };
+  }
+
   const db = getDb();
   const [row] = await db
     .select()
@@ -94,6 +122,107 @@ export async function generateMonthlyCharges(
 ) {
   const month = validateMonth(requestedMonth);
   if (!month) throw new Error("Mês de referência inválido.");
+
+  if (postgresConfigured()) {
+    const sql = getPostgresClient();
+    const configurations = await sql<{
+      athleteId: string;
+      amountCents: number;
+      planName: string;
+      planDueDay: number;
+      customDueDay: number | null;
+      discountType: "none" | "fixed" | "percent";
+      discountValue: number;
+    }[]>`
+      SELECT ab.athlete_id AS "athleteId",
+             bp.amount_cents AS "amountCents",
+             bp.name AS "planName",
+             bp.due_day AS "planDueDay",
+             ab.custom_due_day AS "customDueDay",
+             ab.discount_type AS "discountType",
+             ab.discount_value AS "discountValue"
+      FROM athlete_billing ab
+      INNER JOIN athletes a
+        ON a.id = ab.athlete_id
+       AND a.organization_id = ab.organization_id
+      INNER JOIN billing_plans bp
+        ON bp.id = ab.plan_id
+       AND bp.organization_id = ab.organization_id
+      WHERE ab.organization_id = ${organizationId}
+        AND ab.active = 1
+        AND a.active = 1
+        AND bp.active = 1
+    `;
+
+    let createdCount = 0;
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    for (const configuration of configurations) {
+      const paymentId = crypto.randomUUID();
+      const reservationId = crypto.randomUUID();
+      try {
+        await sql.begin(async (transaction) => {
+          const [reservation] = await transaction<{ id: string }[]>`
+            INSERT INTO athlete_billing_month_reservations (
+              id, organization_id, athlete_id, reference_month,
+              source_type, source_id, created_at
+            )
+            VALUES (
+              ${reservationId}, ${organizationId}, ${configuration.athleteId},
+              ${month}, 'monthly', ${paymentId}, ${nowSeconds}
+            )
+            ON CONFLICT (organization_id, athlete_id, reference_month) DO NOTHING
+            RETURNING id
+          `;
+          if (!reservation) return;
+          await transaction`
+            INSERT INTO payments (
+              id, organization_id, athlete_id, reference_month,
+              amount_cents, due_date, plan_name, paid_amount_cents,
+              status, created_at, updated_at
+            )
+            VALUES (
+              ${paymentId}, ${organizationId}, ${configuration.athleteId},
+              ${month},
+              ${calculateCharge(
+                configuration.amountCents,
+                configuration.discountType,
+                configuration.discountValue,
+              )},
+              ${dueDateForMonth(
+                month,
+                configuration.customDueDay ?? configuration.planDueDay,
+              )},
+              ${configuration.planName}, 0, 'open', ${nowSeconds}, ${nowSeconds}
+            )
+          `;
+          await transaction`
+            UPDATE athletes
+            SET financial_status = 'pending',
+                updated_at = ${nowSeconds}
+            WHERE id = ${configuration.athleteId}
+              AND organization_id = ${organizationId}
+          `;
+          createdCount += 1;
+        });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          /athlete_billing_month_reservation_unique|payments_athlete_month_unique|duplicate key value violates unique constraint/i.test(
+            error.message,
+          )
+        ) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    return {
+      createdCount,
+      skippedCount: configurations.length - createdCount,
+      configuredCount: configurations.length,
+    };
+  }
 
   const db = getDb();
   const configurations = await db
