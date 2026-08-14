@@ -115,7 +115,9 @@ test("webhook chama refreshAthleteFinancialStatus quando escreve status diretame
 });
 
 test("chamada de refresh acontece depois do UPDATE de payments, não antes (ordem importa)", () => {
-  const updateIndex = webhookSource.indexOf("await db.update(payments).set(stateUpdate)");
+  const postgresUpdateIndex = webhookSource.indexOf("UPDATE payments");
+  const d1UpdateIndex = webhookSource.indexOf("await db!.update(payments).set(stateUpdate)");
+  const updateIndex = Math.max(postgresUpdateIndex, d1UpdateIndex);
   const refreshIndex = webhookSource.indexOf("await refreshAthleteFinancialStatus(current.organizationId");
   assert.ok(updateIndex > -1 && refreshIndex > -1);
   assert.ok(refreshIndex > updateIndex);
