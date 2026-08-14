@@ -1,5 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { getD1, getDb } from "../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../db/postgres";
 import { athletes, teamAthletes, teams } from "../../../db/schema";
 import { getApiContext } from "../api-auth";
 import { isValidCategory } from "../categories/category-utils";
@@ -10,17 +11,63 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function toDto(row: typeof athletes.$inferSelect) {
-  const age = row.birthDate
+type AthleteRow = typeof athletes.$inferSelect | {
+  id: string;
+  full_name: string;
+  birth_year: number;
+  birth_date: string | null;
+  category: string;
+  guardian_name: string;
+  guardian_document: string | null;
+  guardian_phone: string | null;
+  guardian_email: string | null;
+  emergency_name: string | null;
+  emergency_phone: string | null;
+  allergies: string | null;
+  medications: string | null;
+  medical_notes: string | null;
+  image_authorized: number | boolean;
+  attendance_rate: number;
+  financial_status: string;
+  created_at: number;
+};
+
+function readAthlete(row: AthleteRow) {
+  if ("fullName" in row) return row;
+  return {
+    id: row.id,
+    fullName: row.full_name,
+    birthYear: row.birth_year,
+    birthDate: row.birth_date,
+    category: row.category,
+    guardianName: row.guardian_name,
+    guardianDocument: row.guardian_document,
+    guardianPhone: row.guardian_phone,
+    guardianEmail: row.guardian_email,
+    emergencyName: row.emergency_name,
+    emergencyPhone: row.emergency_phone,
+    allergies: row.allergies,
+    medications: row.medications,
+    medicalNotes: row.medical_notes,
+    imageAuthorized: Boolean(row.image_authorized),
+    attendanceRate: row.attendance_rate,
+    financialStatus: row.financial_status,
+    createdAt: new Date(row.created_at * 1000),
+  };
+}
+
+function toDto(row: AthleteRow) {
+  const athlete = readAthlete(row);
+  const age = athlete.birthDate
     ? Math.max(
         0,
         Math.floor(
-          (Date.now() - new Date(`${row.birthDate}T12:00:00`).getTime()) /
+          (Date.now() - new Date(`${athlete.birthDate}T12:00:00`).getTime()) /
             31_557_600_000,
         ),
       )
-    : Math.max(0, new Date().getFullYear() - row.birthYear);
-  const initials = row.fullName
+    : Math.max(0, new Date().getFullYear() - athlete.birthYear);
+  const initials = athlete.fullName
     .split(/\s+/)
     .slice(0, 2)
     .map((part) => part[0])
@@ -28,26 +75,26 @@ function toDto(row: typeof athletes.$inferSelect) {
     .toUpperCase();
 
   return {
-    id: row.id,
-    name: row.fullName,
+    id: athlete.id,
+    name: athlete.fullName,
     initials,
-    category: row.category,
+    category: athlete.category,
     age,
-    birthDate: row.birthDate,
-    guardianName: row.guardianName,
-    guardianDocument: row.guardianDocument,
-    guardianPhone: row.guardianPhone,
-    guardianEmail: row.guardianEmail,
-    emergencyName: row.emergencyName,
-    emergencyPhone: row.emergencyPhone,
-    allergies: row.allergies,
-    medications: row.medications,
-    medicalNotes: row.medicalNotes,
-    imageAuthorized: row.imageAuthorized,
-    attendance: row.attendanceRate,
-    status: row.financialStatus === "pending" ? "Pendente" : "Em dia",
+    birthDate: athlete.birthDate,
+    guardianName: athlete.guardianName,
+    guardianDocument: athlete.guardianDocument,
+    guardianPhone: athlete.guardianPhone,
+    guardianEmail: athlete.guardianEmail,
+    emergencyName: athlete.emergencyName,
+    emergencyPhone: athlete.emergencyPhone,
+    allergies: athlete.allergies,
+    medications: athlete.medications,
+    medicalNotes: athlete.medicalNotes,
+    imageAuthorized: athlete.imageAuthorized,
+    attendance: athlete.attendanceRate,
+    status: athlete.financialStatus === "pending" ? "Pendente" : "Em dia",
     tone: "green",
-    createdAt: row.createdAt.toISOString(),
+    createdAt: athlete.createdAt.toISOString(),
   };
 }
 
@@ -59,6 +106,24 @@ export async function GET(request: Request) {
         { error: "Faça login para acessar os atletas." },
         { status: 401 },
       );
+    }
+
+    if (postgresConfigured()) {
+      const sql = getPostgresClient();
+      const rows = await sql<AthleteRow[]>`
+        SELECT id, full_name, birth_year, birth_date, category,
+               guardian_name, guardian_document, guardian_phone, guardian_email,
+               emergency_name, emergency_phone, allergies, medications,
+               medical_notes, image_authorized, attendance_rate, financial_status,
+               created_at
+        FROM athletes
+        WHERE organization_id = ${context.membership.organizationId}
+          AND active = 1
+        ORDER BY created_at DESC
+        LIMIT 500
+      `;
+
+      return Response.json({ athletes: rows.map(toDto) });
     }
 
     const db = getDb();
@@ -147,13 +212,111 @@ export async function POST(request: Request) {
     }
 
     const now = new Date();
+    const organizationId = context.membership.organizationId;
+    if (postgresConfigured()) {
+      const sql = getPostgresClient();
+      const compatibleTeams = await sql<{
+        id: string;
+        name: string;
+        category: string;
+        capacity: number;
+      }[]>`
+        SELECT id, name, category, capacity
+        FROM teams
+        WHERE organization_id = ${organizationId}
+          AND category = ${category}
+          AND active = 1
+      `;
+
+      let enrolledTeamId = requestedTeamId;
+      if (enrolledTeamId) {
+        if (!compatibleTeams.some((team) => team.id === enrolledTeamId)) {
+          return Response.json(
+            { error: "Selecione uma turma ativa da mesma categoria do atleta." },
+            { status: 400 },
+          );
+        }
+      } else if (compatibleTeams.length === 1) {
+        enrolledTeamId = compatibleTeams[0].id;
+      } else if (compatibleTeams.length > 1) {
+        return Response.json(
+          { error: "Selecione a turma em que o atleta serÃ¡ matriculado." },
+          { status: 400 },
+        );
+      }
+
+      const athleteId = crypto.randomUUID();
+      const qrToken = crypto.randomUUID();
+      const timestamp = Math.floor(now.getTime() / 1000);
+      const created = await sql.begin(async (transaction) => {
+        if (enrolledTeamId) {
+          const selectedTeam = compatibleTeams.find((team) => team.id === enrolledTeamId)!;
+          const [enrollmentSnapshot] = await transaction<{ value: number }[]>`
+            SELECT COUNT(*)::int AS value
+            FROM team_athletes
+            WHERE team_id = ${enrolledTeamId}
+              AND organization_id = ${organizationId}
+              AND active = 1
+          `;
+          if ((enrollmentSnapshot?.value ?? 0) >= selectedTeam.capacity) {
+            throw new Error("TEAM_CAPACITY_REACHED");
+          }
+        }
+
+        const [inserted] = await transaction<AthleteRow[]>`
+          INSERT INTO athletes (
+            id, organization_id, full_name, birth_year, category,
+            guardian_name, guardian_phone, attendance_rate, financial_status,
+            qr_token, active, created_by, created_at, updated_at
+          )
+          VALUES (
+            ${athleteId}, ${organizationId}, ${name}, ${now.getFullYear() - age}, ${category},
+            ${guardianName}, ${guardianPhone}, 100, 'paid',
+            ${qrToken}, 1, ${context.user.email}, ${timestamp}, ${timestamp}
+          )
+          RETURNING id, full_name, birth_year, birth_date, category,
+                    guardian_name, guardian_document, guardian_phone, guardian_email,
+                    emergency_name, emergency_phone, allergies, medications,
+                    medical_notes, image_authorized, attendance_rate, financial_status,
+                    created_at
+        `;
+
+        if (enrolledTeamId) {
+          await transaction`
+            INSERT INTO team_athletes (organization_id, team_id, athlete_id, active, enrolled_at)
+            VALUES (${organizationId}, ${enrolledTeamId}, ${athleteId}, 1, ${timestamp})
+          `;
+        }
+
+        return inserted;
+      }).catch((error) => {
+        if (error instanceof Error && error.message === "TEAM_CAPACITY_REACHED") {
+          return null;
+        }
+        throw error;
+      });
+
+      if (!created) {
+        return Response.json({ error: "A turma selecionada atingiu a capacidade." }, { status: 409 });
+      }
+
+      return Response.json(
+        {
+          athlete: toDto(created),
+          enrolledTeamId: enrolledTeamId || null,
+          enrollmentNotification: { created: false, processed: 0 },
+        },
+        { status: 201 },
+      );
+    }
+
     const db = getDb();
     const compatibleTeams = await db
       .select()
       .from(teams)
       .where(
         and(
-          eq(teams.organizationId, context.membership.organizationId),
+          eq(teams.organizationId, organizationId),
           eq(teams.category, category),
           eq(teams.active, true),
         ),
@@ -175,7 +338,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const organizationId = context.membership.organizationId;
     const athleteId = crypto.randomUUID();
     const qrToken = crypto.randomUUID();
     const timestamp = Math.floor(now.getTime() / 1000);

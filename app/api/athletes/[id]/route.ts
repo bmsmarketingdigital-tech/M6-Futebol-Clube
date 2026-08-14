@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getD1, getDb } from "../../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../../db/postgres";
 import { athletes } from "../../../../db/schema";
 import { getApiContext } from "../../api-auth";
 import { isValidCategory } from "../../categories/category-utils";
@@ -7,43 +8,89 @@ import { isValidCpfCnpj, onlyDigits } from "../document-utils";
 
 export const dynamic = "force-dynamic";
 
-function toDto(row: typeof athletes.$inferSelect) {
-  const age = row.birthDate
+type AthleteRow = typeof athletes.$inferSelect | {
+  id: string;
+  full_name: string;
+  birth_year: number;
+  birth_date: string | null;
+  category: string;
+  guardian_name: string;
+  guardian_document: string | null;
+  guardian_phone: string | null;
+  guardian_email: string | null;
+  emergency_name: string | null;
+  emergency_phone: string | null;
+  allergies: string | null;
+  medications: string | null;
+  medical_notes: string | null;
+  image_authorized: number | boolean;
+  attendance_rate: number;
+  financial_status: string;
+  created_at: number;
+};
+
+function readAthlete(row: AthleteRow) {
+  if ("fullName" in row) return row;
+  return {
+    id: row.id,
+    fullName: row.full_name,
+    birthYear: row.birth_year,
+    birthDate: row.birth_date,
+    category: row.category,
+    guardianName: row.guardian_name,
+    guardianDocument: row.guardian_document,
+    guardianPhone: row.guardian_phone,
+    guardianEmail: row.guardian_email,
+    emergencyName: row.emergency_name,
+    emergencyPhone: row.emergency_phone,
+    allergies: row.allergies,
+    medications: row.medications,
+    medicalNotes: row.medical_notes,
+    imageAuthorized: Boolean(row.image_authorized),
+    attendanceRate: row.attendance_rate,
+    financialStatus: row.financial_status,
+    createdAt: new Date(row.created_at * 1000),
+  };
+}
+
+function toDto(row: AthleteRow) {
+  const athlete = readAthlete(row);
+  const age = athlete.birthDate
     ? Math.max(
         0,
         Math.floor(
-          (Date.now() - new Date(`${row.birthDate}T12:00:00`).getTime()) /
+          (Date.now() - new Date(`${athlete.birthDate}T12:00:00`).getTime()) /
             31_557_600_000,
         ),
       )
-    : Math.max(0, new Date().getFullYear() - row.birthYear);
+    : Math.max(0, new Date().getFullYear() - athlete.birthYear);
 
   return {
-    id: row.id,
-    name: row.fullName,
-    initials: row.fullName
+    id: athlete.id,
+    name: athlete.fullName,
+    initials: athlete.fullName
       .split(/\s+/)
       .slice(0, 2)
       .map((part) => part[0])
       .join("")
       .toUpperCase(),
-    category: row.category,
+    category: athlete.category,
     age,
-    birthDate: row.birthDate,
-    guardianName: row.guardianName,
-    guardianDocument: row.guardianDocument,
-    guardianPhone: row.guardianPhone,
-    guardianEmail: row.guardianEmail,
-    emergencyName: row.emergencyName,
-    emergencyPhone: row.emergencyPhone,
-    allergies: row.allergies,
-    medications: row.medications,
-    medicalNotes: row.medicalNotes,
-    imageAuthorized: row.imageAuthorized,
-    attendance: row.attendanceRate,
-    status: row.financialStatus === "pending" ? "Pendente" : "Em dia",
+    birthDate: athlete.birthDate,
+    guardianName: athlete.guardianName,
+    guardianDocument: athlete.guardianDocument,
+    guardianPhone: athlete.guardianPhone,
+    guardianEmail: athlete.guardianEmail,
+    emergencyName: athlete.emergencyName,
+    emergencyPhone: athlete.emergencyPhone,
+    allergies: athlete.allergies,
+    medications: athlete.medications,
+    medicalNotes: athlete.medicalNotes,
+    imageAuthorized: athlete.imageAuthorized,
+    attendance: athlete.attendanceRate,
+    status: athlete.financialStatus === "pending" ? "Pendente" : "Em dia",
     tone: "green",
-    createdAt: row.createdAt.toISOString(),
+    createdAt: athlete.createdAt.toISOString(),
   };
 }
 
@@ -117,6 +164,100 @@ export async function PATCH(
       );
     }
 
+    const organizationId = context.membership.organizationId;
+    if (postgresConfigured()) {
+      const sql = getPostgresClient();
+      const [existingAthlete] = await sql<{
+        birth_year: number;
+        category: string;
+      }[]>`
+        SELECT birth_year, category
+        FROM athletes
+        WHERE id = ${id}
+          AND organization_id = ${organizationId}
+          AND active = 1
+        LIMIT 1
+      `;
+
+      if (!existingAthlete) {
+        return Response.json({ error: "Atleta nÃ£o encontrado." }, { status: 404 });
+      }
+
+      const categoryChanged = existingAthlete.category !== category;
+      let birthYear = existingAthlete.birth_year;
+      if (birthDate) {
+        const parsed = new Date(`${birthDate}T12:00:00`);
+        const age = Math.floor(
+          (Date.now() - parsed.getTime()) / 31_557_600_000,
+        );
+        if (
+          !/^\d{4}-\d{2}-\d{2}$/.test(birthDate) ||
+          Number.isNaN(parsed.getTime()) ||
+          age < 4 ||
+          age > 18
+        ) {
+          return Response.json(
+            { error: "A data de nascimento deve corresponder Ã  idade de 4 a 18 anos." },
+            { status: 400 },
+          );
+        }
+        birthYear = parsed.getFullYear();
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const updated = await sql.begin(async (transaction) => {
+        const [row] = await transaction<AthleteRow[]>`
+          UPDATE athletes SET
+            full_name = ${name},
+            category = ${category},
+            birth_year = ${birthYear},
+            birth_date = ${birthDate},
+            guardian_name = ${guardianName},
+            guardian_document = ${guardianDocument || null},
+            guardian_phone = ${guardianPhone},
+            guardian_email = ${payload.guardianEmail?.trim().toLowerCase() || null},
+            emergency_name = ${payload.emergencyName?.trim() || null},
+            emergency_phone = ${payload.emergencyPhone?.trim() || null},
+            allergies = ${payload.allergies?.trim() || null},
+            medications = ${payload.medications?.trim() || null},
+            medical_notes = ${payload.medicalNotes?.trim() || null},
+            image_authorized = ${Boolean(payload.imageAuthorized) ? 1 : 0},
+            updated_at = ${now}
+          WHERE id = ${id}
+            AND organization_id = ${organizationId}
+            AND active = 1
+          RETURNING id, full_name, birth_year, birth_date, category,
+                    guardian_name, guardian_document, guardian_phone, guardian_email,
+                    emergency_name, emergency_phone, allergies, medications,
+                    medical_notes, image_authorized, attendance_rate, financial_status,
+                    created_at
+        `;
+
+        if (categoryChanged) {
+          await transaction`
+            UPDATE team_athletes
+            SET active = 0
+            WHERE athlete_id = ${id}
+              AND organization_id = ${organizationId}
+              AND active = 1
+              AND EXISTS (
+                SELECT 1 FROM teams t
+                WHERE t.id = team_athletes.team_id
+                  AND t.category != ${category}
+              )
+          `;
+        }
+
+        return row;
+      });
+
+      if (!updated) {
+        return Response.json({ error: "Atleta nÃ£o encontrado." }, { status: 404 });
+      }
+
+      return Response.json({ athlete: toDto(updated) });
+    }
+
     const db = getDb();
     const [existingAthlete] = await db
       .select({ birthYear: athletes.birthYear, category: athletes.category })
@@ -124,7 +265,7 @@ export async function PATCH(
       .where(
         and(
           eq(athletes.id, id),
-          eq(athletes.organizationId, context.membership.organizationId),
+          eq(athletes.organizationId, organizationId),
           eq(athletes.active, true),
         ),
       )
@@ -155,7 +296,6 @@ export async function PATCH(
       birthYear = parsed.getFullYear();
     }
 
-    const organizationId = context.membership.organizationId;
     const d1 = getD1();
     const now = Math.floor(Date.now() / 1000);
     const statements = [
@@ -234,6 +374,26 @@ export async function DELETE(
     }
 
     const { id } = await params;
+    const organizationId = context.membership.organizationId;
+    if (postgresConfigured()) {
+      const sql = getPostgresClient();
+      const now = Math.floor(Date.now() / 1000);
+      const [archived] = await sql<{ id: string }[]>`
+        UPDATE athletes
+        SET active = 0, updated_at = ${now}
+        WHERE id = ${id}
+          AND organization_id = ${organizationId}
+          AND active = 1
+        RETURNING id
+      `;
+
+      if (!archived) {
+        return Response.json({ error: "Atleta nÃ£o encontrado." }, { status: 404 });
+      }
+
+      return Response.json({ archived: true, id: archived.id });
+    }
+
     const db = getDb();
     const [archived] = await db
       .update(athletes)
@@ -241,7 +401,7 @@ export async function DELETE(
       .where(
         and(
           eq(athletes.id, id),
-          eq(athletes.organizationId, context.membership.organizationId),
+          eq(athletes.organizationId, organizationId),
           eq(athletes.active, true),
         ),
       )
