@@ -1,4 +1,5 @@
 import { getDb } from "../../../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../../../db/postgres";
 import { organizations } from "../../../../../db/schema";
 import { runBillingAutomation } from "../../../finance/billing-automation";
 import { NotificationOrigin } from "../../../notifications/outbox";
@@ -24,7 +25,11 @@ export async function POST(request: Request) {
       : requestedOrigin === "automatic"
         ? "automatic"
         : "startup";
-  const rows = await getDb().select({ id: organizations.id }).from(organizations);
+  const rows = postgresConfigured()
+    ? await getPostgresClient()<{
+        id: string;
+      }[]>`SELECT id FROM organizations`
+    : await getDb().select({ id: organizations.id }).from(organizations);
   const results = [];
   for (const organization of rows) {
     results.push({

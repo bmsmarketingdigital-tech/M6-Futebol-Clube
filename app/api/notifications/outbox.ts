@@ -1,4 +1,5 @@
 import { getD1 } from "../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../db/postgres";
 import {
   getWhatsAppBridgeStatus,
   sendWhatsAppMessage,
@@ -109,6 +110,25 @@ function financialNotificationTestEnabled() {
 export async function enqueueNotification(input: OutboxInput) {
   const now = unixNow();
   const id = crypto.randomUUID();
+  if (postgresConfigured()) {
+    const [result] = await getPostgresClient()<{
+      id: string;
+    }[]>`
+      INSERT INTO notification_outbox (
+        id, organization_id, athlete_id, payment_id, team_id, event_type,
+        idempotency_key, phone, message, status, attempt_count, max_attempts,
+        created_at, updated_at
+      ) VALUES (
+        ${id}, ${input.organizationId}, ${input.athleteId},
+        ${input.paymentId ?? null}, ${input.teamId ?? null}, ${input.eventType},
+        ${input.idempotencyKey}, ${input.phone}, ${input.message},
+        'pending', 0, ${input.maxAttempts ?? 3}, ${now}, ${now}
+      )
+      ON CONFLICT (idempotency_key) DO NOTHING
+      RETURNING id
+    `;
+    return { id: result?.id ?? null, created: Boolean(result) };
+  }
   const result = await getD1()
     .prepare(
       `INSERT INTO notification_outbox (
@@ -139,6 +159,22 @@ export async function enqueueNotification(input: OutboxInput) {
 
 async function quarantineExpiredLocks(organizationId: string, notificationId?: string) {
   const now = unixNow();
+  if (postgresConfigured()) {
+    await getPostgresClient()`
+      UPDATE notification_outbox
+      SET status = 'delivery_unknown',
+          last_error = 'A execução foi interrompida após a reserva; entrega requer análise manual.',
+          lock_token = NULL,
+          locked_until = NULL,
+          updated_at = ${now}
+      WHERE organization_id = ${organizationId}
+        AND status = 'processing'
+        AND locked_until IS NOT NULL
+        AND locked_until <= ${now}
+        AND (${notificationId ?? null} IS NULL OR id = ${notificationId ?? null})
+    `;
+    return;
+  }
   const targetFilter = notificationId ? "AND id = ?" : "";
   const bindings: unknown[] = [now, organizationId, now];
   if (notificationId) bindings.push(notificationId);
@@ -163,11 +199,92 @@ async function reserveNext(
 ): Promise<ReservedNotification | null> {
   const now = unixNow();
   const lockToken = crypto.randomUUID();
+  const allowedPhone = testModeAllowedPhone();
+  if (postgresConfigured()) {
+    const [row] = await getPostgresClient()<{
+      id: string;
+      organization_id: string;
+      athlete_id: string;
+      payment_id: string | null;
+      team_id: string | null;
+      event_type: OutboxInput["eventType"];
+      idempotency_key: string;
+      phone: string;
+      message: string;
+      attempt_count: number;
+      lock_token: string;
+    }[]>`
+      WITH candidate AS (
+        SELECT id
+        FROM notification_outbox
+        WHERE organization_id = ${organizationId}
+          AND (
+            status = 'pending'
+            OR (
+              status = 'failed'
+              AND attempt_count < max_attempts
+              AND (next_attempt_at IS NULL OR next_attempt_at <= ${now})
+            )
+          )
+          AND (${notificationId ?? null} IS NULL OR id = ${notificationId ?? null})
+          AND (
+            ${notificationId ?? null} IS NOT NULL
+            OR (
+              event_type != 'controlled_test'
+              AND idempotency_key NOT LIKE 'financial-test:%'
+            )
+          )
+          AND (
+            ${allowedPhone ?? null} IS NULL
+            OR replace(replace(replace(replace(replace(replace(phone, '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', '') = ${allowedPhone ?? null}
+            OR '55' || replace(replace(replace(replace(replace(replace(phone, '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', '') = ${allowedPhone ?? null}
+          )
+          AND (locked_until IS NULL OR locked_until <= ${now})
+        ORDER BY created_at, id
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      )
+      UPDATE notification_outbox outbox
+      SET status = 'processing',
+          locked_at = ${now},
+          locked_until = ${now + LOCK_SECONDS},
+          lock_token = ${lockToken},
+          last_attempt_origin = ${origin},
+          last_error = NULL,
+          updated_at = ${now}
+      FROM candidate
+      WHERE outbox.id = candidate.id
+      RETURNING outbox.id,
+        outbox.organization_id,
+        outbox.athlete_id,
+        outbox.payment_id,
+        outbox.team_id,
+        outbox.event_type,
+        outbox.idempotency_key,
+        outbox.phone,
+        outbox.message,
+        outbox.attempt_count,
+        outbox.lock_token
+    `;
+    if (!row) return null;
+    return {
+      id: row.id,
+      organizationId: row.organization_id,
+      athleteId: row.athlete_id,
+      paymentId: row.payment_id,
+      teamId: row.team_id,
+      eventType: row.event_type,
+      idempotencyKey: row.idempotency_key,
+      phone: row.phone,
+      message: row.message,
+      attemptCount: row.attempt_count,
+      lockToken: row.lock_token,
+    };
+  }
   const targetFilter = notificationId ? "AND id = ?" : "";
   const controlledTestFilter = notificationId
     ? ""
     : "AND event_type != 'controlled_test' AND idempotency_key NOT LIKE 'financial-test:%'";
-  const allowedPhone = testModeAllowedPhone();
   const phoneFilter = allowedPhone
     ? `AND (
         replace(replace(replace(replace(replace(replace(phone, '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', '') = ?
@@ -218,19 +335,45 @@ export async function revalidateFinancialNotification(
     return "Teste financeiro controlado sem contexto autorizado.";
   }
   if (!item.paymentId) return "Mensalidade vinculada não está mais disponível.";
-  const current = await getD1().prepare(`SELECT
-      p.status, p.amount_cents AS amountCents, p.paid_amount_cents AS paidAmountCents,
-      p.due_date AS dueDate, a.active AS athleteActive, a.guardian_phone AS guardianPhone,
-      COALESCE(s.enabled, 1) AS enabled,
-      COALESCE(s.before_due_enabled, 1) AS beforeDueEnabled,
-      COALESCE(s.before_due_days, 3) AS beforeDueDays,
-      COALESCE(s.due_today_enabled, 1) AS dueTodayEnabled,
-      COALESCE(s.overdue_enabled, 1) AS overdueEnabled,
-      COALESCE(s.overdue_days, 5) AS overdueDays
-    FROM payments p JOIN athletes a ON a.id = p.athlete_id
-    LEFT JOIN billing_notification_settings s ON s.organization_id = p.organization_id
-    WHERE p.id = ? AND p.organization_id = ? AND a.id = ?`)
-    .bind(item.paymentId, item.organizationId, item.athleteId).first<Record<string, string | number | null>>();
+  const current = postgresConfigured()
+    ? (await getPostgresClient()<Record<string, string | number | null>[]>`
+        SELECT
+          p.status,
+          p.amount_cents AS "amountCents",
+          p.paid_amount_cents AS "paidAmountCents",
+          p.due_date AS "dueDate",
+          a.active AS "athleteActive",
+          a.guardian_phone AS "guardianPhone",
+          COALESCE(s.enabled, 1) AS enabled,
+          COALESCE(s.before_due_enabled, 1) AS "beforeDueEnabled",
+          COALESCE(s.before_due_days, 3) AS "beforeDueDays",
+          COALESCE(s.due_today_enabled, 1) AS "dueTodayEnabled",
+          COALESCE(s.overdue_enabled, 1) AS "overdueEnabled",
+          COALESCE(s.overdue_days, 5) AS "overdueDays"
+        FROM payments p
+        JOIN athletes a
+          ON a.id = p.athlete_id
+         AND a.organization_id = p.organization_id
+        LEFT JOIN billing_notification_settings s
+          ON s.organization_id = p.organization_id
+        WHERE p.id = ${item.paymentId}
+          AND p.organization_id = ${item.organizationId}
+          AND a.id = ${item.athleteId}
+        LIMIT 1
+      `)[0]
+    : await getD1().prepare(`SELECT
+        p.status, p.amount_cents AS amountCents, p.paid_amount_cents AS paidAmountCents,
+        p.due_date AS dueDate, a.active AS athleteActive, a.guardian_phone AS guardianPhone,
+        COALESCE(s.enabled, 1) AS enabled,
+        COALESCE(s.before_due_enabled, 1) AS beforeDueEnabled,
+        COALESCE(s.before_due_days, 3) AS beforeDueDays,
+        COALESCE(s.due_today_enabled, 1) AS dueTodayEnabled,
+        COALESCE(s.overdue_enabled, 1) AS overdueEnabled,
+        COALESCE(s.overdue_days, 5) AS overdueDays
+      FROM payments p JOIN athletes a ON a.id = p.athlete_id
+      LEFT JOIN billing_notification_settings s ON s.organization_id = p.organization_id
+      WHERE p.id = ? AND p.organization_id = ? AND a.id = ?`)
+      .bind(item.paymentId, item.organizationId, item.athleteId).first<Record<string, string | number | null>>();
   if (!current) return "Mensalidade ou atleta não encontrado na revalidação.";
   const balance = Number(current.amountCents) - Number(current.paidAmountCents || 0);
   if (["paid", "cancelled"].includes(String(current.status)) || balance <= 0) return "Mensalidade quitada, cancelada ou sem saldo.";
@@ -264,6 +407,22 @@ export async function revalidateFinancialNotification(
 
 async function supersede(item: ReservedNotification, reason: string) {
   const now = unixNow();
+  if (postgresConfigured()) {
+    await getPostgresClient()`
+      UPDATE notification_outbox
+      SET status = 'superseded',
+          last_error = ${reason},
+          lock_token = NULL,
+          locked_at = NULL,
+          locked_until = NULL,
+          next_attempt_at = NULL,
+          updated_at = ${now}
+      WHERE id = ${item.id}
+        AND status = 'processing'
+        AND lock_token = ${item.lockToken}
+    `;
+    return;
+  }
   await getD1().prepare(`UPDATE notification_outbox
     SET status='superseded', last_error=?, lock_token=NULL, locked_at=NULL,
         locked_until=NULL, next_attempt_at=NULL, updated_at=?
@@ -273,6 +432,28 @@ async function supersede(item: ReservedNotification, reason: string) {
 
 async function beginAttempt(item: ReservedNotification, origin: NotificationOrigin) {
   const now = unixNow();
+  if (postgresConfigured()) {
+    const [row] = await getPostgresClient()<{
+      attempt_count: number;
+    }[]>`
+      UPDATE notification_outbox
+      SET attempt_count = attempt_count + 1,
+          updated_at = ${now}
+      WHERE id = ${item.id}
+        AND status = 'processing'
+        AND lock_token = ${item.lockToken}
+      RETURNING attempt_count
+    `;
+    if (!row) return false;
+    item.attemptCount = row.attempt_count;
+    await getPostgresClient()`
+      INSERT INTO notification_attempts
+        (id, notification_id, attempt_number, origin, lock_token, status, started_at)
+      VALUES
+        (${crypto.randomUUID()}, ${item.id}, ${item.attemptCount}, ${origin}, ${item.lockToken}, 'processing', ${now})
+    `;
+    return true;
+  }
   const row = await getD1().prepare(`UPDATE notification_outbox
     SET attempt_count = attempt_count + 1, updated_at=?
     WHERE id=? AND status='processing' AND lock_token=?
@@ -299,6 +480,35 @@ async function finishAttempt(
   const now = unixNow();
   const status = result.status;
   const nextAttemptAt = status === "failed" ? retryAt(item.attemptCount) : null;
+  if (postgresConfigured()) {
+    const sql = getPostgresClient();
+    await sql.begin(async (transaction) => {
+      await transaction`
+        UPDATE notification_outbox
+        SET status = ${status},
+            last_error = ${result.error},
+            sent_at = ${status === "sent" ? now : null},
+            provider_message_id = ${result.providerMessageId ?? null},
+            next_attempt_at = ${nextAttemptAt},
+            lock_token = NULL,
+            locked_until = NULL,
+            updated_at = ${now}
+        WHERE id = ${item.id}
+          AND status = 'processing'
+          AND lock_token = ${item.lockToken}
+      `;
+      await transaction`
+        UPDATE notification_attempts
+        SET status = ${status},
+            error = ${result.error},
+            provider_message_id = ${result.providerMessageId ?? null},
+            finished_at = ${now}
+        WHERE lock_token = ${item.lockToken}
+          AND status = 'processing'
+      `;
+    });
+    return;
+  }
   await getD1().batch([
     getD1()
       .prepare(
@@ -449,14 +659,38 @@ export async function createManualResend(
   organizationId: string,
   originalId: string,
 ) {
-  const original = await getD1()
-    .prepare(
-      `SELECT id, athlete_id AS athleteId, payment_id AS paymentId, team_id AS teamId,
-        event_type AS eventType, idempotency_key AS idempotencyKey, phone, message
-       FROM notification_outbox WHERE id = ? AND organization_id = ?`,
-    )
-    .bind(originalId, organizationId)
-    .first<ReservedNotification>();
+  const original = postgresConfigured()
+    ? (await getPostgresClient()<{
+        id: string;
+        athlete_id: string;
+        payment_id: string | null;
+        team_id: string | null;
+        event_type: OutboxInput["eventType"];
+        idempotency_key: string;
+        phone: string;
+        message: string;
+      }[]>`
+        SELECT id,
+               athlete_id,
+               payment_id,
+               team_id,
+               event_type,
+               idempotency_key,
+               phone,
+               message
+        FROM notification_outbox
+        WHERE id = ${originalId}
+          AND organization_id = ${organizationId}
+        LIMIT 1
+      `)[0]
+    : await getD1()
+      .prepare(
+        `SELECT id, athlete_id AS athleteId, payment_id AS paymentId, team_id AS teamId,
+          event_type AS eventType, idempotency_key AS idempotencyKey, phone, message
+         FROM notification_outbox WHERE id = ? AND organization_id = ?`,
+      )
+      .bind(originalId, organizationId)
+      .first<ReservedNotification>();
   if (original?.idempotencyKey.startsWith("financial-test:")) {
     throw new Error("Testes financeiros controlados nao admitem reenvio manual.");
   }
@@ -464,6 +698,42 @@ export async function createManualResend(
 
   const now = unixNow();
   const id = crypto.randomUUID();
+  if (postgresConfigured()) {
+    const normalizedOriginal = {
+      id: original.id,
+      athleteId: "athleteId" in original ? original.athleteId : original.athlete_id,
+      paymentId: "paymentId" in original ? original.paymentId : original.payment_id,
+      teamId: "teamId" in original ? original.teamId : original.team_id,
+      eventType: "eventType" in original ? original.eventType : original.event_type,
+      idempotencyKey: "idempotencyKey" in original ? original.idempotencyKey : original.idempotency_key,
+      phone: original.phone,
+      message: original.message,
+    };
+    await getPostgresClient().begin(async (transaction) => {
+      await transaction`
+        INSERT INTO notification_outbox (
+          id, organization_id, athlete_id, payment_id, team_id,
+          original_notification_id, event_type, idempotency_key, phone, message,
+          status, attempt_count, max_attempts, last_attempt_origin, created_at, updated_at
+        ) VALUES (
+          ${id}, ${organizationId}, ${normalizedOriginal.athleteId},
+          ${normalizedOriginal.paymentId ?? null}, ${normalizedOriginal.teamId ?? null},
+          ${normalizedOriginal.id}, ${normalizedOriginal.eventType},
+          ${`manual:${normalizedOriginal.id}:${id}`},
+          ${normalizedOriginal.phone}, ${normalizedOriginal.message},
+          'pending', 0, 1, 'manual', ${now}, ${now}
+        )
+      `;
+      await transaction`
+        UPDATE notification_outbox
+        SET manual_resend_count = manual_resend_count + 1,
+            updated_at = ${now}
+        WHERE id = ${normalizedOriginal.id}
+          AND organization_id = ${organizationId}
+      `;
+    });
+    return { id };
+  }
   await getD1().batch([
     getD1()
       .prepare(

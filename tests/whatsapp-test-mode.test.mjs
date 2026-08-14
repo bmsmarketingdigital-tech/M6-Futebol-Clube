@@ -58,8 +58,10 @@ test("a barreira final está antes de client.sendMessage e a outbox filtra antes
   assert.ok(connector.indexOf("canSendToPhone(phone, testMode)") < connector.indexOf("client.sendMessage(chatId, text)"));
   assert.match(connector, /Envio bloqueado pelo TEST_MODE/);
   assert.match(outbox, /phoneFilter/);
+  assert.match(outbox, /allowedPhone \?\? null/);
+  assert.match(outbox, /FOR UPDATE SKIP LOCKED/);
   assert.match(outbox, /attempt_count = attempt_count \+ 1/);
-  assert.ok(outbox.indexOf("${phoneFilter}") < outbox.indexOf("ORDER BY created_at"));
+  assert.ok(outbox.indexOf("${phoneFilter}") < outbox.lastIndexOf("ORDER BY created_at"));
 });
 
 test("normalização aceita o número configurado com ou sem máscara e DDI", () => {
