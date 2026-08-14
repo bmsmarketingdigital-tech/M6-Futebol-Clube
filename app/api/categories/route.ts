@@ -1,5 +1,6 @@
 import { eq, max } from "drizzle-orm";
 import { getDb } from "../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../db/postgres";
 import { sportsCategories } from "../../../db/schema";
 import { getApiContext } from "../api-auth";
 import {
@@ -38,6 +39,38 @@ export async function POST(request: Request) {
       { error: "Informe um nome de categoria com pelo menos 2 caracteres." },
       { status: 400 },
     );
+  }
+
+  if (postgresConfigured()) {
+    const sql = getPostgresClient();
+    const [lastOrder] = await sql<{ value: number | null }[]>`
+      SELECT MAX(sort_order)::int AS value
+      FROM sports_categories
+      WHERE organization_id = ${context.membership.organizationId}
+    `;
+    const now = Date.now();
+    try {
+      const [created] = await sql<{ id: string; name: string; sort_order: number }[]>`
+        INSERT INTO sports_categories (id, organization_id, name, sort_order, active, created_at, updated_at)
+        VALUES (${crypto.randomUUID()}, ${context.membership.organizationId}, ${name}, ${(lastOrder?.value ?? 0) + 10}, 1, ${now}, ${now})
+        RETURNING id, name, sort_order
+      `;
+      return Response.json(
+        {
+          category: {
+            id: created.id,
+            name: created.name,
+            sortOrder: created.sort_order,
+          },
+        },
+        { status: 201 },
+      );
+    } catch {
+      return Response.json(
+        { error: "JÃ¡ existe uma categoria com esse nome." },
+        { status: 409 },
+      );
+    }
   }
 
   const db = getDb();

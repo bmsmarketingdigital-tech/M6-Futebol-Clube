@@ -1,5 +1,6 @@
 import { and, count, eq } from "drizzle-orm";
 import { getD1, getDb } from "../../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../../db/postgres";
 import {
   athletes,
   sportsCategories,
@@ -30,6 +31,62 @@ export async function PATCH(
   }
 
   const organizationId = context.membership.organizationId;
+  if (postgresConfigured()) {
+    const sql = getPostgresClient();
+    const [category] = await sql<{ id: string; name: string; sort_order: number }[]>`
+      SELECT id, name, sort_order
+      FROM sports_categories
+      WHERE id = ${id} AND organization_id = ${organizationId} AND active = 1
+      LIMIT 1
+    `;
+    if (!category) {
+      return Response.json({ error: "Categoria nÃ£o encontrada." }, { status: 404 });
+    }
+
+    const [duplicate] = await sql<{ id: string }[]>`
+      SELECT id
+      FROM sports_categories
+      WHERE organization_id = ${organizationId} AND name = ${name} AND active = 1
+      LIMIT 1
+    `;
+    if (duplicate && duplicate.id !== id) {
+      return Response.json(
+        { error: "JÃ¡ existe uma categoria com esse nome." },
+        { status: 409 },
+      );
+    }
+
+    const now = Date.now();
+    try {
+      await sql.begin(async (transaction) => {
+        await transaction`
+          UPDATE sports_categories
+          SET name = ${name}, updated_at = ${now}
+          WHERE id = ${id} AND organization_id = ${organizationId}
+        `;
+        await transaction`
+          UPDATE athletes
+          SET category = ${name}, updated_at = ${now}
+          WHERE organization_id = ${organizationId} AND category = ${category.name}
+        `;
+        await transaction`
+          UPDATE teams
+          SET category = ${name}
+          WHERE organization_id = ${organizationId} AND category = ${category.name}
+        `;
+      });
+    } catch {
+      return Response.json(
+        { error: "JÃ¡ existe uma categoria com esse nome." },
+        { status: 409 },
+      );
+    }
+
+    return Response.json({
+      category: { id, name, sortOrder: category.sort_order },
+    });
+  }
+
   const db = getDb();
   const [category] = await db
     .select()
@@ -108,6 +165,82 @@ export async function DELETE(
 
   const { id } = await params;
   const organizationId = context.membership.organizationId;
+  if (postgresConfigured()) {
+    const sql = getPostgresClient();
+    const [category] = await sql<{ id: string; name: string }[]>`
+      SELECT id, name
+      FROM sports_categories
+      WHERE id = ${id} AND organization_id = ${organizationId} AND active = 1
+      LIMIT 1
+    `;
+    if (!category) {
+      return Response.json({ error: "Categoria nÃ£o encontrada." }, { status: 404 });
+    }
+
+    const [[athleteInUse], [teamInUse]] = await Promise.all([
+      sql<{ id: string }[]>`
+        SELECT id FROM athletes
+        WHERE organization_id = ${organizationId} AND category = ${category.name} AND active = 1
+        LIMIT 1
+      `,
+      sql<{ id: string }[]>`
+        SELECT id FROM teams
+        WHERE organization_id = ${organizationId} AND category = ${category.name} AND active = 1
+        LIMIT 1
+      `,
+    ]);
+    if (athleteInUse || teamInUse) {
+      return Response.json(
+        {
+          error:
+            "Essa categoria estÃ¡ em uso. Edite os atletas e as turmas antes de excluÃ­-la.",
+        },
+        { status: 409 },
+      );
+    }
+
+    const [categoryTotal] = await sql<{ value: number }[]>`
+      SELECT COUNT(*)::int AS value
+      FROM sports_categories
+      WHERE organization_id = ${organizationId} AND active = 1
+    `;
+    if ((categoryTotal?.value ?? 0) <= 1) {
+      return Response.json(
+        { error: "Mantenha pelo menos uma categoria cadastrada." },
+        { status: 409 },
+      );
+    }
+
+    const result = await sql`
+      DELETE FROM sports_categories
+      WHERE id = ${id} AND organization_id = ${organizationId} AND active = 1
+        AND NOT EXISTS (
+          SELECT 1 FROM athletes a
+          WHERE a.organization_id = ${organizationId} AND a.category = sports_categories.name AND a.active = 1
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM teams t
+          WHERE t.organization_id = ${organizationId} AND t.category = sports_categories.name AND t.active = 1
+        )
+        AND (
+          SELECT COUNT(*) FROM sports_categories sc2
+          WHERE sc2.organization_id = ${organizationId} AND sc2.active = 1
+        ) > 1
+    `;
+
+    if (result.count !== 1) {
+      return Response.json(
+        {
+          error:
+            "Essa categoria estÃ¡ em uso ou Ã© a Ãºnica cadastrada. Atualize os vÃ­nculos e tente novamente.",
+        },
+        { status: 409 },
+      );
+    }
+
+    return Response.json({ deleted: true, id });
+  }
+
   const db = getDb();
   const [category] = await db
     .select()
