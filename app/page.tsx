@@ -679,6 +679,26 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
             </div>
             <button className="icon-button" aria-label="Ajuda"><HelpCircle size={18} strokeWidth={1.75} /></button>
             <button className="icon-button notification" aria-label="Notificações"><Bell size={18} strokeWidth={1.75} /></button>
+            <div className="mobile-top-menu">
+              <button
+                className="icon-button"
+                aria-label="Menu"
+                aria-expanded={profileMenuOpen}
+                onClick={() => setProfileMenuOpen((current) => !current)}
+              >
+                <MoreVertical size={19} strokeWidth={1.9} />
+              </button>
+              {profileMenuOpen && (
+                <div className="profile-menu mobile-profile-menu">
+                  <span><strong>{user.displayName}</strong><small>@{user.username}</small></span>
+                  <button type="button" onClick={() => { setSection("Visão geral"); setProfileMenuOpen(false); }}>Início</button>
+                  <button type="button" onClick={() => { setSection("Atletas"); setProfileMenuOpen(false); }}>Cadastro</button>
+                  <button type="button" onClick={() => { setSection("Turmas"); setProfileMenuOpen(false); }}>Categorias</button>
+                  {user.role === "admin" && <button type="button" onClick={() => { setSection("Mensalidades"); setProfileMenuOpen(false); }}>Financeiro</button>}
+                  <button type="button" onClick={() => void onSignOut()}>Sair do sistema</button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -1082,28 +1102,28 @@ function Dashboard({
       <section className={canViewFinance ? "metrics-grid" : "metrics-grid operator-metrics"} aria-label="Indicadores principais">
         {canViewFinance && (
           <>
-            <Metric icon={Wallet} label="A RECEBER" value={formatMoney(finance.openCents)} trend={`${finance.openCount} mensalidade(s) em aberto`} tone="orange" />
-            <Metric icon={AlertTriangle} label="ATRASADO" value={formatMoney(finance.totalOverdueCents)} trend={`${finance.totalOverdueCount} mensalidade(s) vencida(s)`} tone="red" negative />
-            <Metric icon={Wallet} label="RECEBIDO NO MÊS" value={formatMoney(finance.receivedCents)} trend={`${finance.paidCount} pagamento(s) recebido(s)`} tone="green" />
+            <Metric className="financial-primary" icon={Wallet} label="A RECEBER" value={formatMoney(finance.openCents)} trend={`${finance.openCount} mensalidade(s) em aberto`} tone="orange" />
+            <Metric className="financial-primary" icon={AlertTriangle} label="VENCIDAS" value={formatMoney(finance.totalOverdueCents)} trend={`${finance.totalOverdueCount} mensalidade(s) atrasada(s)`} tone="red" negative />
+            <Metric className="financial-secondary" icon={Wallet} label="RECEBIDO NO MÊS" value={formatMoney(finance.receivedCents)} trend={`${finance.paidCount} pagamento(s) recebido(s)`} tone="green" />
           </>
         )}
-        <Metric icon={Users} label="CLIENTES / ATLETAS" value={String(athletes.length)} trend="cadastros ativos" tone="green" />
-        <Metric icon={CheckCircle2} label="FREQUÊNCIA MÉDIA" value={`${averageAttendance}%`} trend="calculada pelas chamadas" tone="blue" />
+        <Metric className="operational-metric" icon={Users} label="CLIENTES / ATLETAS" value={String(athletes.length)} trend="cadastros ativos" tone="green" />
+        <Metric className="operational-metric" icon={CheckCircle2} label="FREQUÊNCIA MÉDIA" value={`${averageAttendance}%`} trend="calculada pelas chamadas" tone="blue" />
       </section>
 
       <section className="quick-mobile-panel" aria-label="Menu rápido">
         <button onClick={() => setSection("Atletas")}>
           <Users size={18} strokeWidth={1.8} />
-          <span><strong>Clientes</strong><small>Ver e cadastrar atletas</small></span>
+          <span><strong>Cadastro</strong><small>Aluno, nascimento e prontuário</small></span>
         </button>
         <button onClick={() => setSection("Turmas")}>
           <LayoutGrid size={18} strokeWidth={1.8} />
-          <span><strong>Categorias</strong><small>Turmas por categoria</small></span>
+          <span><strong>Categoria</strong><small>Escolher turma e chamada</small></span>
         </button>
         {canViewFinance && (
           <button onClick={() => setSection("Mensalidades")}>
             <Wallet size={18} strokeWidth={1.8} />
-            <span><strong>Financeiro</strong><small>Mensalidades e atrasos</small></span>
+            <span><strong>Financeiro</strong><small>A receber e vencidas</small></span>
           </button>
         )}
       </section>
@@ -1698,8 +1718,8 @@ function GenericModule({ section, notify }: { section: Section; notify: (message
   );
 }
 
-function Metric({ icon: Icon, label, value, trend, tone, negative, progress }: { icon: LucideIcon; label: string; value: string; trend: string; tone: string; negative?: boolean; progress?: boolean }) {
-  return <article className="metric-card"><div className={`metric-icon ${tone}`}><Icon size={19} strokeWidth={1.75} /></div><div><span>{label}</span><strong>{value}</strong><small className={negative ? "negative" : ""}>{progress && <i className="mini-progress"><b /></i>}{!progress && <b>{negative ? <ArrowDown size={11} strokeWidth={2.25} /> : <ArrowUp size={11} strokeWidth={2.25} />}</b>} {trend}</small></div></article>;
+function Metric({ icon: Icon, label, value, trend, tone, negative, progress, className = "" }: { icon: LucideIcon; label: string; value: string; trend: string; tone: string; negative?: boolean; progress?: boolean; className?: string }) {
+  return <article className={`metric-card ${className}`.trim()}><div className={`metric-icon ${tone}`}><Icon size={19} strokeWidth={1.75} /></div><div><span>{label}</span><strong>{value}</strong><small className={negative ? "negative" : ""}>{progress && <i className="mini-progress"><b /></i>}{!progress && <b>{negative ? <ArrowDown size={11} strokeWidth={2.25} /> : <ArrowUp size={11} strokeWidth={2.25} />}</b>} {trend}</small></div></article>;
 }
 
 function CardHeader({ title, subtitle, action, onAction }: { title: string; subtitle: string; action?: string; onAction?: () => void }) {
