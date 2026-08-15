@@ -1,0 +1,18 @@
+{
+  "name": "M6 Futebol Clube - Gestão Esportiva",
+  "short_name": "M6 Futebol",
+  "description": "Gestão de atletas, categorias, chamadas e mensalidades da M6 Futebol Clube.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f5f0",
+  "theme_color": "#c8102e",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/logo.jpeg",
+      "sizes": "640x640",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}

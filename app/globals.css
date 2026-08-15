@@ -5071,3 +5071,595 @@ body {
 .athlete-edit-modal .athlete-financial-section { padding: 7px 10px !important; gap: 4px !important; margin: 0 !important; }
 .athlete-edit-modal .athlete-financial-save { height: 32px !important; }
 .athlete-edit-modal .athlete-financial-status { padding: 2px 8px !important; font-size: 8px !important; }
+
+/* ============================================================
+   Experiência mobile — aplicativo M6
+   O desktop continua com o painel completo; abaixo de 760px a
+   interface ganha hierarquia, navegação e densidade próprias.
+   ============================================================ */
+@media (max-width: 760px) {
+  html {
+    min-height: 100%;
+    background: var(--bg);
+    overscroll-behavior-y: none;
+  }
+
+  body {
+    min-width: 320px;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    background:
+      radial-gradient(circle at 100% 0, color-mix(in srgb, var(--accent-subtle) 45%, transparent), transparent 34%),
+      var(--bg);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button, a, input, select, textarea { touch-action: manipulation; }
+  button, a { -webkit-user-select: none; user-select: none; }
+
+  .app-shell, .workspace {
+    width: 100%;
+    min-height: 100dvh;
+    height: auto;
+  }
+
+  .workspace { overflow: visible; }
+
+  .topbar {
+    top: 0;
+    min-height: calc(62px + env(safe-area-inset-top));
+    height: calc(62px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 12px 0;
+    border-bottom-color: color-mix(in srgb, var(--border) 72%, transparent);
+    box-shadow: 0 5px 24px rgba(22, 20, 17, .06);
+  }
+
+  .mobile-brand {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid var(--surface-1);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, .13);
+  }
+
+  .search {
+    height: 40px;
+    border: 0;
+    border-radius: 14px;
+    background: var(--surface-2);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 75%, transparent);
+  }
+
+  .search input { font-size: 13px; }
+  .search input::placeholder { font-size: 0; }
+  .search input::placeholder { content: "Buscar no M6"; }
+
+  .mobile-top-menu .icon-button {
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 14px;
+    background: var(--surface-1);
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+
+  .mobile-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: flex-end;
+    background: rgba(10, 10, 10, .48);
+    backdrop-filter: blur(5px);
+    animation: mobile-backdrop-in .18s ease both;
+  }
+
+  .profile-menu.mobile-profile-menu {
+    position: relative;
+    inset: auto;
+    width: min(88vw, 370px);
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    padding: calc(18px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    border: 0;
+    border-left: 1px solid var(--border);
+    border-radius: 28px 0 0 28px;
+    background: var(--surface-1);
+    box-shadow: -18px 0 55px rgba(0, 0, 0, .2);
+    animation: mobile-menu-in .22s cubic-bezier(.2,.75,.2,1) both;
+  }
+
+  .mobile-menu-header {
+    min-height: 66px;
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr) 38px;
+    align-items: center;
+    gap: 11px;
+    padding: 4px 2px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .mobile-menu-header .avatar { width: 46px; height: 46px; font-size: 12px; }
+  .mobile-menu-header > span:nth-child(2) { min-width: 0; }
+  .mobile-menu-header strong { display: block; overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-menu-header small { display: block; overflow: hidden; margin-top: 2px; color: var(--text-tertiary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-menu-header button {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 13px;
+    background: var(--surface-2);
+    color: var(--text-secondary);
+  }
+
+  .mobile-menu-label {
+    display: block;
+    margin: 18px 5px 8px;
+    color: var(--text-tertiary);
+    font-size: 9px;
+    letter-spacing: 1.7px;
+  }
+
+  .mobile-menu-primary { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .mobile-menu-primary button {
+    min-width: 0;
+    min-height: 96px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--surface-2);
+    color: var(--text-secondary);
+    text-align: left;
+  }
+  .mobile-menu-primary button.active {
+    border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
+    background: var(--accent-subtle);
+    color: var(--accent);
+  }
+  .mobile-menu-primary button > span { min-width: 0; }
+  .mobile-menu-primary button strong { display: block; color: var(--text-primary); font-size: 13px; }
+  .mobile-menu-primary button small { display: block; margin-top: 3px; color: var(--text-tertiary); font-size: 9px; line-height: 1.25; }
+
+  .mobile-menu-secondary { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .mobile-menu-secondary button {
+    min-height: 46px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface-1);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+    text-align: left;
+  }
+  .mobile-menu-secondary svg { color: var(--accent); }
+  .mobile-menu-signout {
+    width: 100%;
+    min-height: 46px;
+    margin-top: 18px;
+    border: 1px solid var(--danger-subtle);
+    border-radius: 14px;
+    background: var(--danger-subtle);
+    color: var(--danger);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  @keyframes mobile-menu-in { from { opacity: .5; transform: translateX(45px); } }
+  @keyframes mobile-backdrop-in { from { opacity: 0; } }
+
+  .page-content,
+  .dashboard-page,
+  .section-page {
+    width: 100%;
+    min-height: calc(100dvh - 62px - env(safe-area-inset-top));
+    padding: 16px 14px calc(28px + env(safe-area-inset-bottom));
+    overflow-x: hidden;
+  }
+
+  .card, .metric-card {
+    border-radius: 18px;
+    border-color: color-mix(in srgb, var(--border) 85%, transparent);
+    box-shadow: 0 3px 16px rgba(27, 24, 19, .045);
+  }
+
+  .section-heading,
+  .finance-page .section-heading {
+    min-height: 0;
+    margin: 0 0 14px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 10px;
+  }
+
+  .section-heading > div:first-child { min-width: 0; }
+  .section-heading .eyebrow { margin-bottom: 4px; font-size: 9px; letter-spacing: 1.45px; }
+  .section-heading h1,
+  .finance-page .section-heading h1 {
+    margin: 0;
+    font-size: clamp(25px, 8vw, 32px);
+    line-height: 1;
+    letter-spacing: -1px;
+  }
+  .section-heading p,
+  .finance-page .section-heading p {
+    display: -webkit-box;
+    max-width: 94%;
+    margin: 6px 0 0;
+    overflow: hidden;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.35;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .section-heading > .primary-button,
+  .section-heading-actions > .primary-button {
+    width: 46px;
+    min-width: 46px;
+    height: 46px;
+    min-height: 46px;
+    padding: 0;
+    border-radius: 15px;
+    font-size: 0 !important;
+    box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  .section-heading > .primary-button svg,
+  .section-heading-actions > .primary-button svg { width: 20px; height: 20px; }
+
+  .card-header { min-height: 58px; padding: 15px 16px 12px; }
+  .card-header h2 { font-size: 17px; letter-spacing: -.35px; }
+  .card-header p { font-size: 10px; }
+
+  /* Cadastro e prontuário */
+  .athletes-page .athlete-records { border: 0; background: transparent; box-shadow: none; }
+  .athletes-page .athlete-tabs { height: 44px; margin-bottom: 8px; padding: 0; border: 0; }
+  .athletes-page .athlete-tabs button { height: 42px; padding: 0 14px; border-radius: 14px; background: var(--surface-1); font-size: 12px; }
+  .athletes-page .athlete-tabs button.active::after { display: none; }
+  .athlete-list-toolbar,
+  .record-toolbar,
+  .team-toolbar,
+  .attendance-toolbar {
+    min-height: 0;
+    padding: 12px;
+    gap: 9px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--surface-1);
+  }
+  .athlete-list-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 112px; }
+  .athlete-list-toolbar > strong { grid-column: 1 / -1; padding-left: 2px; font-size: 10px; }
+  .athlete-list-search, .athlete-category-filter { min-width: 0; height: 44px; border-radius: 13px; }
+  .athlete-list-search input, .athlete-category-filter select { font-size: 12px; }
+  .athlete-category-filter span { font-size: 9px; }
+
+  .athletes-page .athlete-table { padding: 8px 0 0; overflow: visible; }
+  .athletes-page .table-head { display: none; }
+  .athletes-page .athlete-row-button,
+  .athletes-page .athlete-table.expanded .table-row,
+  .athletes-page .operator-athlete-table .table-row {
+    min-height: 82px;
+    margin-bottom: 8px;
+    padding: 13px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "athlete finance" "category attendance";
+    gap: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 17px;
+    background: var(--surface-1);
+    box-shadow: 0 2px 10px rgba(0,0,0,.035);
+  }
+  .athletes-page .athlete-row-button > span { display: flex; }
+  .athletes-page .athlete-row-button > span:nth-child(1) { grid-area: athlete; }
+  .athletes-page .athlete-row-button > span:nth-child(2) { grid-area: category; }
+  .athletes-page .athlete-row-button > span:nth-child(3) { grid-area: attendance; justify-self: end; }
+  .athletes-page .athlete-row-button > span:nth-child(4) { grid-area: finance; justify-self: end; }
+  .athletes-page .attendance-cell { align-items: center; gap: 7px; }
+  .athletes-page .attendance-cell > i { width: 42px; }
+  .athletes-page .athlete-finance-cell { justify-content: flex-end; }
+
+  .records-page .record-toolbar-card,
+  .teams-page .team-toolbar-card,
+  .attendance-page .attendance-toolbar-card { border: 0; background: transparent; box-shadow: none; }
+  .records-page .record-toolbar-card { padding: 0; }
+  .record-toolbar-copy { padding: 0 2px 8px; }
+  .records-page .record-toolbar { grid-template-columns: minmax(0, 1fr) 112px; }
+  .records-page .record-toolbar > strong { grid-column: 1 / -1; }
+  .records-page .record-grid { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 10px 0 0; }
+  .records-page .record-card { min-height: 78px; height: auto; padding: 13px; border-radius: 17px; }
+  .record-open { font-size: 10px; }
+
+  /* Categorias, turmas e chamada */
+  .teams-page .team-toolbar-card,
+  .attendance-page .attendance-toolbar-card { padding: 0; }
+  .teams-page .team-toolbar { display: grid; grid-template-columns: 1fr 1fr; }
+  .teams-page .team-toolbar .athlete-list-search { grid-column: 1 / -1; }
+  .teams-page .team-toolbar > strong { grid-column: 1 / -1; justify-self: start; }
+  .teams-page .class-grid { display: grid; grid-template-columns: 1fr; gap: 10px; height: auto; padding: 10px 0 0; overflow: visible; }
+  .teams-page .class-card { min-height: 0; height: auto; padding: 16px; border-radius: 19px; }
+  .teams-page .class-card h3 { margin: 14px 0 3px; font-size: 20px; }
+  .teams-page .class-card > p { margin: 0 0 14px; font-size: 11px; }
+  .teams-page .class-actions { margin-top: 13px; display: grid; grid-template-columns: .85fr 1.15fr; gap: 8px; }
+  .teams-page .class-actions button { width: 100%; min-height: 44px; border-radius: 13px; font-size: 11px; }
+
+  .attendance-page .attendance-toolbar { display: grid; grid-template-columns: 1fr 1fr; }
+  .attendance-page .attendance-toolbar .athlete-list-search { grid-column: 1 / -1; }
+  .attendance-page .attendance-toolbar > strong { grid-column: 1 / -1; padding: 0; }
+  .attendance-page .attendance-team-grid { display: grid; grid-template-columns: 1fr; gap: 9px; padding: 10px 0 0; overflow: visible; }
+  .attendance-page .attendance-team-card { min-height: 78px; padding: 13px; grid-template-columns: 38px minmax(0,1fr); border-radius: 18px; }
+  .attendance-page .attendance-team-card > b { grid-column: 1 / -1; min-height: 40px; display: grid; place-items: center; border-radius: 12px; background: var(--accent); color: #fff; }
+
+  /* Financeiro: painel curto e carteira navegável */
+  .finance-page { padding-inline: 12px; }
+  .finance-heading { align-items: end; }
+  .finance-heading-title { min-width: 0; }
+  .finance-title-line { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .finance-page .integration-badge { max-width: 100%; font-size: 9px; }
+  .finance-heading-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+    margin-top: 2px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 8px;
+  }
+  .finance-heading-actions > label { grid-column: 1 / -1; font-size: 9px; }
+  .finance-heading-actions input { width: 100%; height: 44px; border-radius: 13px; font-size: 13px; }
+  .finance-heading-actions .filter-button,
+  .finance-heading-actions .primary-button,
+  .finance-heading .primary-button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    height: 44px;
+    padding: 0 10px;
+    border-radius: 13px;
+    font-size: 11px !important;
+    white-space: nowrap;
+    box-shadow: none;
+  }
+  .finance-page .finance-steps { display: none; }
+  .finance-page .real-finance-metrics,
+  .expense-page-metrics {
+    width: calc(100% + 12px);
+    margin: 0 -12px 12px 0;
+    padding: 0 12px 3px 0;
+    display: flex;
+    gap: 9px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+  .finance-page .real-finance-metrics::-webkit-scrollbar,
+  .expense-page-metrics::-webkit-scrollbar { display: none; }
+  .finance-page .real-finance-metrics .metric-card,
+  .expense-page-metrics .metric-card {
+    flex: 0 0 164px;
+    min-height: 108px;
+    padding: 13px;
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    border-radius: 18px;
+    scroll-snap-align: start;
+  }
+  .finance-page .real-finance-metrics .metric-icon,
+  .expense-page-metrics .metric-icon { width: 32px; height: 32px; flex: 0 0 32px; border-radius: 11px; }
+  .finance-page .real-finance-metrics .metric-card-value,
+  .expense-page-metrics .metric-card-value { font-size: 19px; }
+
+  .finance-page .finance-portfolio {
+    margin: 0 0 12px;
+    padding: 15px;
+    border-radius: 20px;
+  }
+  .finance-page .finance-portfolio-head { margin-bottom: 12px; align-items: flex-start; }
+  .finance-page .finance-portfolio-head h2 { font-size: 17px; }
+  .finance-page .finance-portfolio-head p { font-size: 10px; }
+  .finance-page .finance-portfolio-rate { padding: 7px 11px; }
+  .finance-page .finance-portfolio-rate strong { font-size: 18px; }
+  .finance-page .billing-portfolio-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .finance-page .billing-portfolio-grid > * {
+    min-height: 78px;
+    padding: 11px !important;
+    border: 0;
+    border-radius: 14px;
+    background: var(--surface-2);
+  }
+  .finance-page .billing-portfolio-grid b { font-size: 20px; }
+  .finance-page .billing-portfolio-grid em { font-size: 9px; }
+  .finance-page .finance-progress { margin-top: 12px; padding-top: 12px; }
+  .finance-page .finance-progress-legend { gap: 6px 11px; }
+  .finance-page .finance-progress-legend > span { font-size: 9px; }
+
+  .finance-page .billing-notification-card { padding: 12px; border-radius: 18px; }
+  .finance-page .billing-notification-icon { width: 38px; height: 38px; flex: 0 0 38px; }
+  .finance-page .billing-notification-heading { font-size: 14px; }
+  .finance-page .billing-notification-desc { display: none; }
+  .finance-page .billing-whatsapp-state { margin-left: auto; }
+
+  .finance-page .finance-charges { border: 0; background: transparent; box-shadow: none; }
+  .finance-page .finance-charges .card-header { padding: 8px 2px 11px; }
+  .finance-page .finance-charges-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 112px; padding: 12px; border-radius: 18px; }
+  .finance-page .finance-charges-toolbar > strong { grid-column: 1 / -1; }
+  .finance-page .charge-table { padding-top: 9px; overflow: visible; }
+  .finance-page .charge-row {
+    margin-bottom: 9px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--surface-1);
+    box-shadow: 0 2px 10px rgba(0,0,0,.035);
+  }
+  .finance-page .charge-actions { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 7px; }
+  .finance-page .charge-actions button,
+  .finance-page .charge-actions a { width: 100%; min-height: 42px; padding: 0 8px; justify-content: center; border-radius: 12px; font-size: 11px; }
+
+  /* Demais módulos seguem o mesmo vocabulário de aplicativo */
+  .evaluation-metrics,
+  .training-metrics,
+  .communication-metrics,
+  .checkin-metrics,
+  .user-metrics {
+    width: calc(100% + 12px);
+    margin-right: -12px;
+    padding-right: 12px;
+    display: flex;
+    gap: 9px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .evaluation-metrics::-webkit-scrollbar,
+  .training-metrics::-webkit-scrollbar,
+  .communication-metrics::-webkit-scrollbar,
+  .checkin-metrics::-webkit-scrollbar,
+  .user-metrics::-webkit-scrollbar { display: none; }
+  .evaluation-metrics .metric-card,
+  .training-metrics .metric-card,
+  .communication-metrics .metric-card,
+  .checkin-metrics .metric-card,
+  .user-metrics article { flex: 0 0 170px; min-height: 105px; }
+
+  .training-board { display: grid; grid-template-columns: 1fr; gap: 9px; max-height: none; overflow: visible; }
+  .training-session-card { min-height: 0; border-radius: 18px; }
+  .evaluation-panel, .communication-panel, .checkin-panel { overflow: visible; border-radius: 18px; }
+  .evaluation-list, .communication-list, .checkin-history { max-height: none; overflow: visible; }
+  .evaluation-list > article,
+  .communication-list > article {
+    min-width: 0;
+    min-height: 0;
+    margin: 0 10px 9px;
+    padding: 14px;
+    display: grid;
+    grid-template-columns: 38px minmax(0,1fr);
+    gap: 10px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface-1);
+  }
+  .communication-list > article > *:nth-child(n+3),
+  .evaluation-list > article > *:nth-child(n+3) { grid-column: 2; }
+  .communication-actions { justify-content: flex-start; flex-wrap: wrap; }
+
+  .plans-page-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  .finance-page .billing-config-full { max-height: none; }
+  .finance-page .billing-config-full .billing-list { max-height: none; overflow: visible; }
+  .plans-grid { padding: 12px; }
+  .plan-tile { flex: 0 0 180px; min-height: 132px; border-radius: 17px; }
+  .finance-donut-wrap { padding-inline: 12px; flex-direction: column; }
+
+  .expense-workspace { overflow: visible; }
+  .expense-filters { display: grid; grid-template-columns: 1fr 1fr; padding: 12px; }
+  .expense-filter-search { grid-column: 1 / -1; }
+  .expense-workspace-table { overflow: visible; }
+  .expense-head { display: none; }
+  .expense-row:not(.expense-head) {
+    margin: 9px;
+    padding: 13px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+  }
+  .expense-actions { grid-column: 1 / -1; flex-wrap: wrap; }
+
+  /* Modais viram folhas de aplicativo em tela cheia. */
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+    background: rgba(8,8,8,.55);
+  }
+  .modal,
+  .profile-modal,
+  .team-modal,
+  .attendance-panel,
+  .evaluation-modal,
+  .training-modal,
+  .communication-modal,
+  .recipient-modal,
+  .athlete-edit-modal,
+  .category-modal,
+  .record-picker-modal,
+  .qr-card-modal,
+  .roster-picker-modal {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - env(safe-area-inset-top));
+    margin: 0;
+    border: 0;
+    border-radius: 24px 24px 0 0 !important;
+    box-shadow: 0 -16px 50px rgba(0,0,0,.22);
+  }
+  .athlete-edit-modal,
+  .modal-backdrop .athlete-edit-modal { max-height: calc(100dvh - env(safe-area-inset-top)); }
+  .athlete-edit-modal > header,
+  .modal-backdrop .athlete-edit-modal > header,
+  .team-modal-header,
+  .attendance-panel-header,
+  .profile-header,
+  .communication-modal > header,
+  .recipient-modal > header {
+    min-height: 76px;
+    padding: 18px 18px 13px !important;
+  }
+  .athlete-edit-modal > header h2,
+  .modal-backdrop .athlete-edit-modal > header h2 { font-size: 20px !important; }
+  .athlete-edit-modal form,
+  .modal-backdrop .athlete-edit-modal form,
+  .team-form,
+  .profile-form { padding: 16px 18px calc(22px + env(safe-area-inset-bottom)) !important; }
+  .athlete-edit-modal input,
+  .athlete-edit-modal select,
+  .modal-backdrop .athlete-edit-modal input,
+  .modal-backdrop .athlete-edit-modal select,
+  .team-form input,
+  .team-form select,
+  .profile-form input,
+  .profile-form select,
+  .profile-form textarea {
+    min-height: 46px !important;
+    height: 46px !important;
+    padding-inline: 12px !important;
+    border-radius: 13px !important;
+    font-size: 14px !important;
+  }
+  .profile-form textarea { height: auto !important; min-height: 92px !important; padding-block: 12px !important; }
+  .profile-tabs { position: sticky; top: 0; z-index: 2; background: var(--surface-1); }
+  .attendance-roster { max-height: none; }
+  .attendance-footer {
+    position: sticky;
+    bottom: 0;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--surface-1) 96%, transparent);
+    backdrop-filter: blur(14px);
+  }
+
+  .primary-button, .filter-button, .secondary-button { font-weight: 750; }
+  .toast { bottom: calc(18px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); }
+}
+
+@media (max-width: 380px) {
+  .mobile-menu-primary { grid-template-columns: 1fr; }
+  .quick-mobile-panel button { padding-inline: 7px; }
+  .quick-mobile-panel small { display: none; }
+  .finance-heading-actions .filter-button,
+  .finance-heading-actions .primary-button { font-size: 10px !important; }
+}

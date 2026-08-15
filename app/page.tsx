@@ -682,20 +682,38 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
             <div className="mobile-top-menu">
               <button
                 className="icon-button"
-                aria-label="Menu"
+                aria-label="Abrir menu do aplicativo"
                 aria-expanded={profileMenuOpen}
                 onClick={() => setProfileMenuOpen((current) => !current)}
               >
                 <MoreVertical size={19} strokeWidth={1.9} />
               </button>
               {profileMenuOpen && (
-                <div className="profile-menu mobile-profile-menu">
-                  <span><strong>{user.displayName}</strong><small>@{user.username}</small></span>
-                  <button type="button" onClick={() => { setSection("Visão geral"); setProfileMenuOpen(false); }}>Início</button>
-                  <button type="button" onClick={() => { setSection("Atletas"); setProfileMenuOpen(false); }}>Cadastro</button>
-                  <button type="button" onClick={() => { setSection("Turmas"); setProfileMenuOpen(false); }}>Categorias</button>
-                  {user.role === "admin" && <button type="button" onClick={() => { setSection("Mensalidades"); setProfileMenuOpen(false); }}>Financeiro</button>}
-                  <button type="button" onClick={() => void onSignOut()}>Sair do sistema</button>
+                <div className="mobile-menu-backdrop" role="presentation" onMouseDown={() => setProfileMenuOpen(false)}>
+                  <aside className="profile-menu mobile-profile-menu" aria-label="Menu principal" onMouseDown={(event) => event.stopPropagation()}>
+                    <header className="mobile-menu-header">
+                      <span className="avatar">{initials(user.displayName)}</span>
+                      <span><strong>{user.displayName}</strong><small>{user.role === "admin" ? "Administrador" : "Operador"} · @{user.username}</small></span>
+                      <button type="button" aria-label="Fechar menu" onClick={() => setProfileMenuOpen(false)}><X size={18} strokeWidth={2} /></button>
+                    </header>
+                    <strong className="mobile-menu-label">OPERAÇÃO</strong>
+                    <nav className="mobile-menu-primary">
+                      <button type="button" className={section === "Visão geral" ? "active" : ""} onClick={() => { setSection("Visão geral"); setProfileMenuOpen(false); }}><HomeIcon size={20} /><span><strong>Início</strong><small>Resumo da unidade</small></span></button>
+                      <button type="button" className={section === "Atletas" || section === "Prontuário" ? "active" : ""} onClick={() => { setSection("Atletas"); setProfileMenuOpen(false); }}><Users size={20} /><span><strong>Cadastro</strong><small>Alunos e prontuários</small></span></button>
+                      <button type="button" className={section === "Turmas" || section === "Presença" ? "active" : ""} onClick={() => { setSection("Turmas"); setProfileMenuOpen(false); }}><CheckSquare size={20} /><span><strong>Categorias</strong><small>Turmas e chamadas</small></span></button>
+                      {user.role === "admin" && <button type="button" className={section === "Mensalidades" || section === "Financeiro" ? "active" : ""} onClick={() => { setSection("Mensalidades"); setProfileMenuOpen(false); }}><Wallet size={20} /><span><strong>Financeiro</strong><small>Mensalidades e baixas</small></span></button>}
+                    </nav>
+                    <strong className="mobile-menu-label">MAIS RECURSOS</strong>
+                    <nav className="mobile-menu-secondary">
+                      <button type="button" onClick={() => { setSection("Presença"); setProfileMenuOpen(false); }}><CheckSquare size={18} /> Chamada</button>
+                      <button type="button" onClick={() => { setSection("Cartões QR"); setProfileMenuOpen(false); }}><QrCode size={18} /> Cartões QR</button>
+                      <button type="button" onClick={() => { setSection("Treinos"); setProfileMenuOpen(false); }}><Dumbbell size={18} /> Treinos</button>
+                      <button type="button" onClick={() => { setSection("Avaliações"); setProfileMenuOpen(false); }}><TrendingUp size={18} /> Avaliações</button>
+                      <button type="button" onClick={() => { setSection("Comunicação"); setProfileMenuOpen(false); }}><MessageCircle size={18} /> Comunicação</button>
+                      {user.role === "admin" && <button type="button" onClick={() => { setSection("Usuários e permissões"); setProfileMenuOpen(false); }}><Settings size={18} /> Acessos</button>}
+                    </nav>
+                    <button className="mobile-menu-signout" type="button" onClick={() => void onSignOut()}>Sair do sistema</button>
+                  </aside>
                 </div>
               )}
             </div>
