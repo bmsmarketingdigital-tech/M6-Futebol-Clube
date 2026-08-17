@@ -99,6 +99,10 @@ const stylesSource = readFileSync(
   new URL("../app/globals.css", import.meta.url),
   "utf8",
 );
+const teamManagementSource = readFileSync(
+  new URL("../app/TeamManagement.tsx", import.meta.url),
+  "utf8",
+);
 const pageSource = readFileSync(
   new URL("../app/page.tsx", import.meta.url),
   "utf8",
@@ -148,7 +152,9 @@ test("modal de chamada ocupa a viewport móvel sem conteúdo horizontal cortado"
   assert.match(stylesSource, /\.attendance-panel \{[\s\S]*width: 100% !important;[\s\S]*max-width: 100% !important;[\s\S]*height: 100dvh/);
   assert.match(stylesSource, /\.attendance-panel-header > div \{ min-width: 0; \}/);
   assert.match(stylesSource, /\.attendance-panel \.attendance-cancel-row[\s\S]*display: grid !important;[\s\S]*grid-template-columns: minmax\(0, 1fr\) !important/);
-  assert.match(stylesSource, /grid-template-areas: "toggle avatar identity" "\. \. note"/);
+  assert.match(stylesSource, /grid-template-areas: "toggle avatar identity" "note note note"/);
+  assert.match(teamManagementSource, /return createPortal\([\s\S]*className="attendance-panel"/);
+  assert.match(teamManagementSource, /document\.body/);
   assert.match(stylesSource, /\.toast \{[\s\S]*right: 12px;[\s\S]*left: 12px/);
 });
 

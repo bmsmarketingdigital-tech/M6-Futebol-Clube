@@ -5586,9 +5586,14 @@ body {
 
   /* Modais viram folhas de aplicativo em tela cheia. */
   .modal-backdrop {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100dvw;
+    height: 100dvh;
     padding: 0;
     align-items: flex-end;
     background: rgba(8,8,8,.55);
+    overflow: hidden;
   }
   .modal,
   .profile-modal,
@@ -5650,6 +5655,8 @@ body {
     width: 100% !important;
     min-width: 0;
     max-width: 100% !important;
+    flex: 0 0 100%;
+    align-self: stretch;
     height: 100dvh;
     max-height: 100dvh !important;
     overflow: hidden;
@@ -5747,7 +5754,7 @@ body {
     width: 100%;
     min-width: 0;
     grid-template-columns: 44px 42px minmax(0, 1fr);
-    grid-template-areas: "toggle avatar identity" ". . note";
+    grid-template-areas: "toggle avatar identity" "note note note";
     gap: 9px;
     align-items: center;
     padding: 14px 0;
@@ -5774,11 +5781,16 @@ body {
     width: 100%;
     min-width: 0;
     height: 44px;
+    margin-top: 3px;
   }
   .attendance-footer {
     position: sticky;
     bottom: 0;
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    flex: 0 0 auto;
+    overflow: hidden;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
@@ -5786,7 +5798,16 @@ body {
     background: color-mix(in srgb, var(--surface-1) 96%, transparent);
     backdrop-filter: blur(14px);
   }
-  .attendance-footer button { width: 100%; min-width: 0; min-height: 46px; padding-inline: 8px; }
+  .attendance-footer button {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 46px;
+    padding-inline: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
   .primary-button, .filter-button, .secondary-button { font-weight: 750; }
   .toast {
@@ -5816,4 +5837,6 @@ body {
   .quick-mobile-panel small { display: none; }
   .finance-heading-actions .filter-button,
   .finance-heading-actions .primary-button { font-size: 10px !important; }
+  .attendance-footer { grid-template-columns: .9fr 1.1fr; padding-inline: 8px; }
+  .attendance-footer button { font-size: 12px !important; padding-inline: 5px; }
 }

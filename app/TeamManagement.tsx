@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, CalendarX, Plus, Search, Users, X } from "lucide-react";
 import type { AthleteRecord } from "./AthleteProfileModal";
 import type { CategoryRecord } from "./CategoryManagerModal";
@@ -367,7 +368,7 @@ export function AttendanceModal({
 
   const presentCount = roster.filter((athlete) => athlete.present).length;
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section className="attendance-panel" role="dialog" aria-modal="true" aria-labelledby="attendance-panel-title" onMouseDown={(event) => event.stopPropagation()}>
         <header className="attendance-panel-header">
@@ -399,8 +400,8 @@ export function AttendanceModal({
             <article key={athlete.id} className={athlete.present ? "attendance-person present" : "attendance-person absent"}>
               <button onClick={() => updateAthlete(athlete.id, { present: !athlete.present })} aria-label={`${athlete.present ? "Marcar ausência de" : "Marcar presença de"} ${athlete.name}`}><span>{athlete.present ? <Check size={14} strokeWidth={2} /> : <X size={14} strokeWidth={2} />}</span></button>
               <span className="mini-avatar green">{athlete.initials}</span>
-              <div><strong>{athlete.name}</strong><small>Frequência histórica: {athlete.attendance}%</small></div>
-              <input value={athlete.note} onChange={(event) => updateAthlete(athlete.id, { note: event.target.value })} placeholder={athlete.present ? "Observação opcional" : "Motivo da ausência"} maxLength={240} />
+              <div className="attendance-person-identity"><strong>{athlete.name}</strong><small>Frequência histórica: {athlete.attendance}%</small></div>
+              <input className="attendance-note" value={athlete.note} onChange={(event) => updateAthlete(athlete.id, { note: event.target.value })} placeholder={athlete.present ? "Observação opcional" : "Motivo da ausência"} maxLength={240} />
             </article>
           ))}
         </div>
@@ -411,6 +412,7 @@ export function AttendanceModal({
           )}
         </footer>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
