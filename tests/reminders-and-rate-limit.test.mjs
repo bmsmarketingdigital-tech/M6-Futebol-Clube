@@ -9,6 +9,7 @@ const service = readFileSync(new URL("../app/api/reminders/service.ts", import.m
 const recover = readFileSync(new URL("../app/api/internal/notifications/recover/route.ts", import.meta.url), "utf8");
 const outbox = readFileSync(new URL("../app/api/notifications/outbox.ts", import.meta.url), "utf8");
 const config = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
+const license = readFileSync(new URL("../db/license.ts", import.meta.url), "utf8");
 
 function reminderDb() {
   const db = new DatabaseSync(":memory:");
@@ -155,4 +156,18 @@ test("serviço real reserva antes do sender e revalida estado atual", () => {
   assert.ok(service.indexOf("onConflictDoNothing") < service.indexOf("await sender"));
   assert.match(service,/revalidateRecipient/);
   assert.match(service,/normalizeReminderPhone/);
+});
+
+test("consulta de lembretes usa Supabase no runtime Vercel sem processar envios", () => {
+  assert.match(service, /postgresConfigured\(\)/);
+  assert.match(service, /FROM teams t/);
+  assert.match(service, /NOT EXISTS \([\s\S]*FROM class_reminders/);
+  assert.doesNotMatch(route, /processClassReminders|sendWhatsAppMessage/);
+});
+
+test("licença usa Supabase no runtime Vercel e preserva timestamps Unix", () => {
+  assert.match(license, /getPostgresClient/);
+  assert.match(license, /FROM license_state/);
+  assert.match(license, /toPostgresSeconds/);
+  assert.match(license, /Number\(row\.expires_at\) \* 1000/);
 });

@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { ensureDatabase, getD1, getDb } from "./index";
+import { getPostgresClient, postgresConfigured } from "./postgres";
 import { licenseState } from "./schema";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -8,6 +9,8 @@ const TRIAL_DAYS_FIRST_INSTALL = 30;
 const MAX_TRACKED_NONCES = 60;
 const LICENSE_ROW_ID = "default";
 const MAX_ACTIVATE_ATTEMPTS = 5;
+const toPostgresSeconds = (ms: number | null) =>
+  ms === null ? null : Math.floor(ms / 1000);
 
 const EMBEDDED_PUBLIC_KEY_PEM = `
 -----BEGIN PUBLIC KEY-----
@@ -206,6 +209,56 @@ function computeStatus(row: LicenseRow): LicenseStatus {
 }
 
 async function loadOrCreateRow(): Promise<LicenseRow> {
+  if (postgresConfigured()) {
+    const sql = getPostgresClient();
+    type PostgresLicenseRow = {
+      id: string;
+      install_id: string;
+      expires_at: number | string | null;
+      grace_days: number;
+      last_seen_at: number | string;
+      last_issued_at: number | string | null;
+      used_nonces: string;
+      created_at: number | string;
+      updated_at: number | string;
+    };
+    const mapRow = (row: PostgresLicenseRow): LicenseRow => ({
+      id: row.id,
+      installId: row.install_id,
+      expiresAt: row.expires_at === null ? null : Number(row.expires_at) * 1000,
+      graceDays: Number(row.grace_days),
+      lastSeenAt: Number(row.last_seen_at) * 1000,
+      lastIssuedAt: row.last_issued_at === null ? null : Number(row.last_issued_at) * 1000,
+      usedNonces: row.used_nonces,
+      createdAt: Number(row.created_at) * 1000,
+      updatedAt: Number(row.updated_at) * 1000,
+    });
+
+    const existing = await sql<PostgresLicenseRow[]>`
+      SELECT id, install_id, expires_at, grace_days, last_seen_at,
+             last_issued_at, used_nonces, created_at, updated_at
+      FROM license_state WHERE id = ${LICENSE_ROW_ID} LIMIT 1`;
+    if (existing[0]) return mapRow(existing[0]);
+
+    const now = Date.now();
+    const installId = crypto.randomUUID();
+    const expiresAt = now + TRIAL_DAYS_FIRST_INSTALL * DAY_MS;
+    await sql`
+      INSERT INTO license_state
+        (id, install_id, expires_at, grace_days, last_seen_at, last_issued_at,
+         used_nonces, created_at, updated_at)
+      VALUES
+        (${LICENSE_ROW_ID}, ${installId}, ${toPostgresSeconds(expiresAt)}, ${DEFAULT_GRACE_DAYS},
+         ${toPostgresSeconds(now)}, NULL, '[]', ${toPostgresSeconds(now)}, ${toPostgresSeconds(now)})
+      ON CONFLICT (id) DO NOTHING`;
+    const rows = await sql<PostgresLicenseRow[]>`
+      SELECT id, install_id, expires_at, grace_days, last_seen_at,
+             last_issued_at, used_nonces, created_at, updated_at
+      FROM license_state WHERE id = ${LICENSE_ROW_ID} LIMIT 1`;
+    if (!rows[0]) throw new Error("Nao foi possivel carregar a licenca.");
+    return mapRow(rows[0]);
+  }
+
   await ensureDatabase();
   const db = getDb();
 
@@ -269,6 +322,18 @@ async function loadOrCreateRow(): Promise<LicenseRow> {
 }
 
 async function persistRow(row: LicenseRow): Promise<void> {
+  if (postgresConfigured()) {
+    const sql = getPostgresClient();
+    await sql`
+      UPDATE license_state SET
+        install_id = ${row.installId}, expires_at = ${toPostgresSeconds(row.expiresAt)},
+        grace_days = ${row.graceDays}, last_seen_at = ${toPostgresSeconds(row.lastSeenAt)},
+        last_issued_at = ${toPostgresSeconds(row.lastIssuedAt)}, used_nonces = ${row.usedNonces},
+        updated_at = ${toPostgresSeconds(Date.now())}
+      WHERE id = ${LICENSE_ROW_ID}`;
+    return;
+  }
+
   const db = getDb();
   const now = new Date();
   await db
@@ -293,6 +358,25 @@ async function persistRow(row: LicenseRow): Promise<void> {
 // single token, since neither read saw the concurrent nonce as used yet
 // (see P0-LICENSE-001).
 async function persistRowCas(previous: LicenseRow, next: LicenseRow): Promise<boolean> {
+  if (postgresConfigured()) {
+    const sql = getPostgresClient();
+    const rows = await sql<{ id: string }[]>`
+      UPDATE license_state SET
+        install_id = ${next.installId}, expires_at = ${toPostgresSeconds(next.expiresAt)},
+        grace_days = ${next.graceDays}, last_seen_at = ${toPostgresSeconds(next.lastSeenAt)},
+        last_issued_at = ${toPostgresSeconds(next.lastIssuedAt)}, used_nonces = ${next.usedNonces},
+        updated_at = ${toPostgresSeconds(Date.now())}
+      WHERE id = ${LICENSE_ROW_ID}
+        AND install_id = ${previous.installId}
+        AND expires_at IS NOT DISTINCT FROM ${toPostgresSeconds(previous.expiresAt)}
+        AND grace_days = ${previous.graceDays}
+        AND last_seen_at = ${toPostgresSeconds(previous.lastSeenAt)}
+        AND last_issued_at IS NOT DISTINCT FROM ${toPostgresSeconds(previous.lastIssuedAt)}
+        AND used_nonces = ${previous.usedNonces}
+      RETURNING id`;
+    return rows.length === 1;
+  }
+
   const d1 = getD1();
   const toSeconds = (ms: number | null) => (ms === null ? null : Math.floor(ms / 1000));
   const result = await d1
@@ -358,7 +442,7 @@ export async function activateLicense(token: string): Promise<ActivateLicenseRes
     return { ok: false, code: "LICENSE_ISSUED_INVALID", reason: "issuedAt invalido." };
   }
 
-  await ensureDatabase();
+  if (!postgresConfigured()) await ensureDatabase();
 
   for (let attempt = 0; attempt < MAX_ACTIVATE_ATTEMPTS; attempt++) {
     const row = await loadOrCreateRow();
