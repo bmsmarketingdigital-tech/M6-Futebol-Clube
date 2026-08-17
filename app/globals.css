@@ -5374,13 +5374,26 @@ body {
     padding: 0;
     border-radius: 15px;
     font-size: 0 !important;
-    display: grid;
-    place-items: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     gap: 0;
     box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 22%, transparent);
   }
+  .section-heading > .primary-button {
+    position: relative;
+    line-height: 0;
+  }
+  .section-heading > .primary-button > span { display: none; }
   .section-heading > .primary-button svg,
   .section-heading-actions > .primary-button svg { width: 20px; height: 20px; display: block; margin: 0; }
+  .section-heading > .primary-button svg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    margin: 0;
+    transform: translate(-50%, -50%);
+  }
 
   .card-header { min-height: 58px; padding: 15px 16px 12px; }
   .card-header h2 { font-size: 17px; letter-spacing: -.35px; }
@@ -5407,6 +5420,29 @@ body {
   .athlete-list-search, .athlete-category-filter { min-width: 0; height: 44px; border-radius: 13px; }
   .athlete-list-search input, .athlete-category-filter select { font-size: 12px; }
   .athlete-category-filter span { font-size: 9px; }
+  .app-shell .page-content .athlete-list-toolbar .athlete-category-filter {
+    min-width: 0;
+    padding: 0 8px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px;
+    overflow: hidden;
+  }
+  .app-shell .page-content .athlete-list-toolbar .athlete-category-filter span {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .app-shell .page-content .athlete-list-toolbar .athlete-category-filter select {
+    width: auto;
+    min-width: 0;
+    max-width: 46px;
+    padding: 0;
+    font-size: 11px;
+    text-align: right;
+  }
 
   .athletes-page .athlete-table,
   .athletes-page .athlete-table.expanded,

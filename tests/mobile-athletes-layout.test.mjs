@@ -20,7 +20,14 @@ test("licença e ações cabem juntas no cabeçalho móvel", () => {
 });
 
 test("botão de novo atleta centraliza o ícone", () => {
-  assert.match(stylesSource, /\.section-heading > \.primary-button,[\s\S]*display: grid;[\s\S]*place-items: center;/);
+  assert.match(pageSource, /<Plus size=\{16\} strokeWidth=\{2\} \/> <span>\{actionLabel\}<\/span>/);
+  assert.match(stylesSource, /\.section-heading > \.primary-button svg \{[\s\S]*top: 50%;[\s\S]*left: 50%;[\s\S]*transform: translate\(-50%, -50%\);/);
+  assert.match(stylesSource, /\.section-heading > \.primary-button > span \{ display: none; \}/);
+});
+
+test("filtro de categoria respeita a largura do card móvel", () => {
+  assert.match(stylesSource, /\.app-shell \.page-content \.athlete-list-toolbar \.athlete-category-filter \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto;[\s\S]*overflow: hidden;/);
+  assert.match(stylesSource, /\.app-shell \.page-content \.athlete-list-toolbar \.athlete-category-filter select \{[\s\S]*min-width: 0;[\s\S]*max-width: 46px;/);
 });
 
 test("lista móvel remove o limite desktop e mostra todos os atletas", () => {

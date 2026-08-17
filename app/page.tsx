@@ -1425,10 +1425,10 @@ function SectionView({
         </div>
         {section === "Prontuário" ? (
           <button className="primary-button" onClick={() => setRecordPickerOpen(true)}>
-            <Plus size={16} strokeWidth={2} /> Adicionar prontuário
+            <Plus size={16} strokeWidth={2} /> <span>Adicionar prontuário</span>
           </button>
         ) : (
-          <button className="primary-button" onClick={action}><Plus size={16} strokeWidth={2} /> {actionLabel}</button>
+          <button className="primary-button" onClick={action}><Plus size={16} strokeWidth={2} /> <span>{actionLabel}</span></button>
         )}
       </div>
       {section === "Atletas" ? (
