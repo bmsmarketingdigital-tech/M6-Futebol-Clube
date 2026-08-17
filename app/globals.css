@@ -3341,20 +3341,116 @@ body {
   color: var(--muted);
   font-size: 9px;
 }
-/* Botão "Conexão" no cabeçalho da tela de Mensalidades (substitui a faixa
-   central), abre o modal "Conexão e notificações" com o mesmo status. */
-.billing-connection-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
+/* Estado da conexão fica como ação compacta no canto do cabeçalho. */
+.finance-heading-title { position: relative; padding-right: 50px; }
+.billing-connection-icon {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-1);
+  color: var(--danger);
+  cursor: pointer;
 }
-.billing-connection-button .billing-whatsapp-dot {
+.billing-connection-icon.online { color: var(--success); }
+.billing-connection-icon .billing-whatsapp-dot {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  width: 7px;
+  height: 7px;
+  border: 2px solid var(--surface-1);
   background: var(--danger);
 }
-.billing-connection-button.online .billing-whatsapp-dot {
-  background: var(--success);
-  box-shadow: 0 0 0 3px rgba(36, 167, 106, .14);
+.billing-connection-icon.online .billing-whatsapp-dot { background: var(--success); }
+
+.finance-page .finance-charges-toolbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 185px 185px auto;
 }
+.finance-category-filter-trigger {
+  min-width: 0;
+  justify-content: flex-start;
+  cursor: pointer;
+  text-align: left;
+}
+.finance-category-filter-trigger strong {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.finance-category-filter-trigger svg { flex: 0 0 auto; color: var(--muted); }
+
+.modal.charge-category-modal {
+  width: min(460px, 100%);
+  max-height: min(680px, 90dvh);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.charge-category-modal > h2 { margin: 4px 42px 4px 0; }
+.charge-category-modal > p { margin: 0 42px 16px 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.charge-category-search {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.charge-category-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+}
+.charge-category-list { min-height: 0; margin-top: 12px; overflow-y: auto; }
+.charge-category-list > button {
+  width: 100%;
+  min-height: 66px;
+  padding: 10px 4px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 22px;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.charge-category-list > button > span { min-width: 0; }
+.charge-category-list > button strong,
+.charge-category-list > button small { display: block; }
+.charge-category-list > button strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.charge-category-list > button small { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.charge-category-list > button b { color: var(--success); font-size: 10px; white-space: nowrap; }
+.charge-category-list > button b.has-overdue { color: var(--danger); }
+.charge-category-list > button i {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+}
+.charge-category-list > button.selected i { border: 5px solid var(--accent); }
+.charge-category-empty { padding: 28px 8px; color: var(--muted); text-align: center; font-size: 12px; }
 /* Mais largo e horizontal que o modal padrão (500px) — as 3 regras de
    lembrete ficam lado a lado e a grade de últimos avisos em 3 colunas, sem
    esticar a altura. Altura controlada por flex-column: só o bloco de
@@ -5602,7 +5698,10 @@ body {
 
   .finance-page .finance-charges { border: 0; background: transparent; box-shadow: none; }
   .finance-page .finance-charges .card-header { padding: 8px 2px 11px; }
-  .finance-page .finance-charges-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 112px; padding: 12px; border-radius: 18px; }
+  .finance-page .finance-charges-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; border-radius: 18px; }
+  .finance-page .finance-charges-toolbar .athlete-search-wrap { grid-column: 1 / -1; }
+  .finance-page .finance-charges-toolbar .athlete-category-filter,
+  .finance-page .finance-charges-toolbar .finance-category-filter-trigger { width: 100%; min-width: 0; height: 44px; }
   .finance-page .finance-charges-toolbar > strong { grid-column: 1 / -1; }
   .finance-page .charge-table { padding-top: 9px; overflow: visible; }
   .finance-page .charge-row {
@@ -5616,6 +5715,17 @@ body {
   .finance-page .charge-actions { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 7px; }
   .finance-page .charge-actions button,
   .finance-page .charge-actions a { width: 100%; min-height: 42px; padding: 0 8px; justify-content: center; border-radius: 12px; font-size: 11px; }
+
+  .modal.charge-category-modal {
+    width: calc(100% - 24px);
+    max-width: 440px;
+    max-height: min(76dvh, 620px);
+    padding: 20px 16px 14px;
+    border-radius: 22px;
+  }
+  .charge-category-modal > h2 { font-size: 22px; }
+  .charge-category-modal > p { margin-right: 34px; font-size: 11px; }
+  .charge-category-list > button { min-height: 64px; }
 
   /* Demais módulos seguem o mesmo vocabulário de aplicativo */
   .evaluation-metrics,

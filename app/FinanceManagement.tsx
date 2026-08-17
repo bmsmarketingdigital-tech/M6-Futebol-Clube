@@ -12,6 +12,8 @@ import {
   Equal,
   Plus,
   Search,
+  Wifi,
+  ChevronDown,
   X,
 } from "lucide-react";
 import type { AthleteRecord } from "./AthleteProfileModal";
@@ -260,6 +262,8 @@ export function FinanceManagement({
   const [chargeStatusFilter, setChargeStatusFilter] = useState<
     "all" | "received" | Charge["status"]
   >("all");
+  const [chargeCategoryFilter, setChargeCategoryFilter] = useState("all");
+  const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     title: string;
     message: string;
@@ -427,10 +431,24 @@ export function FinanceManagement({
       } else if (chargeStatusFilter !== "all" && charge.status !== chargeStatusFilter) {
         return false;
       }
+      const chargeCategory = charge.category || "Sem categoria";
+      if (chargeCategoryFilter !== "all" && chargeCategory !== chargeCategoryFilter) return false;
       if (query && !charge.athleteName.toLowerCase().includes(query)) return false;
       return true;
     });
-  }, [data.charges, chargeQuery, chargeStatusFilter]);
+  }, [data.charges, chargeCategoryFilter, chargeQuery, chargeStatusFilter]);
+
+  const chargeCategoryStats = useMemo(() => {
+    const stats = new Map<string, { category: string; total: number; overdue: number }>();
+    data.charges.forEach((charge) => {
+      const category = charge.category || "Sem categoria";
+      const current = stats.get(category) ?? { category, total: 0, overdue: 0 };
+      current.total += 1;
+      if (charge.status === "overdue") current.overdue += 1;
+      stats.set(category, current);
+    });
+    return Array.from(stats.values()).sort((a, b) => a.category.localeCompare(b.category, "pt-BR"));
+  }, [data.charges]);
 
   async function generateCharges() {
     if (data.plans.length === 0) {
@@ -977,16 +995,18 @@ export function FinanceManagement({
             </span>
           </div>
           <p>Controle cobranças, recebimentos, vencimentos e inadimplência em um só painel.</p>
-        </div>
-        <div className="finance-heading-actions">
           <button
             type="button"
-            className={`filter-button billing-connection-button ${notifications.overview.whatsapp.connected ? "online" : "offline"}`}
+            className={`billing-connection-icon ${notifications.overview.whatsapp.connected ? "online" : "offline"}`}
             onClick={() => setConnectionModalOpen(true)}
+            aria-label={`Conexão do WhatsApp: ${notifications.overview.whatsapp.connected ? "conectado" : "desconectado"}`}
+            title={notifications.overview.whatsapp.connected ? "WhatsApp conectado" : "WhatsApp desconectado"}
           >
+            <Wifi size={19} strokeWidth={2} />
             <span className="billing-whatsapp-dot" aria-hidden="true" />
-            Conexão
           </button>
+        </div>
+        <div className="finance-heading-actions">
           <label>
             <span>Mês de referência</span>
             <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
@@ -1179,6 +1199,17 @@ export function FinanceManagement({
               <option value="cancelled">Cancelado</option>
             </select>
           </label>
+          <button
+            type="button"
+            className="athlete-category-filter finance-category-filter-trigger"
+            onClick={() => setCategoryFilterOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={categoryFilterOpen}
+          >
+            <span>Categoria</span>
+            <strong>{chargeCategoryFilter === "all" ? "Todas" : chargeCategoryFilter}</strong>
+            <ChevronDown size={14} strokeWidth={2} aria-hidden="true" />
+          </button>
           <strong>{filteredCharges.length} resultado(s)</strong>
         </div>
         <div className="charge-table">
@@ -1268,11 +1299,23 @@ export function FinanceManagement({
           {!loading && data.charges.length > 0 && filteredCharges.length === 0 && (
             <div className="finance-empty">
               <span><Search size={14} strokeWidth={1.75} /></span><strong>Nenhuma cobrança encontrada</strong>
-              <small>Ajuste a busca ou o filtro de situação.</small>
+              <small>Ajuste a busca ou os filtros de situação e categoria.</small>
             </div>
           )}
         </div>
       </div>
+
+      {categoryFilterOpen && (
+        <ChargeCategoryFilterModal
+          categories={chargeCategoryStats}
+          selected={chargeCategoryFilter}
+          onClose={() => setCategoryFilterOpen(false)}
+          onSelect={(category) => {
+            setChargeCategoryFilter(category);
+            setCategoryFilterOpen(false);
+          }}
+        />
+      )}
 
       {paymentCharge && (
         <PaymentModal
@@ -1517,6 +1560,64 @@ function ModalClose({ onClick }: { onClick: () => void }) {
     <button className="modal-close" type="button" onClick={onClick} aria-label="Fechar">
       <X size={18} strokeWidth={1.75} />
     </button>
+  );
+}
+
+function ChargeCategoryFilterModal({
+  categories,
+  selected,
+  onSelect,
+  onClose,
+}: {
+  categories: Array<{ category: string; total: number; overdue: number }>;
+  selected: string;
+  onSelect: (category: string) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLocaleLowerCase("pt-BR");
+  const visibleCategories = categories.filter((item) =>
+    item.category.toLocaleLowerCase("pt-BR").includes(normalizedQuery),
+  );
+  const totalCharges = categories.reduce((sum, item) => sum + item.total, 0);
+  const totalOverdue = categories.reduce((sum, item) => sum + item.overdue, 0);
+
+  return (
+    <Modal onClose={onClose} role="dialog" className="modal charge-category-modal" labelledBy="charge-category-title">
+      <ModalClose onClick={onClose} />
+      <span className="eyebrow">FILTRAR MENSALIDADES</span>
+      <h2 id="charge-category-title">Escolha a categoria</h2>
+      <p>Consulte rapidamente quantas mensalidades vencidas existem em cada categoria.</p>
+      <label className="charge-category-search">
+        <Search size={17} strokeWidth={1.8} />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Pesquisar categoria..."
+          aria-label="Pesquisar categoria"
+          autoFocus
+        />
+      </label>
+      <div className="charge-category-list" role="radiogroup" aria-label="Categorias financeiras">
+        {!normalizedQuery && (
+          <button type="button" role="radio" aria-checked={selected === "all"} className={selected === "all" ? "selected" : ""} onClick={() => onSelect("all")}>
+            <span><strong>Todas as categorias</strong><small>{totalCharges} mensalidade(s)</small></span>
+            <b className={totalOverdue > 0 ? "has-overdue" : ""}>{totalOverdue} vencida(s)</b>
+            <i aria-hidden="true" />
+          </button>
+        )}
+        {visibleCategories.map((item) => (
+          <button type="button" role="radio" aria-checked={selected === item.category} key={item.category} className={selected === item.category ? "selected" : ""} onClick={() => onSelect(item.category)}>
+            <span><strong>{item.category}</strong><small>{item.total} mensalidade(s)</small></span>
+            <b className={item.overdue > 0 ? "has-overdue" : ""}>{item.overdue} vencida(s)</b>
+            <i aria-hidden="true" />
+          </button>
+        ))}
+        {visibleCategories.length === 0 && normalizedQuery && (
+          <div className="charge-category-empty">Nenhuma categoria encontrada.</div>
+        )}
+      </div>
+    </Modal>
   );
 }
 
