@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { CalendarCheck, CalendarX, CheckCircle2, Clock, ListChecks, Plus, X } from "lucide-react";
+import { ArrowLeft, CalendarCheck, CalendarX, CheckCircle2, Clock, ListChecks, Plus, X } from "lucide-react";
 import type { TeamRecord } from "./TeamManagement";
+import { readApiResponse } from "./api-response";
 
 type Drill = { id?: string; name: string; focus: string | null; durationMinutes: number; description: string | null };
 type Training = {
@@ -11,7 +12,7 @@ type Training = {
   status: "planned" | "completed" | "cancelled"; notes: string | null; drills: Drill[];
 };
 
-export function TrainingManagement({ teams, notify }: { teams: TeamRecord[]; notify: (message: string) => void }) {
+export function TrainingManagement({ teams, notify, onBack }: { teams: TeamRecord[]; notify: (message: string) => void; onBack: () => void }) {
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<Training | "new" | null>(null);
@@ -19,7 +20,7 @@ export function TrainingManagement({ teams, notify }: { teams: TeamRecord[]; not
     setLoading(true);
     try {
       const response = await fetch("/api/trainings");
-      const payload = (await response.json()) as { trainings?: Training[]; error?: string };
+      const payload = await readApiResponse<{ trainings?: Training[] }>(response);
       if (!response.ok) throw new Error(payload.error);
       setTrainings(payload.trainings ?? []);
     } catch (error) { notify(error instanceof Error ? error.message : "Não foi possível carregar os treinos."); }
@@ -39,7 +40,7 @@ export function TrainingManagement({ teams, notify }: { teams: TeamRecord[]; not
   const completed = trainings.filter((item) => item.status === "completed");
   const minutes = trainings.reduce((sum, item) => sum + item.durationMinutes, 0);
   return <>
-    <div className="section-heading"><div><span className="eyebrow">METODOLOGIA M6 FUTEBOL CLUBE</span><h1>Treinos</h1><p>Planeje sessões completas e mantenha o histórico por turma.</p></div><button className="primary-button" onClick={() => setModal("new")}><Plus size={16} strokeWidth={2} /> Planejar treino</button></div>
+    <div className="section-heading section-heading-with-back"><button type="button" className="section-back-button" onClick={onBack} aria-label="Voltar para o início"><ArrowLeft size={20} strokeWidth={2} /></button><div><span className="eyebrow">METODOLOGIA M6 FUTEBOL CLUBE</span><h1>Treinos</h1><p>Planeje sessões completas e mantenha o histórico por turma.</p></div><button className="primary-button" onClick={() => setModal("new")}><Plus size={16} strokeWidth={2} /> Planejar treino</button></div>
     <section className="training-metrics">
       <article className="metric-card"><div className="metric-icon green"><CalendarCheck size={19} strokeWidth={1.75} /></div><div><span>PLANEJADOS</span><strong>{planned.length}</strong><small>próximas sessões</small></div></article>
       <article className="metric-card"><div className="metric-icon blue"><CheckCircle2 size={19} strokeWidth={1.75} /></div><div><span>CONCLUÍDOS</span><strong>{completed.length}</strong><small>no histórico</small></div></article>
@@ -70,7 +71,7 @@ function TrainingModal({ teams, training, onClose, onSaved }: { teams: TeamRecor
         method: training ? "PATCH" : "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ teamId: form.get("teamId"), title: form.get("title"), objective: form.get("objective"), sessionDate: form.get("sessionDate"), durationMinutes: Number(form.get("durationMinutes")), status: form.get("status"), notes: form.get("notes"), drills }),
       });
-      const payload = (await response.json()) as { error?: string }; if (!response.ok) throw new Error(payload.error); onSaved();
+      const payload = await readApiResponse<Record<string, never>>(response); if (!response.ok) throw new Error(payload.error); onSaved();
     } catch (error) { window.alert(error instanceof Error ? error.message : "Não foi possível salvar."); } finally { setSaving(false); }
   }
   return <div className="modal-backdrop" onMouseDown={onClose}><div className="training-modal" role="dialog" aria-modal="true" aria-labelledby="training-modal-title" onMouseDown={(event) => event.stopPropagation()}>

@@ -87,10 +87,6 @@ function cloudCookieSuffix() {
   return cloudAuthEnabled() ? "; Secure" : "";
 }
 
-function cloudUnsupported(): never {
-  throw new Error("Gerenciamento de usuários ainda não está disponível no modo Supabase.");
-}
-
 export async function localAccountExists() {
   if (cloudAuthEnabled()) {
     const sql = getPostgresClient();
@@ -296,7 +292,32 @@ export async function getLocalSessionUser(request: Request): Promise<LocalSessio
 }
 
 export async function listManagedLocalUsers(organizationId: string): Promise<ManagedLocalUser[]> {
-  if (cloudAuthEnabled()) cloudUnsupported();
+  if (cloudAuthEnabled()) {
+    const sql = getPostgresClient();
+    const rows = await sql<{
+      id: string;
+      email: string;
+      username: string;
+      display_name: string;
+      role: string;
+      created_at: number;
+    }[]>`
+      SELECT u.id, u.email, u.username, m.display_name, m.role, u.created_at
+      FROM organization_members m
+      INNER JOIN local_users u ON u.id = m.user_id
+      WHERE m.organization_id = ${organizationId}
+      ORDER BY CASE WHEN m.role IN ('owner', 'admin') THEN 0 ELSE 1 END,
+               lower(m.display_name)
+    `;
+    return rows.map((row) => ({
+      id: row.id,
+      email: row.email,
+      username: row.username,
+      displayName: row.display_name,
+      role: effectiveRole(row.role),
+      createdAt: Number(row.created_at),
+    }));
+  }
   const d1 = await getLocalD1();
   const rows = await d1
     .prepare(`SELECT u.id, u.email, u.username, m.display_name, m.role, u.created_at
@@ -321,29 +342,54 @@ export async function createManagedLocalUser(
   organizationId: string,
   input: { displayName: string; username: string; password: string; role: LocalRole },
 ) {
-  if (cloudAuthEnabled()) cloudUnsupported();
-  const d1 = await getLocalD1();
   const username = input.username.trim().toLowerCase();
-  if (await d1.prepare("SELECT id FROM local_users WHERE lower(username) = lower(?) LIMIT 1").bind(username).first()) {
-    throw new Error("Este usuário de acesso já está em uso.");
-  }
-
   const id = crypto.randomUUID();
   const email = `${username}@m6.local`;
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const now = Date.now();
+  const displayName = input.displayName.trim();
+  const passwordHash = await derivePassword(input.password, salt);
+  const passwordSalt = toHex(salt);
+
+  if (cloudAuthEnabled()) {
+    const sql = getPostgresClient();
+    const duplicate = await sql<{ id: string }[]>`
+      SELECT id FROM local_users WHERE lower(username) = lower(${username}) LIMIT 1
+    `;
+    if (duplicate[0]) throw new Error("Este usuário de acesso já está em uso.");
+    await sql.begin(async (transaction) => {
+      await transaction`
+        INSERT INTO local_users
+          (id, username, email, display_name, role, password_hash, password_salt, created_at, updated_at)
+        VALUES
+          (${id}, ${username}, ${email}, ${displayName}, 'operator', ${passwordHash}, ${passwordSalt}, ${now}, ${now})
+      `;
+      await transaction`
+        INSERT INTO organization_members
+          (organization_id, user_id, display_name, role, created_at)
+        VALUES
+          (${organizationId}, ${id}, ${displayName}, ${membershipRole(input.role)}, ${now})
+      `;
+    });
+    return { id, username, email, displayName, role: input.role, createdAt: now };
+  }
+
+  const d1 = await getLocalD1();
+  if (await d1.prepare("SELECT id FROM local_users WHERE lower(username) = lower(?) LIMIT 1").bind(username).first()) {
+    throw new Error("Este usuário de acesso já está em uso.");
+  }
   // D1 desktop keeps the same atomic operation formerly expressed as: await getD1().batch([...])
   await d1.batch([
     d1
       .prepare(`INSERT INTO local_users(id, username, email, display_name, role, password_hash, password_salt, created_at, updated_at)
         VALUES(?, ?, ?, ?, 'operator', ?, ?, ?, ?)`)
-      .bind(id, username, email, input.displayName.trim(), await derivePassword(input.password, salt), toHex(salt), now, now),
+      .bind(id, username, email, displayName, passwordHash, passwordSalt, now, now),
     d1
       .prepare("INSERT INTO organization_members(organization_id, user_id, display_name, role, created_at) VALUES(?, ?, ?, ?, ?)")
-      .bind(organizationId, id, input.displayName.trim(), membershipRole(input.role), now),
+      .bind(organizationId, id, displayName, membershipRole(input.role), now),
   ]);
 
-  return { id, username, email, displayName: input.displayName.trim(), role: input.role, createdAt: now };
+  return { id, username, email, displayName, role: input.role, createdAt: now };
 }
 
 export async function updateManagedLocalUser(
@@ -351,7 +397,69 @@ export async function updateManagedLocalUser(
   id: string,
   input: { displayName: string; username: string; role: LocalRole; password?: string },
 ) {
-  if (cloudAuthEnabled()) cloudUnsupported();
+  const username = input.username.trim().toLowerCase();
+  const displayName = input.displayName.trim();
+
+  if (cloudAuthEnabled()) {
+    const sql = getPostgresClient();
+    const currentRows = await sql<{ username: string; role: string }[]>`
+      SELECT u.username, m.role
+      FROM organization_members m
+      INNER JOIN local_users u ON u.id = m.user_id
+      WHERE m.organization_id = ${organizationId} AND m.user_id = ${id}
+      LIMIT 1
+    `;
+    const current = currentRows[0];
+    if (!current) throw new Error("Usuário não encontrado.");
+    const countRows = await sql<{ total: number }[]>`
+      SELECT COUNT(*)::integer total FROM organization_members WHERE user_id = ${id}
+    `;
+    const membershipCount = Number(countRows[0]?.total ?? 0);
+    if (membershipCount > 1 && (username !== current.username || Boolean(input.password))) {
+      throw new Error("Credenciais globais de usuário compartilhado não podem ser alteradas por uma organização.");
+    }
+    const duplicate = await sql<{ id: string }[]>`
+      SELECT id FROM local_users
+      WHERE lower(username) = lower(${username}) AND id <> ${id}
+      LIMIT 1
+    `;
+    if (duplicate[0]) throw new Error("Este usuário de acesso já está em uso.");
+
+    let passwordHash: string | null = null;
+    let passwordSalt: string | null = null;
+    if (input.password) {
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      passwordHash = await derivePassword(input.password, salt);
+      passwordSalt = toHex(salt);
+    }
+    const now = Date.now();
+    await sql.begin(async (transaction) => {
+      await transaction`
+        UPDATE organization_members
+        SET display_name = ${displayName}, role = ${membershipRole(input.role)}
+        WHERE organization_id = ${organizationId} AND user_id = ${id}
+      `;
+      if (membershipCount === 1) {
+        const email = `${username}@m6.local`;
+        if (passwordHash && passwordSalt) {
+          await transaction`
+            UPDATE local_users
+            SET username = ${username}, email = ${email}, display_name = ${displayName},
+                password_hash = ${passwordHash}, password_salt = ${passwordSalt}, updated_at = ${now}
+            WHERE id = ${id}
+          `;
+        } else {
+          await transaction`
+            UPDATE local_users
+            SET username = ${username}, email = ${email}, display_name = ${displayName}, updated_at = ${now}
+            WHERE id = ${id}
+          `;
+        }
+      }
+    });
+    return { id, username, displayName, role: input.role };
+  }
+
   const d1 = await getLocalD1();
   const current = await d1
     .prepare(`SELECT u.username, m.role
@@ -366,8 +474,6 @@ export async function updateManagedLocalUser(
     .prepare("SELECT COUNT(*) total FROM organization_members WHERE user_id = ?")
     .bind(id)
     .first<{ total: number }>();
-  const username = input.username.trim().toLowerCase();
-
   if ((memberships?.total ?? 0) > 1 && (username !== current.username || Boolean(input.password))) {
     throw new Error("Credenciais globais de usuário compartilhado não podem ser alteradas por uma organização.");
   }
@@ -384,7 +490,7 @@ export async function updateManagedLocalUser(
   const statements = [
     d1
       .prepare("UPDATE organization_members SET display_name = ?, role = ? WHERE organization_id = ? AND user_id = ?")
-      .bind(input.displayName.trim(), membershipRole(input.role), organizationId, id),
+      .bind(displayName, membershipRole(input.role), organizationId, id),
   ];
 
   if ((memberships?.total ?? 0) === 1) {
@@ -394,26 +500,36 @@ export async function updateManagedLocalUser(
       statements.push(
         d1
           .prepare("UPDATE local_users SET username = ?, email = ?, display_name = ?, password_hash = ?, password_salt = ?, updated_at = ? WHERE id = ?")
-          .bind(username, email, input.displayName.trim(), await derivePassword(input.password, salt), toHex(salt), Date.now(), id),
+          .bind(username, email, displayName, await derivePassword(input.password, salt), toHex(salt), Date.now(), id),
       );
     } else {
       statements.push(
         d1
           .prepare("UPDATE local_users SET username = ?, email = ?, display_name = ?, updated_at = ? WHERE id = ?")
-          .bind(username, email, input.displayName.trim(), Date.now(), id),
+          .bind(username, email, displayName, Date.now(), id),
       );
     }
   }
 
   // D1 desktop keeps the same atomic operation formerly expressed as: await getD1().batch(statements)
   await d1.batch(statements);
-  return { id, username, displayName: input.displayName.trim(), role: input.role };
+  return { id, username, displayName, role: input.role };
 }
 
 export async function deleteManagedLocalUser(organizationId: string, id: string, currentUserId: string) {
-  if (cloudAuthEnabled()) cloudUnsupported();
-  const d1 = await getLocalD1();
   if (id === currentUserId) throw new Error("Você não pode excluir o usuário conectado.");
+  if (cloudAuthEnabled()) {
+    const sql = getPostgresClient();
+    const member = await sql<{ role: string }[]>`
+      SELECT role FROM organization_members
+      WHERE organization_id = ${organizationId} AND user_id = ${id}
+      LIMIT 1
+    `;
+    if (!member[0]) throw new Error("Usuário não encontrado.");
+    await sql`DELETE FROM organization_members WHERE organization_id = ${organizationId} AND user_id = ${id}`;
+    return { removed: true };
+  }
+  const d1 = await getLocalD1();
   const member = await d1
     .prepare("SELECT role FROM organization_members WHERE organization_id = ? AND user_id = ? LIMIT 1")
     .bind(organizationId, id)
@@ -424,7 +540,32 @@ export async function deleteManagedLocalUser(organizationId: string, id: string,
 }
 
 export async function resetLocalPassword(organizationId: string, username: string, password: string) {
-  if (cloudAuthEnabled()) cloudUnsupported();
+  if (cloudAuthEnabled()) {
+    const sql = getPostgresClient();
+    const rows = await sql<{ id: string }[]>`
+      SELECT u.id
+      FROM local_users u
+      INNER JOIN organization_members m ON m.user_id = u.id
+      WHERE m.organization_id = ${organizationId} AND lower(u.username) = lower(${username.trim()})
+      LIMIT 1
+    `;
+    const row = rows[0];
+    if (!row) throw new Error("Usuário não encontrado.");
+    const counts = await sql<{ total: number }[]>`
+      SELECT COUNT(*)::integer total FROM organization_members WHERE user_id = ${row.id}
+    `;
+    if (Number(counts[0]?.total ?? 0) !== 1) {
+      throw new Error("A senha de um usuário compartilhado não pode ser redefinida por uma organização.");
+    }
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    await sql`
+      UPDATE local_users
+      SET password_hash = ${await derivePassword(password, salt)},
+          password_salt = ${toHex(salt)}, updated_at = ${Date.now()}
+      WHERE id = ${row.id}
+    `;
+    return;
+  }
   const d1 = await getLocalD1();
   const row = await d1
     .prepare(`SELECT u.id

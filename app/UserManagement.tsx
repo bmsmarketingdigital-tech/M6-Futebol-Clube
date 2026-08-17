@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Plus, ShieldCheck, UserCheck, Users, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Plus, ShieldCheck, UserCheck, Users, X } from "lucide-react";
+import { readApiResponse } from "./api-response";
 
 type UserRole = "admin" | "operator";
 
@@ -16,8 +17,10 @@ type ManagedUser = {
 
 export function UserManagement({
   notify,
+  onBack,
 }: {
   notify: (message: string) => void;
+  onBack: () => void;
 }) {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,7 +35,7 @@ export function UserManagement({
     setError("");
     try {
       const response = await fetch("/api/users", { cache: "no-store" });
-      const payload = (await response.json()) as { users?: ManagedUser[]; error?: string };
+      const payload = await readApiResponse<{ users?: ManagedUser[] }>(response);
       if (!response.ok) throw new Error(payload.error || "Não foi possível carregar os usuários.");
       setUsers(payload.users ?? []);
     } catch (loadError) {
@@ -82,7 +85,7 @@ export function UserManagement({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const result = (await response.json()) as { user?: ManagedUser; error?: string };
+      const result = await readApiResponse<{ user?: ManagedUser }>(response);
       if (!response.ok || !result.user) {
         throw new Error(result.error || "Não foi possível salvar o usuário.");
       }
@@ -107,7 +110,7 @@ export function UserManagement({
     setError("");
     try {
       const response = await fetch(`/api/users/${deleteTarget.id}`, { method: "DELETE" });
-      const payload = (await response.json()) as { deleted?: boolean; error?: string };
+      const payload = await readApiResponse<{ deleted?: boolean }>(response);
       if (!response.ok || !payload.deleted) {
         throw new Error(payload.error || "Não foi possível excluir o usuário.");
       }
@@ -124,7 +127,8 @@ export function UserManagement({
 
   return (
     <section className="users-management">
-      <div className="section-heading users-heading">
+      <div className="section-heading section-heading-with-back users-heading">
+        <button type="button" className="section-back-button" onClick={onBack} aria-label="Voltar para o início"><ArrowLeft size={20} strokeWidth={2} /></button>
         <div>
           <span className="eyebrow">SEGURANÇA E ACESSO</span>
           <h1>Usuários e permissões</h1>

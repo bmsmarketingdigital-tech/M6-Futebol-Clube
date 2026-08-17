@@ -1,17 +1,49 @@
 import { and, eq } from "drizzle-orm";
 import { getD1, getDb } from "../../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../../db/postgres";
 import { teams, trainingSessions } from "../../../../db/schema";
 import { getApiContext } from "../../api-auth";
 import { normalizeTraining, type TrainingPayload } from "../training-utils";
 
 export const dynamic = "force-dynamic";
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const context = await getApiContext(request);
-  if (!context) return Response.json({ error: "Acesso não autorizado." }, { status: 401 });
-  const normalized = normalizeTraining((await request.json()) as TrainingPayload);
-  if ("error" in normalized) return Response.json({ error: normalized.error }, { status: 400 });
-  const { id } = await params; const db = getDb(); const organizationId = context.membership.organizationId;
-  const { drills, ...session } = normalized.value;
+  try {
+    const context = await getApiContext(request);
+    if (!context) return Response.json({ error: "Acesso não autorizado." }, { status: 401 });
+    const normalized = normalizeTraining((await request.json()) as TrainingPayload);
+    if ("error" in normalized) return Response.json({ error: normalized.error }, { status: 400 });
+    const { id } = await params; const organizationId = context.membership.organizationId;
+    const { drills, ...session } = normalized.value;
+    if (postgresConfigured()) {
+      const sql = getPostgresClient();
+      const team = await sql<{ id: string }[]>`
+        SELECT id FROM teams WHERE id = ${session.teamId}
+          AND organization_id = ${organizationId} AND active = 1 LIMIT 1
+      `;
+      if (!team[0]) return Response.json({ error: "Turma não encontrada." }, { status: 404 });
+      const updated = await sql.begin(async (transaction) => {
+        const rows = await transaction<{ id: string }[]>`
+          UPDATE training_sessions SET team_id = ${session.teamId}, title = ${session.title},
+            objective = ${session.objective}, session_date = ${session.sessionDate},
+            duration_minutes = ${session.durationMinutes}, status = ${session.status},
+            notes = ${session.notes}, updated_at = ${Math.floor(Date.now() / 1000)}
+          WHERE id = ${id} AND organization_id = ${organizationId} RETURNING id
+        `;
+        if (!rows[0]) return false;
+        await transaction`DELETE FROM training_drills WHERE session_id = ${id}`;
+        for (const drill of drills) {
+          await transaction`
+            INSERT INTO training_drills
+              (id, session_id, position, name, focus, duration_minutes, description)
+            VALUES (${crypto.randomUUID()}, ${id}, ${drill.position}, ${drill.name}, ${drill.focus},
+                    ${drill.durationMinutes}, ${drill.description})
+          `;
+        }
+        return true;
+      });
+      return updated ? Response.json({ updated: true }) : Response.json({ error: "Treino não encontrado." }, { status: 404 });
+    }
+    const db = getDb();
   const [team] = await db
     .select({ id: teams.id })
     .from(teams)
@@ -55,12 +87,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     ),
   ]);
   if ((results[0].meta.changes ?? 0) !== 1) return Response.json({ error: "Treino não encontrado." }, { status: 404 });
-  return Response.json({ updated: true });
+    return Response.json({ updated: true });
+  } catch (error) {
+    console.error("Failed to update training", error);
+    return Response.json({ error: "Não foi possível atualizar o treino." }, { status: 500 });
+  }
 }
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const context = await getApiContext(request);
-  if (!context) return Response.json({ error: "Acesso não autorizado." }, { status: 401 });
-  const { id } = await params;
-  const [deleted] = await getDb().delete(trainingSessions).where(and(eq(trainingSessions.id, id), eq(trainingSessions.organizationId, context.membership.organizationId))).returning({ id: trainingSessions.id });
-  return deleted ? Response.json({ deleted: true }) : Response.json({ error: "Treino não encontrado." }, { status: 404 });
+  try {
+    const context = await getApiContext(request);
+    if (!context) return Response.json({ error: "Acesso não autorizado." }, { status: 401 });
+    const { id } = await params;
+    if (postgresConfigured()) {
+      const deleted = await getPostgresClient()<{ id: string }[]>`
+        DELETE FROM training_sessions WHERE id = ${id}
+          AND organization_id = ${context.membership.organizationId} RETURNING id
+      `;
+      return deleted[0] ? Response.json({ deleted: true }) : Response.json({ error: "Treino não encontrado." }, { status: 404 });
+    }
+    const [deleted] = await getDb().delete(trainingSessions).where(and(eq(trainingSessions.id, id), eq(trainingSessions.organizationId, context.membership.organizationId))).returning({ id: trainingSessions.id });
+    return deleted ? Response.json({ deleted: true }) : Response.json({ error: "Treino não encontrado." }, { status: 404 });
+  } catch (error) {
+    console.error("Failed to delete training", error);
+    return Response.json({ error: "Não foi possível excluir o treino." }, { status: 500 });
+  }
 }

@@ -51,7 +51,7 @@ async function candidateTeams(organizationId: string, target: ReturnType<typeof 
       SELECT t.id, t.name, t.schedule_days, t.start_time, t.place
       FROM teams t
       WHERE t.organization_id = ${organizationId}
-        AND t.active = true
+        AND t.active = 1
         AND NOT EXISTS (
           SELECT 1 FROM class_reminders r
           WHERE r.team_id = t.id AND r.session_date = ${target.dateStr}
@@ -115,8 +115,8 @@ async function revalidateRecipient(organizationId: string, teamId: string, athle
       INNER JOIN athletes a
         ON a.id = ta.athlete_id AND a.organization_id = t.organization_id
       WHERE t.id = ${teamId} AND t.organization_id = ${organizationId}
-        AND t.active = true AND ta.athlete_id = ${athleteId}
-        AND ta.active = true AND a.active = true
+        AND t.active = 1 AND ta.athlete_id = ${athleteId}
+        AND ta.active = 1 AND a.active = 1
         AND NOT EXISTS (
           SELECT 1 FROM attendance_sessions s
           WHERE s.team_id = t.id AND s.session_date = ${target.dateStr}

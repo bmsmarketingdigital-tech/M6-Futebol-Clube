@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { CircleDashed, Plus, Star, TrendingUp, X } from "lucide-react";
+import { ArrowLeft, CircleDashed, Plus, Star, TrendingUp, X } from "lucide-react";
 import type { AthleteRecord } from "./AthleteProfileModal";
+import { readApiResponse } from "./api-response";
 
 type Evaluation = {
   id: string;
@@ -24,9 +25,11 @@ type Evaluation = {
 export function EvaluationManagement({
   athletes,
   notify,
+  onBack,
 }: {
   athletes: AthleteRecord[];
   notify: (message: string) => void;
+  onBack: () => void;
 }) {
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +39,7 @@ export function EvaluationManagement({
     setLoading(true);
     try {
       const response = await fetch("/api/evaluations");
-      const payload = (await response.json()) as { evaluations?: Evaluation[]; error?: string };
+      const payload = await readApiResponse<{ evaluations?: Evaluation[] }>(response);
       if (!response.ok) throw new Error(payload.error);
       setEvaluations(payload.evaluations ?? []);
     } catch (error) {
@@ -65,7 +68,7 @@ export function EvaluationManagement({
   async function remove(evaluation: Evaluation) {
     if (!window.confirm(`Excluir a avaliação de ${evaluation.athleteName}?`)) return;
     const response = await fetch(`/api/evaluations/${evaluation.id}`, { method: "DELETE" });
-    const payload = (await response.json()) as { error?: string };
+    const payload = await readApiResponse<Record<string, never>>(response);
     if (!response.ok) return notify(payload.error || "Não foi possível excluir.");
     notify("Avaliação excluída.");
     await load();
@@ -73,7 +76,8 @@ export function EvaluationManagement({
 
   return (
     <>
-      <div className="section-heading">
+      <div className="section-heading section-heading-with-back">
+        <button type="button" className="section-back-button" onClick={onBack} aria-label="Voltar para o início"><ArrowLeft size={20} strokeWidth={2} /></button>
         <div><span className="eyebrow">DESENVOLVIMENTO ESPORTIVO</span><h1>Avaliações</h1><p>Acompanhe a evolução técnica, física, tática e comportamental.</p></div>
         <button className="primary-button" onClick={() => setModal("new")}><Plus size={16} strokeWidth={2} /> Nova avaliação</button>
       </div>
@@ -120,7 +124,7 @@ function EvaluationModal({ athletes, evaluation, onClose, onSaved }: { athletes:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(Object.fromEntries(form)),
       });
-      const payload = (await response.json()) as { error?: string };
+      const payload = await readApiResponse<Record<string, never>>(response);
       if (!response.ok) throw new Error(payload.error);
       onSaved();
     } catch (error) {

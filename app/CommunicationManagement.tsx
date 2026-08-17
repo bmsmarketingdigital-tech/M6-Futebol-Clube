@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { CalendarClock, Check, CheckCircle2, MessageCircle, Plus, X } from "lucide-react";
+import { ArrowLeft, CalendarClock, Check, CheckCircle2, MessageCircle, Plus, X } from "lucide-react";
 import type { TeamRecord } from "./TeamManagement";
+import { readApiResponse } from "./api-response";
 
 type Recipient = { id: string; athleteId: string; guardianName: string; guardianEmail: string | null; guardianPhone: string | null; readAt: string | null };
 type Communication = {
@@ -14,7 +15,7 @@ type Communication = {
 
 const statusLabels = { draft: "Rascunho", scheduled: "Agendado", sent: "Enviado", cancelled: "Cancelado" };
 
-export function CommunicationManagement({ teams, notify }: { teams: TeamRecord[]; notify: (message: string) => void }) {
+export function CommunicationManagement({ teams, notify, onBack }: { teams: TeamRecord[]; notify: (message: string) => void; onBack: () => void }) {
   const [items, setItems] = useState<Communication[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<Communication | "new" | null>(null);
@@ -23,7 +24,7 @@ export function CommunicationManagement({ teams, notify }: { teams: TeamRecord[]
     setLoading(true);
     try {
       const response = await fetch("/api/communications");
-      const payload = (await response.json()) as { communications?: Communication[]; error?: string };
+      const payload = await readApiResponse<{ communications?: Communication[] }>(response);
       if (!response.ok) throw new Error(payload.error);
       setItems(payload.communications ?? []);
       setDetails((current) =>
@@ -54,7 +55,7 @@ export function CommunicationManagement({ teams, notify }: { teams: TeamRecord[]
   const totalReads = sent.reduce((sum, item) => sum + item.readCount, 0);
   const readingRate = totalRecipients ? Math.round((totalReads / totalRecipients) * 100) : 0;
   return <>
-    <div className="section-heading"><div><span className="eyebrow">RELACIONAMENTO COM FAMÍLIAS</span><h1>Comunicação</h1><p>Crie avisos segmentados e acompanhe a confirmação de leitura.</p></div><button className="primary-button" onClick={() => setModal("new")}><Plus size={16} strokeWidth={2} /> Novo comunicado</button></div>
+    <div className="section-heading section-heading-with-back"><button type="button" className="section-back-button" onClick={onBack} aria-label="Voltar para o início"><ArrowLeft size={20} strokeWidth={2} /></button><div><span className="eyebrow">RELACIONAMENTO COM FAMÍLIAS</span><h1>Comunicação</h1><p>Crie avisos segmentados e acompanhe a confirmação de leitura.</p></div><button className="primary-button" onClick={() => setModal("new")}><Plus size={16} strokeWidth={2} /> Novo comunicado</button></div>
  <WhatsAppCommunicationCard notify={notify} />
  <section className="communication-metrics">
       <article className="metric-card"><div className="metric-icon green"><MessageCircle size={19} strokeWidth={1.75} /></div><div><span>COMUNICADOS</span><strong>{items.length}</strong><small>histórico completo</small></div></article>
@@ -89,7 +90,7 @@ function WhatsAppCommunicationCard({ notify }: { notify: (message: string) => vo
 
   const refresh = useCallback(async () => {
     const response = await fetch("/api/check-in/whatsapp");
-    const payload = await response.json() as { whatsapp?: CommunicationWhatsAppStatus };
+    const payload = await readApiResponse<{ whatsapp?: CommunicationWhatsAppStatus }>(response);
     if (payload.whatsapp) setStatus(payload.whatsapp);
   }, []);
 
@@ -99,7 +100,7 @@ function WhatsAppCommunicationCard({ notify }: { notify: (message: string) => vo
     setBusy(true);
     try {
       const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: bridgeAction ? JSON.stringify({ action: bridgeAction }) : undefined });
-      const payload = await response.json() as { whatsapp?: CommunicationWhatsAppStatus; error?: string };
+      const payload = await readApiResponse<{ whatsapp?: CommunicationWhatsAppStatus }>(response);
       if (!response.ok) throw new Error(payload.error || "Falha na operação.");
       if (payload.whatsapp) setStatus(payload.whatsapp);
       notify(message);
@@ -128,7 +129,7 @@ function CommunicationModal({ teams, item, onClose, onSaved }: { teams: TeamReco
     event.preventDefault(); const form = new FormData(event.currentTarget); setSaving(true);
     try {
       const response = await fetch(item ? `/api/communications/${item.id}` : "/api/communications", { method: item ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: form.get("title"), message: form.get("message"), audienceType: audience, teamId: form.get("teamId"), priority: form.get("priority"), status, scheduledAt: form.get("scheduledAt") }) });
-      const payload = (await response.json()) as { error?: string }; if (!response.ok) throw new Error(payload.error); onSaved();
+      const payload = await readApiResponse<Record<string, never>>(response); if (!response.ok) throw new Error(payload.error); onSaved();
     } catch (error) { window.alert(error instanceof Error ? error.message : "Não foi possível salvar."); } finally { setSaving(false); }
   }
   return <div className="modal-backdrop" onMouseDown={onClose}><div className="communication-modal" role="dialog" aria-modal="true" aria-labelledby="communication-modal-title" onMouseDown={(event) => event.stopPropagation()}><header><div><span className="eyebrow">NOVO AVISO</span><h2 id="communication-modal-title">{item ? "Editar comunicado" : "Criar comunicado"}</h2><p>O sistema salvará a lista exata de destinatários.</p></div><button className="modal-close" onClick={onClose} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button></header><form onSubmit={submit}>

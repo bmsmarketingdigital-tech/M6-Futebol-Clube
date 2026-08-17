@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Copy, Power, Plus, UserPlus, WalletCards, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Copy, Power, Plus, UserPlus, WalletCards, X } from "lucide-react";
 import { filterAthletesForQuery, getEligibleAthletes } from "./combo-athlete-search";
+import { readApiResponse } from "./api-response";
 
 type Combo = {
   id: string;
@@ -46,7 +47,7 @@ function comboTypeLabel(type: string) {
 }
 
 
-export default function CombosManagement({ notify, athletes }: { notify: (message: string) => void; athletes: Athlete[] }) {
+export default function CombosManagement({ notify, athletes, onBack }: { notify: (message: string) => void; athletes: Athlete[]; onBack: () => void }) {
   const [combos, setCombos] = useState<Combo[]>([]);
   const [contracts, setContracts] = useState<ComboContract[]>([]);
   const [open, setOpen] = useState(false);
@@ -76,8 +77,8 @@ export default function CombosManagement({ notify, athletes }: { notify: (messag
       fetch("/api/finance/combos"),
       fetch("/api/finance/combos/contracts"),
     ]);
-    const comboPayload = await comboResponse.json();
-    const contractPayload = await contractResponse.json();
+    const comboPayload = await readApiResponse<{ combos?: Combo[] }>(comboResponse);
+    const contractPayload = await readApiResponse<{ contracts?: ComboContract[] }>(contractResponse);
     if (comboResponse.ok) setCombos(comboPayload.combos ?? []);
     if (contractResponse.ok) setContracts(contractPayload.contracts ?? []);
   }
@@ -102,7 +103,7 @@ export default function CombosManagement({ notify, athletes }: { notify: (messag
       headers: { "content-type": "application/json" },
       body: JSON.stringify(form),
     });
-    const payload = await response.json();
+    const payload = await readApiResponse<{ combos?: Combo[]; contracts?: ComboContract[] }>(response);
     if (!response.ok) return notify(payload.error ?? "Não foi possível criar o combo.");
     notify("Combo criado com sucesso.");
     setOpen(false);
@@ -213,7 +214,7 @@ export default function CombosManagement({ notify, athletes }: { notify: (messag
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ comboId: applyCombo.id, athleteId: applyAthlete, startDate, firstDueDate }),
     });
-    const payload = await response.json();
+    const payload = await readApiResponse<{ error?: string }>(response);
     setApplying(false);
     if (!response.ok) return notify(payload.error ?? "Não foi possível aplicar o combo.");
     notify("Combo aplicado ao aluno com sucesso.");
@@ -224,7 +225,7 @@ export default function CombosManagement({ notify, athletes }: { notify: (messag
   async function confirmCancelContract() {
     if (!cancelContract) return;
     const response = await fetch(`/api/finance/combos/contracts/${cancelContract.id}/cancel`, { method: "POST" });
-    const payload = await response.json();
+    const payload = await readApiResponse<{ error?: string; releasedMonths?: string[] }>(response);
     if (!response.ok) return notify(payload.error ?? "Nao foi possivel cancelar o contrato.");
     notify(`Contrato cancelado. Competencias liberadas: ${payload.releasedMonths?.length ?? 0}.`);
     setCancelContract(null);
@@ -233,7 +234,8 @@ export default function CombosManagement({ notify, athletes }: { notify: (messag
 
   return (
     <div className="finance-page-content combos-page">
-      <div className="section-heading finance-heading">
+      <div className="section-heading section-heading-with-back finance-heading">
+        <button type="button" className="section-back-button" onClick={onBack} aria-label="Voltar para o início"><ArrowLeft size={20} strokeWidth={2} /></button>
         <div><span className="eyebrow">FINANCEIRO</span><h1>Combos</h1><p>Crie pacotes e condições especiais para os alunos.</p></div>
         <button className="primary-button" onClick={() => setOpen(true)}><Plus size={16} /> Novo Combo</button>
       </div>

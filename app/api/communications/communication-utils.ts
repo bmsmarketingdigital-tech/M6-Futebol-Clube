@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../db/postgres";
 import {
   athletes,
   teamAthletes,
@@ -31,6 +32,37 @@ export type CommunicationRecipientSnapshot = {
 };
 
 export async function buildRecipientSnapshot(organizationId: string, audienceType: "all" | "team", teamId: string | null): Promise<CommunicationRecipientSnapshot[]> {
+  if (postgresConfigured()) {
+    const sql = getPostgresClient();
+    if (audienceType === "team" && teamId) {
+      const team = await sql<{ id: string }[]>`
+        SELECT id FROM teams
+        WHERE id = ${teamId} AND organization_id = ${organizationId} AND active = 1
+        LIMIT 1
+      `;
+      if (!team[0]) throw new Error("Turma não encontrada.");
+    }
+    const rows = audienceType === "team" && teamId
+      ? await sql<{ athlete_id: string; guardian_name: string; guardian_email: string | null; guardian_phone: string | null }[]>`
+          SELECT a.id athlete_id, a.guardian_name, a.guardian_email, a.guardian_phone
+          FROM team_athletes ta
+          INNER JOIN athletes a ON a.id = ta.athlete_id AND a.organization_id = ta.organization_id
+          WHERE ta.organization_id = ${organizationId} AND ta.team_id = ${teamId}
+            AND ta.active = 1 AND a.active = 1
+          ORDER BY lower(a.guardian_name), a.id
+        `
+      : await sql<{ athlete_id: string; guardian_name: string; guardian_email: string | null; guardian_phone: string | null }[]>`
+          SELECT id athlete_id, guardian_name, guardian_email, guardian_phone
+          FROM athletes
+          WHERE organization_id = ${organizationId} AND active = 1
+          ORDER BY lower(guardian_name), id
+        `;
+    return rows.map((row) => ({
+      id: crypto.randomUUID(), athleteId: row.athlete_id,
+      guardianName: row.guardian_name, guardianEmail: row.guardian_email,
+      guardianPhone: row.guardian_phone,
+    }));
+  }
   const db = getDb();
   let athleteIds: string[] | null = null;
   if (audienceType === "team" && teamId) {

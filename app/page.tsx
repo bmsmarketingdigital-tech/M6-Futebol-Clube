@@ -740,7 +740,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
               userName={user.displayName}
             />
           ) : section === "Combos" ? (
-            <CombosManagement athletes={athletes} notify={notify} />
+            <CombosManagement athletes={athletes} notify={notify} onBack={() => setSection("Visão geral")} />
           ) : section === "Financeiro" || section === "Mensalidades" || section === "Planos" || section === "Controle de gastos" ? (
             <FinanceManagement
               view={section === "Planos" ? "plans" : section === "Controle de gastos" ? "expenses" : "overview"}
@@ -751,15 +751,16 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
                 void loadFinanceOverview();
               }}
               onOpenPlans={() => setSection("Planos")}
+              onBack={() => setSection("Visão geral")}
             />
           ) : section === "Avaliações" ? (
-            <EvaluationManagement athletes={filteredAthletes} notify={notify} />
+            <EvaluationManagement athletes={filteredAthletes} notify={notify} onBack={() => setSection("Visão geral")} />
           ) : section === "Treinos" ? (
-            <TrainingManagement teams={teams} notify={notify} />
+            <TrainingManagement teams={teams} notify={notify} onBack={() => setSection("Visão geral")} />
           ) : section === "Comunicação" ? (
-            <CommunicationManagement teams={teams} notify={notify} />
+            <CommunicationManagement teams={teams} notify={notify} onBack={() => setSection("Visão geral")} />
           ) : section === "Usuários e permissões" && user.role === "admin" ? (
-            <UserManagement notify={notify} />
+            <UserManagement notify={notify} onBack={() => setSection("Visão geral")} />
           ) : (
             <SectionView
               key={section}

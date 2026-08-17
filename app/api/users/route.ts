@@ -5,10 +5,15 @@ export const dynamic = "force-dynamic";
 const validUsername = (value:string) => /^[a-z0-9._-]{3,30}$/.test(value);
 
 export async function GET(request:Request){
-  const context=await getApiContext(request);
-  if(!context||context.role!=="admin")return Response.json({error:"Apenas administradores podem gerenciar usuários."},{status:403});
-  const users=await listManagedLocalUsers(context.membership.organizationId);
-  return Response.json({users:users.map(user=>({...user,isCurrent:user.id===context.user.id}))});
+  try {
+    const context=await getApiContext(request);
+    if(!context||context.role!=="admin")return Response.json({error:"Apenas administradores podem gerenciar usuários."},{status:403});
+    const users=await listManagedLocalUsers(context.membership.organizationId);
+    return Response.json({users:users.map(user=>({...user,isCurrent:user.id===context.user.id}))});
+  } catch (error) {
+    console.error("Failed to list managed users", error);
+    return Response.json({error:"Não foi possível carregar os usuários."},{status:500});
+  }
 }
 
 export async function POST(request:Request){

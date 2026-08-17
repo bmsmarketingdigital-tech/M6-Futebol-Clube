@@ -6079,6 +6079,114 @@ body {
     white-space: nowrap;
   }
 
+  /* Navegação e permissões: páginas completas, sem faixas de desktop. */
+  .finance-heading-with-back {
+    grid-template-columns: 42px minmax(0, 1fr);
+    align-items: start;
+  }
+  .finance-heading-with-back > .finance-heading-title { min-width: 0; }
+  .finance-heading-with-back > .finance-heading-actions {
+    grid-column: 1 / -1;
+  }
+
+  .users-page,
+  .users-management,
+  .users-card { width: 100%; min-width: 0; overflow-x: hidden; }
+  .users-page .users-heading h1 {
+    max-width: 100%;
+    font-size: clamp(23px, 7.4vw, 29px);
+    overflow-wrap: anywhere;
+  }
+  .users-page .user-metrics {
+    width: 100%;
+    margin: 0 0 12px;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    overflow: visible;
+  }
+  .users-page .user-metrics article {
+    width: 100%;
+    min-width: 0;
+    min-height: 116px;
+    padding: 12px;
+    display: flex;
+    flex: none;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 9px;
+    overflow: hidden;
+  }
+  .users-page .user-metrics article:nth-child(3) {
+    grid-column: 1 / -1;
+    min-height: 82px;
+    flex-direction: row;
+    align-items: center;
+  }
+  .users-page .user-metric-icon { width: 38px; height: 38px; flex: 0 0 38px; border-radius: 12px; }
+  .users-page .user-metrics article > div { min-width: 0; }
+  .users-page .user-metrics small { font-size: 8px; letter-spacing: .55px; overflow-wrap: anywhere; }
+  .users-page .user-metrics strong { font-size: 23px; }
+  .users-page .user-metrics p { font-size: 10px; line-height: 1.35; overflow-wrap: anywhere; }
+  .users-card > header {
+    min-height: 0;
+    padding: 15px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 8px;
+  }
+  .users-card > header h2 { font-size: 17px; }
+  .users-card > header p { max-width: 100%; font-size: 10px; line-height: 1.4; }
+  .users-card > header > span { padding: 6px 8px; font-size: 9px; white-space: nowrap; }
+  .permissions-explainer {
+    margin: 10px;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .permissions-explainer div { min-width: 0; display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 6px; }
+  .permissions-explainer b { font-size: 10px; white-space: normal; }
+  .permissions-explainer span { min-width: 0; font-size: 9px; overflow-wrap: anywhere; }
+  .users-list { padding: 2px 10px 12px; }
+  .users-list > article {
+    width: 100%;
+    min-width: 0;
+    min-height: 92px;
+    margin-bottom: 8px;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    grid-template-areas: "avatar identity delete" "role edit edit";
+    gap: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface-1);
+  }
+  .users-list .user-avatar { grid-area: avatar; width: 42px; height: 42px; }
+  .users-list .user-identity { grid-area: identity; min-width: 0; }
+  .users-list .user-identity strong,
+  .users-list .user-identity small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .users-list .role-badge { grid-area: role; width: fit-content; max-width: 100%; font-size: 9px; }
+  .users-list .user-edit-button { grid-area: edit; justify-self: end; width: auto; min-height: 34px; }
+  .users-list .user-delete-button { grid-area: delete; }
+  .users-list .user-access-summary { display: none; }
+  .users-error { margin-inline: 10px; overflow-wrap: anywhere; }
+  .user-modal {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - env(safe-area-inset-top));
+    margin: 0;
+    border-radius: 24px 24px 0 0;
+    overflow-y: auto;
+  }
+  .user-modal > header { padding: 18px 18px 13px; }
+  .user-modal-body { padding: 16px 18px; }
+  .user-modal > footer { padding: 12px 18px calc(16px + env(safe-area-inset-bottom)); }
+  .user-modal > footer button { min-width: 0; flex: 1; }
+
   .primary-button, .filter-button, .secondary-button { font-weight: 750; }
   .toast {
     right: 12px;

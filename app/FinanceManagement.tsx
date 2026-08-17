@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   type LucideIcon,
+  ArrowLeft,
   Wallet,
   CheckCircle2,
   Clock,
@@ -17,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import type { AthleteRecord } from "./AthleteProfileModal";
+import { readApiResponse } from "./api-response";
 import { planCategoryCompatible, suggestPlanForCategory } from "./athlete-financial-plan";
 
 type Plan = {
@@ -227,7 +229,7 @@ function monthLabel(month: string) {
 }
 
 async function readJson<T>(response: Response) {
-  return (await response.json()) as T & { error?: string };
+  return readApiResponse<T>(response);
 }
 
 export function FinanceManagement({
@@ -236,12 +238,14 @@ export function FinanceManagement({
   notify,
   onChanged,
   onOpenPlans,
+  onBack,
 }: {
   view: "overview" | "plans" | "expenses";
   athletes: AthleteRecord[];
   notify: (message: string) => void;
   onChanged: () => void;
   onOpenPlans: () => void;
+  onBack: () => void;
 }) {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [data, setData] = useState<FinancePayload>(emptyPayload);
@@ -735,7 +739,8 @@ export function FinanceManagement({
 
     return (
       <>
-        <div className="section-heading finance-heading">
+        <div className="section-heading section-heading-with-back finance-heading finance-heading-with-back">
+          <button type="button" className="section-back-button" onClick={onBack} aria-label="Voltar para o início"><ArrowLeft size={20} strokeWidth={2} /></button>
           <div className="finance-heading-title">
             <h1>Planos</h1>
             <p>Planos de mensalidade, faturamento e vínculo de cobrança por atleta.</p>
@@ -926,7 +931,8 @@ export function FinanceManagement({
   if (view === "expenses") {
     return (
       <>
-        <div className="section-heading finance-heading expenses-heading">
+        <div className="section-heading section-heading-with-back finance-heading finance-heading-with-back expenses-heading">
+          <button type="button" className="section-back-button" onClick={onBack} aria-label="Voltar para o início"><ArrowLeft size={20} strokeWidth={2} /></button>
           <div className="finance-heading-title">
             <h1>Controle de gastos</h1>
             <p>Organize contas a pagar, parcelas, baixas e o resultado real da escolinha.</p>
@@ -986,7 +992,8 @@ export function FinanceManagement({
 
   return (
     <>
-      <div className="section-heading finance-heading">
+      <div className="section-heading section-heading-with-back finance-heading finance-heading-with-back">
+        <button type="button" className="section-back-button" onClick={onBack} aria-label="Voltar para o início"><ArrowLeft size={20} strokeWidth={2} /></button>
         <div className="finance-heading-title">
           <div className="finance-title-line">
             <h1>Mensalidades</h1>
