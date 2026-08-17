@@ -371,7 +371,7 @@ export function AttendanceModal({
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section className="attendance-panel" role="dialog" aria-modal="true" aria-labelledby="attendance-panel-title" onMouseDown={(event) => event.stopPropagation()}>
         <header className="attendance-panel-header">
-          <div><span className="eyebrow">CHAMADA DA TURMA</span><h2 id="attendance-panel-title">{team.name} · {team.category}</h2><p>{team.coachName} · {team.startTime} · {team.place}</p></div>
+          <div><span className="eyebrow">CHAMADA DA TURMA</span><div className="attendance-title-row"><h2 id="attendance-panel-title">{team.name}</h2><span className="attendance-category-badge">{team.category}</span></div><p>{team.coachName} · {team.startTime} · {team.place}</p></div>
           <button className="modal-close" onClick={onClose} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button>
         </header>
         <div className="attendance-toolbar">

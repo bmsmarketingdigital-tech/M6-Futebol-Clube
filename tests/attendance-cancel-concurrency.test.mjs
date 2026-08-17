@@ -145,9 +145,10 @@ test("Supabase serializa salvar e cancelar chamada pelo mesmo lock de turma", ()
 });
 
 test("modal de chamada ocupa a viewport móvel sem conteúdo horizontal cortado", () => {
-  assert.match(stylesSource, /\.attendance-panel \{[\s\S]*width: 100vw !important;[\s\S]*height: 100dvh/);
+  assert.match(stylesSource, /\.attendance-panel \{[\s\S]*width: 100% !important;[\s\S]*max-width: 100% !important;[\s\S]*height: 100dvh/);
   assert.match(stylesSource, /\.attendance-panel-header > div \{ min-width: 0; \}/);
-  assert.match(stylesSource, /\.attendance-panel \.attendance-cancel-row[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(stylesSource, /\.attendance-panel \.attendance-cancel-row[\s\S]*display: grid !important;[\s\S]*grid-template-columns: minmax\(0, 1fr\) !important/);
+  assert.match(stylesSource, /grid-template-areas: "toggle avatar identity" "\. \. note"/);
   assert.match(stylesSource, /\.toast \{[\s\S]*right: 12px;[\s\S]*left: 12px/);
 });
 

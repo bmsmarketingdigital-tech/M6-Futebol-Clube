@@ -1465,6 +1465,8 @@ input[type="email"], input[type="password"], input[type="date"], input[type="dat
 .team-modal-header h2, .attendance-panel-header h2 { margin: 0; font-size: 21px; letter-spacing: -.5px; }
 .team-modal-header p, .attendance-panel-header p { margin: 5px 0 0; color: var(--muted); font-size: 9px; }
 .team-modal-header .modal-close, .attendance-panel-header .modal-close { position: static; flex: 0 0 auto; }
+.attendance-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
+.attendance-category-badge { padding: 5px 8px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent); font-size: 10px; font-weight: 800; line-height: 1; }
 .team-form { padding: 22px 28px 26px; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
 .team-form > label { color: var(--text-secondary); font-size: 9px; font-weight: 800; }
 .team-form .wide { grid-column: 1 / -1; }
@@ -5645,8 +5647,9 @@ body {
   .profile-form textarea { height: auto !important; min-height: 92px !important; padding-block: 12px !important; }
   .profile-tabs { position: static; background: var(--surface-1); }
   .attendance-panel {
-    width: 100vw !important;
+    width: 100% !important;
     min-width: 0;
+    max-width: 100% !important;
     height: 100dvh;
     max-height: 100dvh !important;
     overflow: hidden;
@@ -5660,11 +5663,30 @@ body {
     gap: 12px;
   }
   .attendance-panel-header > div { min-width: 0; }
+  .attendance-title-row {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+  }
   .modal-backdrop .attendance-panel-header h2 {
+    flex: 1 1 220px;
+    min-width: 0;
     max-width: 100%;
     font-size: clamp(22px, 7vw, 28px);
     line-height: 1.12;
     overflow-wrap: anywhere;
+  }
+  .attendance-category-badge {
+    flex: 0 0 auto;
+    padding: 6px 9px;
+    border-radius: 999px;
+    background: var(--accent-subtle);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
   }
   .attendance-panel-header p {
     max-width: 100%;
@@ -5698,12 +5720,13 @@ body {
     width: 100%;
     min-width: 0;
     margin: 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
     gap: 8px;
   }
   .attendance-panel .attendance-cancel-row input,
   .attendance-panel .attendance-cancel-row button {
+    grid-column: 1 !important;
     width: 100%;
     min-width: 0;
     min-height: 44px;
@@ -5723,11 +5746,35 @@ body {
   .attendance-panel .attendance-person {
     width: 100%;
     min-width: 0;
-    grid-template-columns: 38px 36px minmax(0, 1fr);
+    grid-template-columns: 44px 42px minmax(0, 1fr);
+    grid-template-areas: "toggle avatar identity" ". . note";
     gap: 9px;
+    align-items: center;
+    padding: 14px 0;
   }
-  .attendance-panel .attendance-person > div { min-width: 0; }
-  .attendance-panel .attendance-person > input { grid-column: 1 / -1; width: 100%; min-width: 0; }
+  .attendance-panel .attendance-person > button {
+    grid-area: toggle;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+  }
+  .attendance-panel .attendance-person > .mini-avatar {
+    grid-area: avatar;
+    width: 42px;
+    height: 42px;
+  }
+  .attendance-panel .attendance-person > div { grid-area: identity; min-width: 0; }
+  .attendance-panel .attendance-person > div strong,
+  .attendance-panel .attendance-person > div small {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  .attendance-panel .attendance-person > input {
+    grid-area: note;
+    width: 100%;
+    min-width: 0;
+    height: 44px;
+  }
   .attendance-footer {
     position: sticky;
     bottom: 0;
