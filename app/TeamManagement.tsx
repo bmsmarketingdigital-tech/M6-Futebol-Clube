@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, CalendarX, Plus, Search, Users, X } from "lucide-react";
+import { ArrowLeft, Check, CalendarX, Plus, Search, Users, X } from "lucide-react";
 import type { AthleteRecord } from "./AthleteProfileModal";
 import type { CategoryRecord } from "./CategoryManagerModal";
 
@@ -369,11 +369,11 @@ export function AttendanceModal({
   const presentCount = roster.filter((athlete) => athlete.present).length;
 
   return createPortal(
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="modal-backdrop attendance-backdrop" role="presentation" onMouseDown={onClose}>
       <section className="attendance-panel" role="dialog" aria-modal="true" aria-labelledby="attendance-panel-title" onMouseDown={(event) => event.stopPropagation()}>
         <header className="attendance-panel-header">
+          <button className="attendance-back-button" onClick={onClose} aria-label="Voltar"><ArrowLeft size={22} strokeWidth={2} /></button>
           <div><span className="eyebrow">CHAMADA DA TURMA</span><div className="attendance-title-row"><h2 id="attendance-panel-title">{team.name}</h2><span className="attendance-category-badge">{team.category}</span></div><p>{team.coachName} · {team.startTime} · {team.place}</p></div>
-          <button className="modal-close" onClick={onClose} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button>
         </header>
         <div className="attendance-toolbar">
           <label>Data da aula<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>

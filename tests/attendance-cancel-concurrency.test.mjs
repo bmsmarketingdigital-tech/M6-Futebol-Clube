@@ -155,6 +155,9 @@ test("modal de chamada ocupa a viewport móvel sem conteúdo horizontal cortado"
   assert.match(stylesSource, /grid-template-areas: "toggle avatar identity" "note note note"/);
   assert.match(teamManagementSource, /return createPortal\([\s\S]*className="attendance-panel"/);
   assert.match(teamManagementSource, /document\.body/);
+  assert.match(teamManagementSource, /className="attendance-back-button"[\s\S]*aria-label="Voltar"/);
+  assert.match(stylesSource, /\.attendance-backdrop {[\s\S]*position: fixed !important;[\s\S]*inset: 0 !important;[\s\S]*background: var\(--surface-1\) !important;/);
+  assert.match(stylesSource, /\.attendance-backdrop \.attendance-panel {[\s\S]*position: absolute !important;[\s\S]*inset: 0 !important;/);
   assert.match(stylesSource, /\.toast \{[\s\S]*right: 12px;[\s\S]*left: 12px/);
 });
 
