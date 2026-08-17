@@ -4,13 +4,12 @@ import test from "node:test";
 
 const root = new URL("../", import.meta.url);
 
-test("keeps every operational module available from the dashboard", async () => {
+test("keeps the school operational modules available without exposing the QR flow", async () => {
   const page = await readFile(new URL("app/page.tsx", root), "utf8");
   const modules = [
     "Atletas",
     "Turmas",
     "Presença",
-    "Cartões QR",
     "Financeiro",
     "Treinos",
     "Avaliações",
@@ -26,11 +25,12 @@ test("keeps every operational module available from the dashboard", async () => 
     "EvaluationManagement",
     "TrainingManagement",
     "CommunicationManagement",
-    "CheckInManagement",
   ]) {
     assert.ok(page.includes(`import { ${component} }`));
     assert.match(page, new RegExp(`<${component}`));
   }
+
+  assert.doesNotMatch(page, /Cartões QR|QR e entrada|Ver QR Code|CheckInManagement/);
 });
 
 test("protects persisted APIs and keeps the complete migration history", async () => {

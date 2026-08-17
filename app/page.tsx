@@ -15,7 +15,6 @@ import CombosManagement from "./CombosManagement";
 import { EvaluationManagement } from "./EvaluationManagement";
 import { TrainingManagement } from "./TrainingManagement";
 import { CommunicationManagement } from "./CommunicationManagement";
-import { CheckInManagement } from "./CheckInManagement";
 import {
   CategoryManagerModal,
   type CategoryRecord,
@@ -30,7 +29,6 @@ import {
   Users,
   LayoutGrid,
   CheckSquare,
-  QrCode,
   Wallet,
   Dumbbell,
   TrendingUp,
@@ -61,8 +59,6 @@ type Section =
   | "Prontuário"
   | "Turmas"
   | "Presença"
-  | "Cartões QR"
-  | "QR e entrada"
   | "Financeiro"
   | "Mensalidades"
   | "Planos"
@@ -105,7 +101,6 @@ const navItems: { label: Section; icon: LucideIcon }[] = [
   { label: "Atletas", icon: Users },
   { label: "Turmas", icon: LayoutGrid },
   { label: "Presença", icon: CheckSquare },
-  { label: "Cartões QR", icon: QrCode },
   { label: "Financeiro", icon: Wallet },
   { label: "Treinos", icon: Dumbbell },
   { label: "Avaliações", icon: TrendingUp },
@@ -117,8 +112,6 @@ const sectionPageClasses: Record<Exclude<Section, "Visão geral">, string> = {
   Prontuário: "records-page",
   Turmas: "teams-page",
   Presença: "attendance-page",
-  "Cartões QR": "checkin-page",
-  "QR e entrada": "checkin-page",
   Financeiro: "finance-page",
   Mensalidades: "finance-page",
   Planos: "finance-page",
@@ -180,7 +173,6 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [editingAthlete, setEditingAthlete] = useState<Athlete | null>(null);
   const [profileAthlete, setProfileAthlete] = useState<Athlete | null>(null);
-  const [qrAthlete, setQrAthlete] = useState<Athlete | null>(null);
   const [teamModalOpen, setTeamModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamRecord | null>(null);
   const [attendanceTeam, setAttendanceTeam] = useState<TeamRecord | null>(null);
@@ -350,12 +342,6 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
     };
   }, [checkReminders]);
 
-  useEffect(() => {
-    if (section !== "QR e entrada") return;
-    const timeout = window.setTimeout(() => setSection("Cartões QR"), 0);
-    return () => window.clearTimeout(timeout);
-  }, [section]);
-
   const filteredAthletes = useMemo(
     () =>
       athletes.filter((athlete) =>
@@ -433,8 +419,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
       }
       formElement.reset();
       closeAthleteModal();
-      setQrAthlete(payload.athlete);
-      notify(`${name} foi cadastrado e o QR Code individual já está pronto.`);
+      notify(`${name} foi cadastrado com sucesso.`);
     } catch (error) {
       notify(
         error instanceof Error
@@ -462,7 +447,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
 
         <nav aria-label="Navegação principal">
           <p className="nav-label">GESTÃO</p>
-          {navItems.slice(0, 6).filter((item) => user.role === "admin" || item.label !== "Financeiro").map((item) =>
+          {navItems.slice(0, 5).filter((item) => user.role === "admin" || item.label !== "Financeiro").map((item) =>
             item.label === "Atletas" ? (
               <div className="nav-group" key={item.label}>
                 <button
@@ -581,7 +566,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
             ),
           )}
           <p className="nav-label second">DESENVOLVIMENTO</p>
-          {navItems.slice(6).map((item) => (
+          {navItems.slice(5).map((item) => (
             <button
               key={item.label}
               className={section === item.label ? "nav-item active" : "nav-item"}
@@ -706,7 +691,6 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
                     <strong className="mobile-menu-label">MAIS RECURSOS</strong>
                     <nav className="mobile-menu-secondary">
                       <button type="button" onClick={() => { setSection("Presença"); setProfileMenuOpen(false); }}><CheckSquare size={18} /> Chamada</button>
-                      <button type="button" onClick={() => { setSection("Cartões QR"); setProfileMenuOpen(false); }}><QrCode size={18} /> Cartões QR</button>
                       <button type="button" onClick={() => { setSection("Treinos"); setProfileMenuOpen(false); }}><Dumbbell size={18} /> Treinos</button>
                       <button type="button" onClick={() => { setSection("Avaliações"); setProfileMenuOpen(false); }}><TrendingUp size={18} /> Avaliações</button>
                       <button type="button" onClick={() => { setSection("Comunicação"); setProfileMenuOpen(false); }}><MessageCircle size={18} /> Comunicação</button>
@@ -775,11 +759,6 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
             <CommunicationManagement teams={teams} notify={notify} />
           ) : section === "Usuários e permissões" && user.role === "admin" ? (
             <UserManagement notify={notify} />
-          ) : section === "Cartões QR" || section === "QR e entrada" ? (
-            <CheckInManagement
-              teams={teams}
-              notify={notify}
-            />
           ) : (
             <SectionView
               key={section}
@@ -800,7 +779,6 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
               onOpenAthlete={
                 section === "Atletas" ? setEditingAthlete : setProfileAthlete
               }
-              onOpenQr={setQrAthlete}
               canViewFinance={user.role === "admin"}
               notify={notify}
             />
@@ -947,15 +925,6 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
               current.filter((athlete) => athlete.id !== athleteId),
             );
           }}
-          notify={notify}
-        />
-      )}
-
-      {qrAthlete && (
-        <AthleteQrModal
-          key={qrAthlete.id}
-          athlete={qrAthlete}
-          onClose={() => setQrAthlete(null)}
           notify={notify}
         />
       )}
@@ -1318,7 +1287,6 @@ function SectionView({
   onOpenTeam,
   onAttendance,
   onOpenAthlete,
-  onOpenQr,
   canViewFinance,
   notify,
 }: {
@@ -1331,7 +1299,6 @@ function SectionView({
   onOpenTeam: (team: TeamRecord) => void;
   onAttendance: (team: TeamRecord) => void;
   onOpenAthlete: (athlete: Athlete) => void;
-  onOpenQr: (athlete: Athlete) => void;
   canViewFinance: boolean;
   notify: (message: string) => void;
 }) {
@@ -1405,8 +1372,6 @@ function SectionView({
     Prontuário: "Acesse informações médicas, autorizações, documentos e histórico individual.",
     Turmas: "Horários, categorias, professores e capacidade das turmas.",
     Presença: "Acompanhe frequência, ausências e reposições.",
-    "Cartões QR": "Consulte os cartões individuais e acompanhe as entradas registradas pelo aplicativo.",
-    "QR e entrada": "Consulte os cartões individuais e acompanhe as entradas registradas pelo aplicativo.",
     Financeiro: "Mensalidades, cobranças, fluxo de caixa e inadimplência.",
     Mensalidades: "Cobranças mensais, recebimentos, baixas e inadimplência.",
     Planos: "Planos de mensalidade, faturamento e vínculo de cobrança por atleta.",
@@ -1504,8 +1469,8 @@ function SectionView({
             <strong>{visibleAthletes.length} resultado(s)</strong>
           </div>
           <div className={canViewFinance ? "athlete-table expanded" : "athlete-table expanded operator-athlete-table"}>
-            <div className="table-row table-head"><span>ATLETA</span><span>CATEGORIA</span><span>FREQUÊNCIA</span><span>{canViewFinance ? "FINANCEIRO / QR" : "QR CODE"}</span></div>
-            {visibleAthletes.map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} onOpen={onOpenAthlete} onQr={onOpenQr} showFinance={canViewFinance} />)}
+            <div className="table-row table-head"><span>ATLETA</span><span>CATEGORIA</span><span>FREQUÊNCIA</span><span>{canViewFinance ? "FINANCEIRO" : "SITUAÇÃO"}</span></div>
+            {visibleAthletes.map((athlete) => <AthleteRow key={athlete.id} athlete={athlete} onOpen={onOpenAthlete} showFinance={canViewFinance} />)}
             {visibleAthletes.length === 0 && <EmptyAthletes />}
           </div>
         </div>
@@ -1747,12 +1712,10 @@ function CardHeader({ title, subtitle, action, onAction }: { title: string; subt
 function AthleteRow({
   athlete,
   onOpen,
-  onQr,
   showFinance = true,
 }: {
   athlete: Athlete;
   onOpen: (athlete: Athlete) => void;
-  onQr?: (athlete: Athlete) => void;
   showFinance?: boolean;
 }) {
   function openFromKeyboard(event: KeyboardEvent<HTMLDivElement>) {
@@ -1769,98 +1732,7 @@ function AthleteRow({
       <span className="attendance-cell"><strong>{athlete.attendance}%</strong><i><b style={{ width: `${athlete.attendance}%` }} /></i></span>
       <span className="athlete-finance-cell">
         {showFinance && <b className={athlete.status === "Em dia" ? "status-tag paid" : "status-tag pending"}><i />{athlete.status}</b>}
-        {onQr && (
-          <button
-            type="button"
-            className="athlete-row-qr-button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onQr(athlete);
-            }}
-          >
-            Ver QR Code
-          </button>
-        )}
       </span>
-    </div>
-  );
-}
-
-function AthleteQrModal({ athlete, onClose, notify }: { athlete: Athlete; onClose: () => void; notify: (message: string) => void }) {
-  const [image, setImage] = useState("");
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    async function generateQrCode() {
-      try {
-        const [response, qrCode] = await Promise.all([
-          fetch("/api/check-in/cards"),
-          import("qrcode"),
-        ]);
-        const payload = (await response.json()) as {
-          cards?: Array<{ id: string; value: string }>;
-          error?: string;
-        };
-        if (!response.ok) throw new Error(payload.error || "Não foi possível carregar o QR Code.");
-        const card = payload.cards?.find((item) => item.id === athlete.id);
-        if (!card) throw new Error("O cartão deste atleta não foi encontrado.");
-        const dataUrl = await qrCode.toDataURL(card.value, {
-          width: 420,
-          margin: 2,
-          color: { dark: "#16392d", light: "#ffffff" },
-          errorCorrectionLevel: "M",
-        });
-        if (active) setImage(dataUrl);
-      } catch (error) {
-        if (active) {
-          notify(error instanceof Error ? error.message : "Não foi possível gerar o QR Code.");
-          onClose();
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    void generateQrCode();
-    return () => {
-      active = false;
-    };
-  }, [athlete.id, notify, onClose]);
-
-  return (
-    <div className="modal-backdrop qr-card-modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <div className="qr-card-modal" role="dialog" aria-modal="true" aria-labelledby="athlete-qr-title" onMouseDown={(event) => event.stopPropagation()}>
-        <header>
-          <div>
-            <span className="eyebrow">CARTÃO INDIVIDUAL</span>
-            <h2 id="athlete-qr-title">{athlete.name}</h2>
-            <p>{athlete.category} · gerado automaticamente no cadastro</p>
-          </div>
-          <button className="modal-close" onClick={onClose} aria-label="Fechar"><X size={18} strokeWidth={1.75} /></button>
-        </header>
-        <div className="qr-card-modal-content">
-          <div className="qr-card-brand">
-            <span>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.jpeg" alt="Escola de Futebol M6 Futebol Clube" />
-            </span>
-            <strong>M6 Futebol Clube</strong>
-          </div>
-          {loading ? (
-            <div className="athlete-qr-loading">Gerando QR Code...</div>
-          ) : image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={image} alt={`QR Code de ${athlete.name}`} />
-          ) : null}
-          <strong>{athlete.name}</strong>
-          <small>{athlete.category} · Cartão de entrada</small>
-          <p>A escola escaneia este código na chegada para registrar a presença.</p>
-        </div>
-        <footer className="qr-card-modal-actions">
-          <button className="filter-button" onClick={onClose}>Fechar</button>
-          <button className="primary-button" onClick={() => window.print()} disabled={!image}>Imprimir cartão</button>
-        </footer>
-      </div>
     </div>
   );
 }

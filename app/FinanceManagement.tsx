@@ -1905,7 +1905,7 @@ function BillingNotificationPanel({
         <small>
           {data.overview.whatsapp.connectedPhone
             ? maskPhone(data.overview.whatsapp.connectedPhone)
-            : "Conecte em Cartões QR → WhatsApp"}
+            : "Conexão do WhatsApp não configurada"}
         </small>
       </span>
       </div>

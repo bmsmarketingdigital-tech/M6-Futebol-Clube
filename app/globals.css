@@ -5106,7 +5106,8 @@ body {
   .workspace { overflow: visible; }
 
   .topbar {
-    top: 0;
+    position: relative;
+    top: auto;
     min-height: calc(62px + env(safe-area-inset-top));
     height: calc(62px + env(safe-area-inset-top));
     padding: env(safe-area-inset-top) 12px 0;
@@ -5348,7 +5349,7 @@ body {
   .athlete-category-filter span { font-size: 9px; }
 
   .athletes-page .athlete-table { padding: 8px 0 0; overflow: visible; }
-  .athletes-page .table-head { display: none; }
+  .app-shell .page-content.athletes-page .table-head { display: none !important; position: static !important; }
   .athletes-page .athlete-row-button,
   .athletes-page .athlete-table.expanded .table-row,
   .athletes-page .operator-athlete-table .table-row {
@@ -5642,7 +5643,7 @@ body {
     font-size: 14px !important;
   }
   .profile-form textarea { height: auto !important; min-height: 92px !important; padding-block: 12px !important; }
-  .profile-tabs { position: sticky; top: 0; z-index: 2; background: var(--surface-1); }
+  .profile-tabs { position: static; background: var(--surface-1); }
   .attendance-roster { max-height: none; }
   .attendance-footer {
     position: sticky;
@@ -5654,6 +5655,13 @@ body {
 
   .primary-button, .filter-button, .secondary-button { font-weight: 750; }
   .toast { bottom: calc(18px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); }
+
+  .app-shell .page-content .table-head,
+  .app-shell .page-content .charge-head,
+  .app-shell .page-content .checkin-history-head,
+  .app-shell .page-content .qr-print-toolbar {
+    position: static !important;
+  }
 }
 
 @media (max-width: 380px) {
