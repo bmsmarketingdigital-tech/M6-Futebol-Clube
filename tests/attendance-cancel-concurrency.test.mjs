@@ -103,6 +103,10 @@ const teamManagementSource = readFileSync(
   new URL("../app/TeamManagement.tsx", import.meta.url),
   "utf8",
 );
+const layoutSource = readFileSync(
+  new URL("../app/layout.tsx", import.meta.url),
+  "utf8",
+);
 const pageSource = readFileSync(
   new URL("../app/page.tsx", import.meta.url),
   "utf8",
@@ -150,7 +154,7 @@ test("Supabase serializa salvar e cancelar chamada pelo mesmo lock de turma", ()
 
 test("modal de chamada ocupa a viewport móvel sem conteúdo horizontal cortado", () => {
   assert.match(stylesSource, /\.attendance-panel \{[\s\S]*width: 100% !important;[\s\S]*max-width: 100% !important;[\s\S]*height: 100dvh/);
-  assert.match(stylesSource, /\.attendance-panel-header > div \{ min-width: 0; \}/);
+  assert.match(stylesSource, /\.attendance-panel-header > div \{[^}]*min-width: 0;[^}]*max-width: 100%;/);
   assert.match(stylesSource, /\.attendance-panel \.attendance-cancel-row[\s\S]*display: grid !important;[\s\S]*grid-template-columns: minmax\(0, 1fr\) !important/);
   assert.match(stylesSource, /grid-template-areas: "toggle avatar identity" "note note note"/);
   assert.match(teamManagementSource, /return createPortal\([\s\S]*className="attendance-panel"/);
@@ -159,6 +163,10 @@ test("modal de chamada ocupa a viewport móvel sem conteúdo horizontal cortado"
   assert.match(stylesSource, /\.attendance-backdrop {[\s\S]*position: fixed !important;[\s\S]*inset: 0 !important;[\s\S]*background: var\(--surface-1\) !important;/);
   assert.match(stylesSource, /\.attendance-backdrop \.attendance-panel {[\s\S]*position: absolute !important;[\s\S]*inset: 0 !important;/);
   assert.match(stylesSource, /\.attendance-panel \.attendance-person > button \{[\s\S]*display: grid;[\s\S]*place-items: center;/);
+  assert.match(stylesSource, /\.attendance-title-row \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);/);
+  assert.match(stylesSource, /touch-action: pan-y;/);
+  assert.match(layoutSource, /maximumScale: 1/);
+  assert.match(layoutSource, /userScalable: false/);
   assert.match(stylesSource, /\.toast \{[\s\S]*right: 12px;[\s\S]*left: 12px/);
 });
 

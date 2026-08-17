@@ -2914,6 +2914,12 @@ body {
 }
 
 @media (max-width: 760px) {
+  html, body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip !important;
+    overscroll-behavior-x: none;
+  }
   .sidebar { display: none; }
   .workspace { margin-left: 0; }
   .topbar {
@@ -5675,6 +5681,9 @@ body {
     overflow: hidden !important;
     background: var(--surface-1) !important;
     backdrop-filter: none;
+    overflow-x: clip !important;
+    overscroll-behavior: none;
+    touch-action: pan-y;
   }
   .attendance-backdrop .attendance-panel {
     position: absolute !important;
@@ -5697,22 +5706,28 @@ body {
     gap: 12px;
     padding: calc(16px + env(safe-area-inset-top)) 18px 14px !important;
     align-items: start;
+    overflow-x: clip;
   }
-  .attendance-panel-header > div { min-width: 0; }
+  .attendance-panel-header > div { width: 100%; min-width: 0; max-width: 100%; overflow-x: clip; }
   .attendance-title-row {
+    width: 100%;
+    max-width: 100%;
     min-width: 0;
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px 10px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+    gap: 8px;
+    overflow-x: clip;
   }
   .modal-backdrop .attendance-panel-header h2 {
-    flex: 1 1 220px;
+    width: 100%;
     min-width: 0;
     max-width: 100%;
     font-size: clamp(22px, 7vw, 28px);
     line-height: 1.12;
     overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
   }
   .attendance-category-badge {
     flex: 0 0 auto;
@@ -5723,6 +5738,7 @@ body {
     font-size: 11px;
     font-weight: 800;
     line-height: 1;
+    justify-self: start;
   }
   .attendance-panel-header p {
     max-width: 100%;
@@ -5750,6 +5766,7 @@ body {
     overflow: visible;
     border-inline: 0;
     border-radius: 0;
+    overflow-x: clip;
   }
   .attendance-panel .attendance-toolbar > label,
   .attendance-panel .attendance-toolbar > label input { width: 100%; min-width: 0; }
