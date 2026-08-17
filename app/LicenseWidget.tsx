@@ -119,7 +119,7 @@ export function LicenseWidget() {
         onClick={() => setModalOpen(true)}
         title={status.message}
       >
-        <i /> {badgeLabel}
+        <i /> <span className="license-badge-label">{badgeLabel}</span>
       </button>
 
       {modalOpen &&

@@ -724,6 +724,7 @@ select option { background: #ffffff; color: #1a1917; }
 .license-badge::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 4px var(--success-subtle); }
 .license-badge.warn::before { background: var(--warning); box-shadow: 0 0 0 4px var(--warning-subtle); }
 .license-badge.danger::before { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-subtle); }
+.section-back-button { display: none; }
 .license-modal { width: min(560px, 100%); }
 .license-status-message { margin: 8px 0 18px; color: var(--muted); font-size: 14px; line-height: 1.5; }
 .license-id-label { display: block; color: var(--text-secondary); font-size: 13px; font-weight: 800; }
@@ -5121,6 +5122,7 @@ body {
     padding: env(safe-area-inset-top) 12px 0;
     border-bottom-color: color-mix(in srgb, var(--border) 72%, transparent);
     box-shadow: 0 5px 24px rgba(22, 20, 17, .06);
+    gap: 7px;
   }
 
   .mobile-brand {
@@ -5132,6 +5134,7 @@ body {
   }
 
   .search {
+    min-width: 0;
     height: 40px;
     border: 0;
     border-radius: 14px;
@@ -5142,6 +5145,35 @@ body {
   .search input { font-size: 13px; }
   .search input::placeholder { font-size: 0; }
   .search input::placeholder { content: "Buscar no M6"; }
+
+  .top-actions {
+    min-width: 0;
+    flex: 0 0 auto;
+    gap: 6px;
+  }
+
+  .top-actions > .license-badge {
+    width: auto;
+    max-width: 86px;
+    min-height: 40px;
+    height: 40px;
+    padding: 0 9px;
+    gap: 6px;
+    overflow: hidden;
+    border-radius: 14px;
+    font-size: 9px;
+    white-space: nowrap;
+  }
+  .top-actions > .license-badge::before {
+    flex: 0 0 7px;
+    width: 7px;
+    height: 7px;
+  }
+  .license-badge-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
   .mobile-top-menu .icon-button {
     width: 40px;
@@ -5295,6 +5327,23 @@ body {
   }
 
   .section-heading > div:first-child { min-width: 0; }
+  .section-heading-with-back {
+    grid-template-columns: 42px minmax(0, 1fr) 46px;
+    align-items: center;
+  }
+  .section-heading-with-back > div { min-width: 0; }
+  .section-back-button {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface-1);
+    color: var(--text-primary);
+  }
+  .section-back-button svg { display: block; }
   .section-heading .eyebrow { margin-bottom: 4px; font-size: 9px; letter-spacing: 1.45px; }
   .section-heading h1,
   .finance-page .section-heading h1 {
@@ -5325,10 +5374,13 @@ body {
     padding: 0;
     border-radius: 15px;
     font-size: 0 !important;
+    display: grid;
+    place-items: center;
+    gap: 0;
     box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 22%, transparent);
   }
   .section-heading > .primary-button svg,
-  .section-heading-actions > .primary-button svg { width: 20px; height: 20px; }
+  .section-heading-actions > .primary-button svg { width: 20px; height: 20px; display: block; margin: 0; }
 
   .card-header { min-height: 58px; padding: 15px 16px 12px; }
   .card-header h2 { font-size: 17px; letter-spacing: -.35px; }
@@ -5356,7 +5408,15 @@ body {
   .athlete-list-search input, .athlete-category-filter select { font-size: 12px; }
   .athlete-category-filter span { font-size: 9px; }
 
-  .athletes-page .athlete-table { padding: 8px 0 0; overflow: visible; }
+  .athletes-page .athlete-table,
+  .athletes-page .athlete-table.expanded,
+  .athletes-page .operator-athlete-table {
+    width: 100%;
+    max-height: none;
+    padding: 8px 0 0;
+    overflow: visible;
+    scrollbar-gutter: auto;
+  }
   .app-shell .page-content.athletes-page .table-head { display: none !important; position: static !important; }
   .athletes-page .athlete-row-button,
   .athletes-page .athlete-table.expanded .table-row,

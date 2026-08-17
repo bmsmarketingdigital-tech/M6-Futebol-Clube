@@ -41,6 +41,7 @@ import {
   MoreVertical,
   CheckCircle2,
   AlertTriangle,
+  ArrowLeft,
   ArrowUp,
   ArrowDown,
   Sun,
@@ -780,6 +781,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
                 section === "Atletas" ? setEditingAthlete : setProfileAthlete
               }
               canViewFinance={user.role === "admin"}
+              onBack={() => setSection("Visão geral")}
               notify={notify}
             />
           )}
@@ -1288,6 +1290,7 @@ function SectionView({
   onAttendance,
   onOpenAthlete,
   canViewFinance,
+  onBack,
   notify,
 }: {
   section: Section;
@@ -1300,6 +1303,7 @@ function SectionView({
   onAttendance: (team: TeamRecord) => void;
   onOpenAthlete: (athlete: Athlete) => void;
   canViewFinance: boolean;
+  onBack: () => void;
   notify: (message: string) => void;
 }) {
   const [athleteQuery, setAthleteQuery] = useState("");
@@ -1403,7 +1407,15 @@ function SectionView({
 
   return (
     <>
-      <div className="section-heading">
+      <div className="section-heading section-heading-with-back">
+        <button
+          type="button"
+          className="section-back-button"
+          onClick={onBack}
+          aria-label="Voltar para o início"
+        >
+          <ArrowLeft size={20} strokeWidth={2} />
+        </button>
         <div>
           <span className="eyebrow">
             {section === "Atletas" ? "CADASTRO" : section === "Prontuário" ? "ATLETAS" : "M6 FUTEBOL CLUBE"}
