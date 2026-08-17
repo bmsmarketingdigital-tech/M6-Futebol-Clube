@@ -1,5 +1,6 @@
 import { and, eq, ne, notExists, sql } from "drizzle-orm";
 import { getDb } from "../../../../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../../../../db/postgres";
 import {
   athletes,
   attendanceRecords,
@@ -46,6 +47,91 @@ export async function POST(
       );
     }
     const organizationId = context.membership.organizationId;
+
+    if (postgresConfigured()) {
+      const sqlClient = getPostgresClient();
+      const teamRows = await sqlClient<{ id: string; name: string }[]>`
+        SELECT id, name FROM teams
+        WHERE id = ${id} AND organization_id = ${organizationId} AND active = 1
+        LIMIT 1`;
+      const team = teamRows[0];
+      if (!team) return Response.json({ error: "Turma não encontrada." }, { status: 404 });
+
+      const reason = payload.reason?.trim().slice(0, 240) || "Chuva";
+      const outcome = await sqlClient.begin(async (transaction) => {
+        await transaction`SELECT id FROM teams
+          WHERE id = ${id} AND organization_id = ${organizationId} FOR UPDATE`;
+        const sessions = await transaction<{
+          id: string; status: string; cancel_reason: string | null;
+        }[]>`
+          SELECT id, status, cancel_reason FROM attendance_sessions
+          WHERE team_id = ${id} AND session_date = ${date} FOR UPDATE`;
+        const session = sessions[0];
+
+        if (payload.canceled) {
+          if (session?.status === "canceled") {
+            return { kind: "already-canceled" as const, reason: session.cancel_reason ?? reason };
+          }
+          if (session) {
+            const records = await transaction<{ exists: boolean }[]>`
+              SELECT EXISTS(
+                SELECT 1 FROM attendance_records WHERE session_id = ${session.id}
+              ) exists`;
+            if (records[0]?.exists) return { kind: "has-records" as const };
+            await transaction`
+              UPDATE attendance_sessions SET status = 'canceled',
+                canceled_at = ${Math.floor(Date.now() / 1000)},
+                canceled_by = ${context.user.email}, cancel_reason = ${reason}
+              WHERE id = ${session.id}`;
+          } else {
+            await transaction`
+              INSERT INTO attendance_sessions
+                (id, organization_id, team_id, session_date, recorded_by, status,
+                 canceled_at, canceled_by, cancel_reason, created_at)
+              VALUES (${crypto.randomUUID()}, ${organizationId}, ${id}, ${date},
+                ${context.user.email}, 'canceled', ${Math.floor(Date.now() / 1000)},
+                ${context.user.email}, ${reason}, ${Math.floor(Date.now() / 1000)})`;
+          }
+          return { kind: "canceled" as const, reason };
+        }
+
+        if (!session || session.status !== "canceled") return { kind: "not-canceled" as const };
+        await transaction`
+          UPDATE attendance_sessions SET status = 'completed', canceled_at = NULL,
+            canceled_by = NULL, cancel_reason = NULL WHERE id = ${session.id}`;
+        return { kind: "reopened" as const };
+      });
+
+      if (outcome.kind === "has-records") {
+        return Response.json(
+          { error: "Já existe chamada registrada nesta data. Apague os registros antes de cancelar." },
+          { status: 409 },
+        );
+      }
+      if (outcome.kind === "not-canceled") {
+        return Response.json({ error: "Esta data não está cancelada." }, { status: 400 });
+      }
+      if (outcome.kind === "reopened") return Response.json({ canceled: false, date });
+      if (outcome.kind === "already-canceled") {
+        return Response.json({ canceled: true, date, reason: outcome.reason, notified: 0 });
+      }
+
+      const roster = await sqlClient<{ guardian_phone: string | null }[]>`
+        SELECT a.guardian_phone
+        FROM team_athletes ta
+        INNER JOIN athletes a
+          ON a.id = ta.athlete_id AND a.organization_id = ta.organization_id
+        WHERE ta.team_id = ${id} AND ta.organization_id = ${organizationId}
+          AND ta.active = 1 AND a.active = 1`;
+      const phones = new Set(roster.map((athlete) => athlete.guardian_phone).filter((phone): phone is string => Boolean(phone)));
+      const message = `Aviso: o treino da turma ${team.name} do dia ${formatDateBR(date)} foi cancelado. Motivo: ${outcome.reason}.`;
+      let notified = 0;
+      for (const phone of phones) {
+        const delivery = await sendWhatsAppMessage(phone, message);
+        if (delivery.status === "sent") notified += 1;
+      }
+      return Response.json({ canceled: true, date, reason: outcome.reason, notified });
+    }
 
     const db = getDb();
     const [team] = await db

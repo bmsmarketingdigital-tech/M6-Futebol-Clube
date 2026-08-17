@@ -95,6 +95,14 @@ const triggerSource = readFileSync(
   new URL("../db/history-protection-triggers.ts", import.meta.url),
   "utf8",
 );
+const stylesSource = readFileSync(
+  new URL("../app/globals.css", import.meta.url),
+  "utf8",
+);
+const pageSource = readFileSync(
+  new URL("../app/page.tsx", import.meta.url),
+  "utf8",
+);
 
 test("API cancel usa UPDATE condicional atômico (ne status + notExists records)", () => {
   assert.match(cancelSource, /ne\(attendanceSessions\.status, "canceled"\)/);
@@ -127,4 +135,22 @@ test("Trigger de banco bloqueia INSERT em attendance_records de sessão cancelad
 test("Trigger de banco bloqueia UPDATE em attendance_records de sessão cancelada", () => {
   assert.match(triggerSource, /attendance_records_block_canceled_session_update/);
   assert.match(triggerSource, /BEFORE UPDATE ON attendance_records/);
+});
+
+test("Supabase serializa salvar e cancelar chamada pelo mesmo lock de turma", () => {
+  assert.match(postSource, /postgresConfigured\(\)/);
+  assert.match(cancelSource, /postgresConfigured\(\)/);
+  assert.match(postSource, /SELECT id FROM teams[\s\S]*FOR UPDATE/);
+  assert.match(cancelSource, /SELECT id FROM teams[\s\S]*FOR UPDATE/);
+});
+
+test("modal de chamada ocupa a viewport móvel sem conteúdo horizontal cortado", () => {
+  assert.match(stylesSource, /\.attendance-panel \{[\s\S]*width: 100vw !important;[\s\S]*height: 100dvh/);
+  assert.match(stylesSource, /\.attendance-panel-header > div \{ min-width: 0; \}/);
+  assert.match(stylesSource, /\.attendance-panel \.attendance-cancel-row[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(stylesSource, /\.toast \{[\s\S]*right: 12px;[\s\S]*left: 12px/);
+});
+
+test("aviso estável impede repetição do GET da chamada a cada renderização", () => {
+  assert.match(pageSource, /const notify = useCallback\([\s\S]*\}, \[\]\);/);
 });

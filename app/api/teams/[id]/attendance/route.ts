@@ -1,5 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { getD1, getDb } from "../../../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../../../db/postgres";
 import {
   athletes,
   attendanceRecords,
@@ -20,6 +21,22 @@ async function getAuthorizedTeam(request: Request, teamId: string) {
   const context = await getApiContext(request);
   if (!context) return null;
 
+  if (postgresConfigured()) {
+    const rows = await getPostgresClient()<{
+      id: string; name: string; category: string; start_time: string;
+    }[]>`
+      SELECT id, name, category, start_time
+      FROM teams
+      WHERE id = ${teamId}
+        AND organization_id = ${context.membership.organizationId}
+        AND active = 1
+      LIMIT 1`;
+    const team = rows[0];
+    return team
+      ? { context, team: { ...team, startTime: team.start_time } }
+      : null;
+  }
+
   const db = getDb();
   const [team] = await db
     .select()
@@ -37,6 +54,18 @@ async function getAuthorizedTeam(request: Request, teamId: string) {
 }
 
 async function getRoster(teamId: string, organizationId: string) {
+  if (postgresConfigured()) {
+    return getPostgresClient()<{ id: string; name: string; category: string; attendance: number }[]>`
+      SELECT a.id, a.full_name name, a.category, a.attendance_rate attendance
+      FROM team_athletes ta
+      INNER JOIN athletes a
+        ON a.id = ta.athlete_id AND a.organization_id = ta.organization_id
+      WHERE ta.team_id = ${teamId}
+        AND ta.organization_id = ${organizationId}
+        AND ta.active = 1 AND a.active = 1
+      ORDER BY lower(a.full_name)`;
+  }
+
   const db = getDb();
   return db
     .select({
@@ -78,32 +107,47 @@ export async function GET(
       id,
       authorized.context.membership.organizationId,
     );
-    const db = getDb();
-    const [session] = await db
-      .select({
-        id: attendanceSessions.id,
-        status: attendanceSessions.status,
-        cancelReason: attendanceSessions.cancelReason,
-      })
-      .from(attendanceSessions)
-      .where(
-        and(
-          eq(attendanceSessions.teamId, id),
-          eq(attendanceSessions.sessionDate, date),
-        ),
-      )
-      .limit(1);
-
-    const savedRecords = session
-      ? await db
-          .select({
-            athleteId: attendanceRecords.athleteId,
-            present: attendanceRecords.present,
-            note: attendanceRecords.note,
-          })
-          .from(attendanceRecords)
-          .where(eq(attendanceRecords.sessionId, session.id))
-      : [];
+    let session: { id: string; status: string; cancelReason: string | null } | undefined;
+    let savedRecords: Array<{ athleteId: string; present: boolean; note: string | null }> = [];
+    if (postgresConfigured()) {
+      const sql = getPostgresClient();
+      const sessions = await sql<{ id: string; status: string; cancel_reason: string | null }[]>`
+        SELECT id, status, cancel_reason
+        FROM attendance_sessions
+        WHERE team_id = ${id} AND session_date = ${date}
+        LIMIT 1`;
+      const current = sessions[0];
+      session = current
+        ? { id: current.id, status: current.status, cancelReason: current.cancel_reason }
+        : undefined;
+      if (session) {
+        const records = await sql<{ athlete_id: string; present: number; note: string | null }[]>`
+          SELECT athlete_id, present, note
+          FROM attendance_records WHERE session_id = ${session.id}`;
+        savedRecords = records.map((record) => ({
+          athleteId: record.athlete_id,
+          present: Boolean(record.present),
+          note: record.note,
+        }));
+      }
+    } else {
+      const db = getDb();
+      [session] = await db
+        .select({
+          id: attendanceSessions.id,
+          status: attendanceSessions.status,
+          cancelReason: attendanceSessions.cancelReason,
+        })
+        .from(attendanceSessions)
+        .where(and(eq(attendanceSessions.teamId, id), eq(attendanceSessions.sessionDate, date)))
+        .limit(1);
+      savedRecords = session
+        ? await db
+            .select({ athleteId: attendanceRecords.athleteId, present: attendanceRecords.present, note: attendanceRecords.note })
+            .from(attendanceRecords)
+            .where(eq(attendanceRecords.sessionId, session.id))
+        : [];
+    }
     const savedByAthlete = new Map(
       savedRecords.map((record) => [record.athleteId, record]),
     );
@@ -186,6 +230,60 @@ export async function POST(
           },
         ]),
     );
+
+    if (postgresConfigured()) {
+      const organizationId = authorized.context.membership.organizationId;
+      const result = await getPostgresClient().begin(async (transaction) => {
+        await transaction`SELECT id FROM teams
+          WHERE id = ${id} AND organization_id = ${organizationId} FOR UPDATE`;
+        let sessions = await transaction<{ id: string; status: string }[]>`
+          SELECT id, status FROM attendance_sessions
+          WHERE team_id = ${id} AND session_date = ${date} FOR UPDATE`;
+        if (sessions[0]?.status === "canceled") return { conflict: true as const };
+        if (!sessions[0]) {
+          const sessionId = crypto.randomUUID();
+          await transaction`
+            INSERT INTO attendance_sessions
+              (id, organization_id, team_id, session_date, recorded_by, status, created_at)
+            VALUES (${sessionId}, ${organizationId}, ${id}, ${date},
+              ${authorized.context.user.email}, 'completed', ${Math.floor(Date.now() / 1000)})
+            ON CONFLICT (team_id, session_date) DO NOTHING`;
+          sessions = await transaction<{ id: string; status: string }[]>`
+            SELECT id, status FROM attendance_sessions
+            WHERE team_id = ${id} AND session_date = ${date} FOR UPDATE`;
+        }
+        if (!sessions[0] || sessions[0].status === "canceled") return { conflict: true as const };
+
+        for (const athlete of roster) {
+          const record = submitted.get(athlete.id) ?? { present: true, note: null };
+          await transaction`
+            INSERT INTO attendance_records (session_id, athlete_id, present, note)
+            VALUES (${sessions[0].id}, ${athlete.id}, ${record.present ? 1 : 0}, ${record.note})
+            ON CONFLICT (session_id, athlete_id) DO UPDATE
+              SET present = EXCLUDED.present, note = EXCLUDED.note`;
+          await transaction`
+            UPDATE athletes SET
+              attendance_rate = COALESCE((
+                SELECT ROUND(100.0 * SUM(CASE WHEN present = 1 THEN 1 ELSE 0 END) / COUNT(*))::integer
+                FROM attendance_records WHERE athlete_id = ${athlete.id}
+              ), attendance_rate),
+              updated_at = ${Math.floor(Date.now() / 1000)}
+            WHERE id = ${athlete.id} AND organization_id = ${organizationId}`;
+        }
+        return { conflict: false as const };
+      });
+      if (result.conflict) {
+        return Response.json(
+          { error: "Esta data está marcada como aula cancelada. Reabra a aula antes de fazer a chamada." },
+          { status: 409 },
+        );
+      }
+      const presentCount = roster.filter((athlete) => submitted.get(athlete.id)?.present !== false).length;
+      return Response.json({
+        saved: true, date, total: roster.length, present: presentCount,
+        absent: roster.length - presentCount,
+      });
+    }
 
     const db = getDb();
     let [session] = await db

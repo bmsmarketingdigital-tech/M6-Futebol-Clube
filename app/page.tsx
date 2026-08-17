@@ -368,10 +368,10 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
     setTeamPreview(null);
   }
 
-  function notify(message: string) {
+  const notify = useCallback((message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
-  }
+  }, []);
 
   async function addAthlete(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

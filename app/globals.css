@@ -5644,17 +5644,116 @@ body {
   }
   .profile-form textarea { height: auto !important; min-height: 92px !important; padding-block: 12px !important; }
   .profile-tabs { position: static; background: var(--surface-1); }
-  .attendance-roster { max-height: none; }
+  .attendance-panel {
+    width: 100vw !important;
+    min-width: 0;
+    height: 100dvh;
+    max-height: 100dvh !important;
+    overflow: hidden;
+    border-radius: 0 !important;
+  }
+  .attendance-panel-header {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    gap: 12px;
+  }
+  .attendance-panel-header > div { min-width: 0; }
+  .modal-backdrop .attendance-panel-header h2 {
+    max-width: 100%;
+    font-size: clamp(22px, 7vw, 28px);
+    line-height: 1.12;
+    overflow-wrap: anywhere;
+  }
+  .attendance-panel-header p {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  .attendance-panel-header .modal-close {
+    width: 44px;
+    height: 44px;
+    justify-self: end;
+  }
+  .attendance-panel .attendance-toolbar {
+    width: 100%;
+    min-width: 0;
+    padding: 13px 16px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    overflow: visible;
+    border-inline: 0;
+    border-radius: 0;
+  }
+  .attendance-panel .attendance-toolbar > label,
+  .attendance-panel .attendance-toolbar > label input { width: 100%; min-width: 0; }
+  .attendance-panel .attendance-toolbar > div:not(.attendance-cancel-row) {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+  }
+  .attendance-panel .attendance-cancel-row {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .attendance-panel .attendance-cancel-row input,
+  .attendance-panel .attendance-cancel-row button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+  }
+  .attendance-roster {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    max-height: none;
+    flex: 1 1 auto;
+    padding: 8px 14px;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .attendance-roster .document-empty { width: 100%; min-width: 0; padding-inline: 12px; }
+  .attendance-roster .document-empty small { max-width: 100%; overflow-wrap: anywhere; }
+  .attendance-panel .attendance-person {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: 38px 36px minmax(0, 1fr);
+    gap: 9px;
+  }
+  .attendance-panel .attendance-person > div { min-width: 0; }
+  .attendance-panel .attendance-person > input { grid-column: 1 / -1; width: 100%; min-width: 0; }
   .attendance-footer {
     position: sticky;
     bottom: 0;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
     padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
     background: color-mix(in srgb, var(--surface-1) 96%, transparent);
     backdrop-filter: blur(14px);
   }
+  .attendance-footer button { width: 100%; min-width: 0; min-height: 46px; padding-inline: 8px; }
 
   .primary-button, .filter-button, .secondary-button { font-weight: 750; }
-  .toast { bottom: calc(18px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); }
+  .toast {
+    right: 12px;
+    left: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    min-height: 52px;
+    padding: 9px 12px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
 
   .app-shell .page-content .table-head,
   .app-shell .page-content .charge-head,
