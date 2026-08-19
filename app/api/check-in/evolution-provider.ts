@@ -34,6 +34,85 @@ function providerMessageIdFrom(payload: unknown) {
   return String(key?.id || record.messageId || record.id || "").trim() || null;
 }
 
+export type EvolutionConnectionState = "open" | "connecting" | "close" | "unknown";
+
+export async function getEvolutionConnectionState(): Promise<EvolutionConnectionState> {
+  const config = getEvolutionConfig();
+  if (!config) return "unknown";
+  try {
+    const response = await fetch(
+      `${config.baseUrl}/instance/connectionState/${config.instance}`,
+      { headers: { apikey: config.apiKey } },
+    );
+    if (!response.ok) return "unknown";
+    const payload = (await response.json()) as { instance?: { state?: string } };
+    const state = payload.instance?.state;
+    return state === "open" || state === "connecting" || state === "close" ? state : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function qrCodeFromPayload(payload: unknown) {
+  if (!payload || typeof payload !== "object") return "";
+  const record = payload as Record<string, unknown>;
+  const direct = record.base64;
+  if (typeof direct === "string") return direct;
+  const nested = record.qrcode as Record<string, unknown> | undefined;
+  return typeof nested?.base64 === "string" ? nested.base64 : "";
+}
+
+// Pede um QR Code novo para conectar o numero desta instancia. Chamado quando
+// o estado nao esta "open" (ainda nao conectado ou sessao expirada) -- a UI
+// existente (CommunicationManagement) ja sabe renderizar qrCodeDataUrl.
+export async function getEvolutionQrCode(): Promise<{ qrCodeDataUrl: string; error: string | null }> {
+  const config = getEvolutionConfig();
+  if (!config) return { qrCodeDataUrl: "", error: "Evolution API nao configurada." };
+  try {
+    const response = await fetch(`${config.baseUrl}/instance/connect/${config.instance}`, {
+      headers: { apikey: config.apiKey },
+    });
+    const raw = await response.text().catch(() => "");
+    if (!response.ok) {
+      return {
+        qrCodeDataUrl: "",
+        error: `Evolution API respondeu ${response.status}${raw ? `: ${raw.slice(0, 200)}` : ""}`,
+      };
+    }
+    const payload = raw ? (JSON.parse(raw) as unknown) : null;
+    return { qrCodeDataUrl: qrCodeFromPayload(payload), error: null };
+  } catch (error) {
+    return {
+      qrCodeDataUrl: "",
+      error: error instanceof Error ? error.message : "Evolution API nao respondeu.",
+    };
+  }
+}
+
+export async function logoutEvolutionInstance(): Promise<{ ok: boolean; error: string | null }> {
+  const config = getEvolutionConfig();
+  if (!config) return { ok: false, error: "Evolution API nao configurada." };
+  try {
+    const response = await fetch(`${config.baseUrl}/instance/logout/${config.instance}`, {
+      method: "DELETE",
+      headers: { apikey: config.apiKey },
+    });
+    if (!response.ok) {
+      const raw = await response.text().catch(() => "");
+      return {
+        ok: false,
+        error: `Evolution API respondeu ${response.status}${raw ? `: ${raw.slice(0, 200)}` : ""}`,
+      };
+    }
+    return { ok: true, error: null };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Evolution API nao respondeu.",
+    };
+  }
+}
+
 export async function sendEvolutionWhatsAppMessage(phone: string, message: string) {
   const config = getEvolutionConfig();
   if (!config) {

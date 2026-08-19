@@ -1,5 +1,8 @@
 import {
   evolutionConfigured,
+  getEvolutionConnectionState,
+  getEvolutionQrCode,
+  logoutEvolutionInstance,
   sendEvolutionWhatsAppMessage,
 } from "./evolution-provider";
 import { getRuntimeEnv } from "../runtime-env";
@@ -74,13 +77,39 @@ async function bridgeRequest<T>(path: string, init?: RequestInit) {
 
 export async function getWhatsAppBridgeStatus(): Promise<WhatsAppBridgeStatus> {
   if (!runtime.WHATSAPP_BRIDGE_URL && evolutionConfigured(runtime)) {
+    const state = await getEvolutionConnectionState();
+    if (state === "open") {
+      return {
+        configured: true,
+        status: "connected",
+        qrCodeDataUrl: "",
+        connectedPhone: "",
+        lastError: "",
+        lastMessage: "WhatsApp conectado via Evolution API.",
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    if (state === "connecting" || state === "close") {
+      const { qrCodeDataUrl, error } = await getEvolutionQrCode();
+      return {
+        configured: true,
+        status: qrCodeDataUrl ? "qr" : "disconnected",
+        qrCodeDataUrl,
+        connectedPhone: "",
+        lastError: error ?? "",
+        lastMessage: qrCodeDataUrl
+          ? "Escaneie o QR Code para conectar o WhatsApp."
+          : "WhatsApp desconectado.",
+        updatedAt: new Date().toISOString(),
+      };
+    }
     return {
       configured: true,
-      status: "connected",
+      status: "error",
       qrCodeDataUrl: "",
       connectedPhone: "",
-      lastError: "",
-      lastMessage: "Evolution API configurada para envio em nuvem.",
+      lastError: "Não foi possível consultar o status da Evolution API.",
+      lastMessage: "Status indisponível.",
       updatedAt: new Date().toISOString(),
     };
   }
@@ -115,6 +144,9 @@ export async function getWhatsAppBridgeStatus(): Promise<WhatsAppBridgeStatus> {
 
 export async function controlWhatsAppBridge(action: "connect" | "disconnect") {
   if (!runtime.WHATSAPP_BRIDGE_URL && evolutionConfigured(runtime)) {
+    if (action === "disconnect") {
+      await logoutEvolutionInstance();
+    }
     return getWhatsAppBridgeStatus();
   }
   return bridgeRequest<Omit<WhatsAppBridgeStatus, "configured">>(`/${action}`, {
