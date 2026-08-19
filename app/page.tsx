@@ -789,6 +789,14 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
         </div>
       </section>
 
+      <MobileBottomNav
+        section={section}
+        setSection={setSection}
+        canViewFinance={user.role === "admin"}
+        moreOpen={profileMenuOpen}
+        onToggleMore={() => setProfileMenuOpen((current) => !current)}
+      />
+
       {showAthleteModal && (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeAthleteModal}>
           <div className="modal" role="dialog" aria-modal="true" aria-labelledby="new-athlete-title" onMouseDown={(event) => event.stopPropagation()}>
@@ -989,6 +997,87 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
 
       {toast && <div className="toast" role="status"><span><CheckCircle2 size={16} strokeWidth={1.75} /></span>{toast}</div>}
     </main>
+  );
+}
+
+const financeSections: Section[] = [
+  "Financeiro",
+  "Mensalidades",
+  "Planos",
+  "Combos",
+  "Controle de gastos",
+];
+
+function MobileBottomNav({
+  section,
+  setSection,
+  canViewFinance,
+  moreOpen,
+  onToggleMore,
+}: {
+  section: Section;
+  setSection: (section: Section) => void;
+  canViewFinance: boolean;
+  moreOpen: boolean;
+  onToggleMore: () => void;
+}) {
+  const items: {
+    label: string;
+    icon: LucideIcon;
+    active: boolean;
+    onClick: () => void;
+  }[] = [
+    {
+      label: "Início",
+      icon: HomeIcon,
+      active: section === "Visão geral",
+      onClick: () => setSection("Visão geral"),
+    },
+    {
+      label: "Atletas",
+      icon: Users,
+      active: section === "Atletas" || section === "Prontuário",
+      onClick: () => setSection("Atletas"),
+    },
+    {
+      label: "Turmas",
+      icon: LayoutGrid,
+      active: section === "Turmas" || section === "Presença",
+      onClick: () => setSection("Turmas"),
+    },
+    ...(canViewFinance
+      ? [
+          {
+            label: "Financeiro",
+            icon: Wallet,
+            active: financeSections.includes(section),
+            onClick: () => setSection("Mensalidades"),
+          },
+        ]
+      : []),
+    {
+      label: "Mais",
+      icon: MoreVertical,
+      active: moreOpen,
+      onClick: onToggleMore,
+    },
+  ];
+
+  return (
+    <nav className="mobile-bottom-nav" aria-label="Navegação principal do aplicativo">
+      {items.map((item) => (
+        <button
+          key={item.label}
+          type="button"
+          className={item.active ? "active" : ""}
+          onClick={item.onClick}
+          aria-current={item.active ? "page" : undefined}
+        >
+          <item.icon size={20} strokeWidth={item.active ? 2.1 : 1.75} />
+          <span>{item.label}</span>
+        </button>
+      ))}
+    </nav>
   );
 }
 
