@@ -5406,9 +5406,11 @@ body {
     overflow-x: hidden;
   }
 
-  /* Bottom nav substitui o hambúrguer no topo: uma única navegação mobile,
-     sem duplicar o menu deslizante (reaproveitado pelo item "Mais"). */
-  .mobile-top-menu { display: none; }
+  /* Bottom nav substitui o botão hambúrguer no topo: uma única navegação
+     mobile, sem duplicar o menu deslizante (reaproveitado pelo item "Mais").
+     Só o botão-gatilho some — o container continua no DOM porque o painel
+     deslizante (.mobile-menu-backdrop) é renderizado como filho dele. */
+  .mobile-top-menu > .icon-button { display: none; }
 
   .mobile-bottom-nav {
     position: fixed;
@@ -5483,7 +5485,12 @@ body {
   }
 
   .section-heading > div:first-child { min-width: 0; }
-  .section-heading-with-back {
+  /* .finance-page .section-heading (duas classes) tem mais especificidade que
+     .section-heading-with-back sozinha — sem repetir o prefixo aqui, o grid de
+     3 colunas do cabeçalho com voltar nunca vencia dentro do financeiro, e o
+     botão voltar caía alinhado ao fim de uma linha alta (sobrepondo o texto). */
+  .section-heading-with-back,
+  .finance-page .section-heading-with-back {
     grid-template-columns: 42px minmax(0, 1fr) 46px;
     align-items: center;
   }
@@ -6160,13 +6167,18 @@ body {
     white-space: nowrap;
   }
 
-  /* Navegação e permissões: páginas completas, sem faixas de desktop. */
-  .finance-heading-with-back {
+  /* Navegação e permissões: páginas completas, sem faixas de desktop.
+     Mesmo motivo do bloco acima: precisa do prefixo .finance-page para
+     vencer a especificidade de ".finance-page .section-heading". */
+  .finance-heading-with-back,
+  .finance-page .finance-heading-with-back {
     grid-template-columns: 42px minmax(0, 1fr);
     align-items: start;
   }
-  .finance-heading-with-back > .finance-heading-title { min-width: 0; }
-  .finance-heading-with-back > .finance-heading-actions {
+  .finance-heading-with-back > .finance-heading-title,
+  .finance-page .finance-heading-with-back > .finance-heading-title { min-width: 0; }
+  .finance-heading-with-back > .finance-heading-actions,
+  .finance-page .finance-heading-with-back > .finance-heading-actions {
     grid-column: 1 / -1;
   }
 
