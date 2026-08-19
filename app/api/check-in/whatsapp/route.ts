@@ -28,11 +28,12 @@ export async function POST(request: Request) {
     }
     const payload = (await request.json()) as {
       action?: "connect" | "disconnect";
+      phone?: string;
     };
     if (!payload.action || !["connect", "disconnect"].includes(payload.action)) {
       return Response.json({ error: "Ação inválida." }, { status: 400 });
     }
-    const whatsapp = await controlWhatsAppBridge(payload.action);
+    const whatsapp = await controlWhatsAppBridge(payload.action, payload.phone);
     return Response.json({ whatsapp: { configured: true, ...whatsapp } });
   } catch (error) {
     return Response.json(

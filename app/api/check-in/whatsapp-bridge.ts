@@ -1,5 +1,8 @@
 import {
   evolutionConfigured,
+  getEvolutionConnectionState,
+  getEvolutionConnectPayload,
+  logoutEvolutionInstance,
   sendEvolutionWhatsAppMessage,
 } from "./evolution-provider";
 import { getRuntimeEnv } from "../runtime-env";
@@ -23,6 +26,7 @@ export type WhatsAppBridgeStatus = {
     | "connected"
     | "error";
   qrCodeDataUrl: string;
+  pairingCode: string | null;
   connectedPhone: string;
   lastError: string;
   lastMessage: string;
@@ -72,15 +76,46 @@ async function bridgeRequest<T>(path: string, init?: RequestInit) {
   return payload;
 }
 
-export async function getWhatsAppBridgeStatus(): Promise<WhatsAppBridgeStatus> {
+export async function getWhatsAppBridgeStatus(phone?: string): Promise<WhatsAppBridgeStatus> {
   if (!runtime.WHATSAPP_BRIDGE_URL && evolutionConfigured(runtime)) {
+    const state = await getEvolutionConnectionState();
+    if (state === "open") {
+      return {
+        configured: true,
+        status: "connected",
+        qrCodeDataUrl: "",
+        pairingCode: null,
+        connectedPhone: "",
+        lastError: "",
+        lastMessage: "WhatsApp conectado via Evolution API.",
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    if (state === "connecting" || state === "close") {
+      const { qrCodeDataUrl, pairingCode, error } = await getEvolutionConnectPayload(phone);
+      return {
+        configured: true,
+        status: qrCodeDataUrl || pairingCode ? "qr" : "disconnected",
+        qrCodeDataUrl,
+        pairingCode,
+        connectedPhone: "",
+        lastError: error ?? "",
+        lastMessage: pairingCode
+          ? "Digite o código no WhatsApp para conectar."
+          : qrCodeDataUrl
+            ? "Escaneie o QR Code para conectar o WhatsApp."
+            : "WhatsApp desconectado.",
+        updatedAt: new Date().toISOString(),
+      };
+    }
     return {
       configured: true,
-      status: "connected",
+      status: "error",
       qrCodeDataUrl: "",
+      pairingCode: null,
       connectedPhone: "",
-      lastError: "",
-      lastMessage: "Evolution API configurada para envio em nuvem.",
+      lastError: "Não foi possível consultar o status da Evolution API.",
+      lastMessage: "Status indisponível.",
       updatedAt: new Date().toISOString(),
     };
   }
@@ -89,6 +124,7 @@ export async function getWhatsAppBridgeStatus(): Promise<WhatsAppBridgeStatus> {
       configured: false,
       status: "unavailable",
       qrCodeDataUrl: "",
+      pairingCode: null,
       connectedPhone: "",
       lastError: "",
       lastMessage: "Disponível somente no aplicativo Windows.",
@@ -96,15 +132,16 @@ export async function getWhatsAppBridgeStatus(): Promise<WhatsAppBridgeStatus> {
     };
   }
   try {
-    const payload = await bridgeRequest<Omit<WhatsAppBridgeStatus, "configured">>(
+    const payload = await bridgeRequest<Omit<WhatsAppBridgeStatus, "configured" | "pairingCode">>(
       "/status",
     );
-    return { configured: true, ...payload };
+    return { configured: true, pairingCode: null, ...payload };
   } catch (error) {
     return {
       configured: true,
       status: "error",
       qrCodeDataUrl: "",
+      pairingCode: null,
       connectedPhone: "",
       lastError: error instanceof Error ? error.message : "O conector local não respondeu.",
       lastMessage: "Conector local indisponível.",
@@ -113,13 +150,19 @@ export async function getWhatsAppBridgeStatus(): Promise<WhatsAppBridgeStatus> {
   }
 }
 
-export async function controlWhatsAppBridge(action: "connect" | "disconnect") {
+export async function controlWhatsAppBridge(action: "connect" | "disconnect", phone?: string) {
   if (!runtime.WHATSAPP_BRIDGE_URL && evolutionConfigured(runtime)) {
-    return getWhatsAppBridgeStatus();
+    if (action === "disconnect") {
+      await logoutEvolutionInstance();
+      return getWhatsAppBridgeStatus();
+    }
+    return getWhatsAppBridgeStatus(phone);
   }
-  return bridgeRequest<Omit<WhatsAppBridgeStatus, "configured">>(`/${action}`, {
-    method: "POST",
-  });
+  const payload = await bridgeRequest<Omit<WhatsAppBridgeStatus, "configured" | "pairingCode">>(
+    `/${action}`,
+    { method: "POST" },
+  );
+  return { pairingCode: null, ...payload };
 }
 
 export async function validateWhatsAppTestMode(phone: string, message: string) {

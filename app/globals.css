@@ -1768,6 +1768,11 @@ input[type="email"], input[type="password"], input[type="date"], input[type="dat
 .whatsapp-connector-copy h2 { margin: 3px 0; font-size: 14px; }.whatsapp-connector-copy p { margin: 0; color: var(--muted); font-size: 8px; }
 .whatsapp-qr { display: flex; align-items: center; gap: 11px; }.whatsapp-qr img { width: 82px; height: 82px; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); }
 .whatsapp-qr strong, .whatsapp-qr small { display: block; }.whatsapp-qr strong { font-size: 9px; }.whatsapp-qr small { max-width: 145px; margin-top: 4px; color: var(--muted); font-size: 7px; }
+.whatsapp-pairing-code { flex: 0 0 auto; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); font-size: 15px; font-weight: 800; letter-spacing: 1.5px; font-variant-numeric: tabular-nums; }
+.whatsapp-pairing-toggle { align-self: flex-start; margin-top: 6px; padding: 0; border: 0; background: transparent; color: var(--accent); font-size: 9px; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.whatsapp-pairing-form { display: flex; align-items: flex-end; gap: 8px; margin-top: 8px; }
+.whatsapp-pairing-form label { flex: 1 1 auto; display: grid; gap: 4px; color: var(--text-secondary); font-size: 9px; font-weight: 700; }
+.whatsapp-pairing-form input { height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); color: var(--ink); font-size: 12px; }
 .whatsapp-connector-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }.whatsapp-connector-actions > small { max-width: 230px; color: var(--muted); font-size: 8px; line-height: 1.45; text-align: right; }
 .whatsapp-waiting, .whatsapp-ready { display: inline-flex; align-items: center; gap: 7px; color: var(--warning); font-size: 8px; font-weight: 800; }.whatsapp-waiting i { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); animation: pulse .8s infinite alternate; }.whatsapp-ready { color: var(--green); }
 .disconnect-button { min-height: 35px; padding: 0 10px; border: 1px solid var(--danger-subtle); border-radius: 8px; background: var(--surface-1); color: var(--danger); font-size: 8px; font-weight: 800; }
