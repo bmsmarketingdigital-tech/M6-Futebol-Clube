@@ -1,5 +1,11 @@
 {
   "framework": null,
   "buildCommand": "npm run build:vercel",
-  "outputDirectory": ".output"
+  "outputDirectory": ".output",
+  "crons": [
+    {
+      "path": "/api/cron/notifications",
+      "schedule": "0 11 * * *"
+    }
+  ]
 }
