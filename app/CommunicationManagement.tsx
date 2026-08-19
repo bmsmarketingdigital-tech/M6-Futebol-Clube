@@ -82,11 +82,17 @@ export function CommunicationManagement({ teams, notify, onBack }: { teams: Team
   </>;
 }
 
-type CommunicationWhatsAppStatus = { status: string; configured: boolean; qrCodeDataUrl?: string; connectedPhone?: string };
+type CommunicationWhatsAppStatus = { status: string; configured: boolean; qrCodeDataUrl?: string; pairingCode?: string | null; connectedPhone?: string };
+
+function formatPairingCode(code: string) {
+  return code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
+}
 
 function WhatsAppCommunicationCard({ notify }: { notify: (message: string) => void }) {
-  const [status, setStatus] = useState<CommunicationWhatsAppStatus>({ status: "disconnected", configured: false, qrCodeDataUrl: "" });
+  const [status, setStatus] = useState<CommunicationWhatsAppStatus>({ status: "disconnected", configured: false, qrCodeDataUrl: "", pairingCode: null });
   const [busy, setBusy] = useState(false);
+  const [pairingPhone, setPairingPhone] = useState("");
+  const [showPairingForm, setShowPairingForm] = useState(false);
 
   const refresh = useCallback(async () => {
     const response = await fetch("/api/check-in/whatsapp");
@@ -96,10 +102,10 @@ function WhatsAppCommunicationCard({ notify }: { notify: (message: string) => vo
 
   useEffect(() => { const timer = window.setTimeout(() => { void refresh(); }, 0); return () => window.clearTimeout(timer); }, [refresh]);
 
-  async function action(path: string, message: string, bridgeAction?: "connect" | "disconnect") {
+  async function action(path: string, message: string, bridgeAction?: "connect" | "disconnect", phone?: string) {
     setBusy(true);
     try {
-      const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: bridgeAction ? JSON.stringify({ action: bridgeAction }) : undefined });
+      const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: bridgeAction ? JSON.stringify({ action: bridgeAction, phone }) : undefined });
       const payload = await readApiResponse<{ whatsapp?: CommunicationWhatsAppStatus }>(response);
       if (!response.ok) throw new Error(payload.error || "Falha na operação.");
       if (payload.whatsapp) setStatus(payload.whatsapp);
@@ -113,7 +119,18 @@ function WhatsAppCommunicationCard({ notify }: { notify: (message: string) => vo
       <span className="eyebrow">NOTIFICAÇÕES AUTOMÁTICAS</span><h2>WhatsApp da comunicação</h2>
       <p>{status.status === "connected" ? `Conectado${status.connectedPhone ? ` · ${status.connectedPhone}` : ""}. Pronto para enviar avisos.` : "Conecte o WhatsApp para enviar confirmações e avisos aos responsáveis."}</p>
     </div></div>
-    {status.status === "qr" && status.qrCodeDataUrl && <div className="whatsapp-qr"><img src={status.qrCodeDataUrl} alt="QR Code para conectar o WhatsApp" /><span><strong>Escaneie no WhatsApp</strong><small>Aparelhos conectados → Conectar aparelho</small></span></div>}
+    {status.status === "qr" && status.pairingCode && <div className="whatsapp-qr whatsapp-pairing"><strong className="whatsapp-pairing-code">{formatPairingCode(status.pairingCode)}</strong><span><strong>Digite esse código no WhatsApp</strong><small>No celular do número da escolinha: Aparelhos conectados → Conectar com número de telefone</small></span></div>}
+    {status.status === "qr" && !status.pairingCode && status.qrCodeDataUrl && <div className="whatsapp-qr"><img src={status.qrCodeDataUrl} alt="QR Code para conectar o WhatsApp" /><span><strong>Escaneie no WhatsApp</strong><small>Use outro aparelho para ver este QR e escaneie com a câmera do WhatsApp do número da escolinha (Aparelhos conectados → Conectar aparelho)</small></span></div>}
+    {status.status !== "connected" && !showPairingForm && <button type="button" className="link-button whatsapp-pairing-toggle" onClick={() => setShowPairingForm(true)}>Só tenho este aparelho para conectar? Use um código em vez de QR</button>}
+    {status.status !== "connected" && showPairingForm && (
+      <div className="whatsapp-pairing-form">
+        <label>
+          Número do WhatsApp da escolinha
+          <input type="tel" inputMode="tel" placeholder="(11) 99999-9999" value={pairingPhone} onChange={(event) => setPairingPhone(event.target.value)} />
+        </label>
+        <button type="button" className="whatsapp-connect-button" disabled={busy || !pairingPhone.trim()} onClick={() => void action("/api/check-in/whatsapp", "Código gerado. Digite no WhatsApp.", "connect", pairingPhone)}>{busy ? "Gerando..." : "Gerar código"}</button>
+      </div>
+    )}
     <div className="whatsapp-connector-actions">
       {status.status !== "connected" && <button className="whatsapp-connect-button" onClick={() => void action("/api/check-in/whatsapp", "Conector iniciado. Aguarde o QR Code.", "connect")} disabled={busy}>{busy ? "Preparando..." : "Conectar WhatsApp"}</button>}
       {status.status === "connected" && <><button className="whatsapp-connect-button" onClick={() => void action("/api/check-in/whatsapp/test", "Mensagem de teste enviada para 18981518787.")} disabled={busy}>{busy ? "Enviando..." : "Enviar teste (18981518787)"}</button><button className="disconnect-button" onClick={() => void action("/api/check-in/whatsapp", "WhatsApp desconectado.", "disconnect")} disabled={busy}>Desconectar</button></>}

@@ -8,7 +8,7 @@ type EvolutionConfig = {
   instance: string;
 };
 
-function normalizePhone(value = "") {
+export function normalizeEvolutionPhone(value = "") {
   let digits = value.replace(/\D/g, "");
   while (digits.startsWith("0")) digits = digits.slice(1);
   if (!digits.startsWith("55") && [10, 11].includes(digits.length)) digits = `55${digits}`;
@@ -53,37 +53,49 @@ export async function getEvolutionConnectionState(): Promise<EvolutionConnection
   }
 }
 
-function qrCodeFromPayload(payload: unknown) {
-  if (!payload || typeof payload !== "object") return "";
+function connectFieldsFromPayload(payload: unknown) {
+  if (!payload || typeof payload !== "object") return { qrCodeDataUrl: "", pairingCode: null as string | null };
   const record = payload as Record<string, unknown>;
-  const direct = record.base64;
-  if (typeof direct === "string") return direct;
+  // Resposta do /connect sem "number": { base64, code, pairingCode: null, count }.
+  // Resposta do /create: os mesmos campos aninhados em "qrcode".
+  // Resposta do /connect com "number": { pairingCode: "6LHHNDM2", count } (sem QR).
   const nested = record.qrcode as Record<string, unknown> | undefined;
-  return typeof nested?.base64 === "string" ? nested.base64 : "";
+  const base64 = record.base64 ?? nested?.base64;
+  const pairingCode = record.pairingCode ?? nested?.pairingCode;
+  return {
+    qrCodeDataUrl: typeof base64 === "string" ? base64 : "",
+    pairingCode: typeof pairingCode === "string" ? pairingCode : null,
+  };
 }
 
-// Pede um QR Code novo para conectar o numero desta instancia. Chamado quando
-// o estado nao esta "open" (ainda nao conectado ou sessao expirada) -- a UI
-// existente (CommunicationManagement) ja sabe renderizar qrCodeDataUrl.
-export async function getEvolutionQrCode(): Promise<{ qrCodeDataUrl: string; error: string | null }> {
+// Pede uma forma nova de conectar o numero desta instancia: QR Code (padrao) ou,
+// se "phone" for informado, um codigo de pareamento de 8 digitos -- util quando
+// o unico aparelho disponivel para conectar e o mesmo que esta olhando a tela
+// (nao da para escanear um QR exibido na propria tela do celular do WhatsApp).
+// Chamado quando o estado nao esta "open" (ainda nao conectado ou sessao expirada).
+export async function getEvolutionConnectPayload(
+  phone?: string,
+): Promise<{ qrCodeDataUrl: string; pairingCode: string | null; error: string | null }> {
   const config = getEvolutionConfig();
-  if (!config) return { qrCodeDataUrl: "", error: "Evolution API nao configurada." };
+  if (!config) return { qrCodeDataUrl: "", pairingCode: null, error: "Evolution API nao configurada." };
+  const number = phone ? normalizeEvolutionPhone(phone) : "";
+  const url = `${config.baseUrl}/instance/connect/${config.instance}${number ? `?number=${number}` : ""}`;
   try {
-    const response = await fetch(`${config.baseUrl}/instance/connect/${config.instance}`, {
-      headers: { apikey: config.apiKey },
-    });
+    const response = await fetch(url, { headers: { apikey: config.apiKey } });
     const raw = await response.text().catch(() => "");
     if (!response.ok) {
       return {
         qrCodeDataUrl: "",
+        pairingCode: null,
         error: `Evolution API respondeu ${response.status}${raw ? `: ${raw.slice(0, 200)}` : ""}`,
       };
     }
     const payload = raw ? (JSON.parse(raw) as unknown) : null;
-    return { qrCodeDataUrl: qrCodeFromPayload(payload), error: null };
+    return { ...connectFieldsFromPayload(payload), error: null };
   } catch (error) {
     return {
       qrCodeDataUrl: "",
+      pairingCode: null,
       error: error instanceof Error ? error.message : "Evolution API nao respondeu.",
     };
   }
@@ -123,7 +135,7 @@ export async function sendEvolutionWhatsAppMessage(phone: string, message: strin
     };
   }
 
-  const number = normalizePhone(phone);
+  const number = normalizeEvolutionPhone(phone);
   const text = String(message || "").trim();
   if (!number || !text) {
     return {
