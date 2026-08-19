@@ -5402,9 +5402,69 @@ body {
   .section-page {
     width: 100%;
     min-height: calc(100dvh - 62px - env(safe-area-inset-top));
-    padding: 16px 14px calc(28px + env(safe-area-inset-bottom));
+    padding: 16px 14px calc(76px + env(safe-area-inset-bottom));
     overflow-x: hidden;
   }
+
+  /* Bottom nav substitui o hambúrguer no topo: uma única navegação mobile,
+     sem duplicar o menu deslizante (reaproveitado pelo item "Mais"). */
+  .mobile-top-menu { display: none; }
+
+  .mobile-bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 90;
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--surface-1) 96%, transparent);
+    backdrop-filter: blur(18px);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, .06);
+  }
+  .mobile-bottom-nav button {
+    flex: 1 1 0;
+    min-height: 52px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 2px;
+    border: 0;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--text-tertiary);
+  }
+  .mobile-bottom-nav button span {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: .1px;
+  }
+  .mobile-bottom-nav button.active {
+    color: var(--accent);
+    background: var(--accent-subtle);
+  }
+
+  /* Dashboard: linhas que ainda herdavam a altura de desktop (nenhuma regra
+     de largura as compactava) — trazidas para o mesmo padrão de cartão
+     mobile já usado em Atletas/Turmas/Financeiro. */
+  .dashboard-screen .card-header { min-height: 46px; padding: 11px 14px 8px; }
+  .dashboard-screen .schedule-item {
+    min-height: 58px;
+    margin-bottom: 8px;
+    padding: 9px 11px;
+    border-radius: 13px;
+    gap: 10px;
+  }
+  .dashboard-screen .schedule-info strong { font-size: 13px; }
+  .dashboard-screen .schedule-info small { margin-top: 3px; font-size: 11px; }
+  .dashboard-screen .call-button { min-width: 0; height: 36px; padding-inline: 10px; font-size: 11px; }
+  .dashboard-screen .attention-card > button { min-height: 46px; padding-inline: 8px; }
+  .dashboard-screen .table-row { min-height: 44px; }
 
   .card, .metric-card {
     border-radius: 18px;
@@ -5635,6 +5695,18 @@ body {
     white-space: nowrap;
     box-shadow: none;
   }
+  /* "Gerar mensalidades" é a ação primária: ocupa a linha inteira e vem
+     primeiro visualmente; "Cobrar vencidos" fica abaixo, mais discreta. */
+  .finance-heading-actions .primary-button {
+    grid-column: 1 / -1;
+    order: 1;
+  }
+  .finance-heading-actions .filter-button.warn {
+    grid-column: 1 / -1;
+    order: 2;
+    min-height: 38px;
+    height: 38px;
+  }
   .finance-page .finance-steps { display: none; }
   .finance-page .real-finance-metrics,
   .expense-page-metrics {
@@ -5797,7 +5869,8 @@ body {
   .expense-actions { grid-column: 1 / -1; flex-wrap: wrap; }
 
   /* Modais viram folhas de aplicativo em tela cheia. */
-  .modal-backdrop {
+  .modal-backdrop,
+  .category-backdrop {
     position: fixed !important;
     inset: 0 !important;
     width: 100dvw;
@@ -5828,6 +5901,10 @@ body {
     border-radius: 24px 24px 0 0 !important;
     box-shadow: 0 -16px 50px rgba(0,0,0,.22);
   }
+  .category-modal {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
   .athlete-edit-modal,
   .modal-backdrop .athlete-edit-modal { max-height: calc(100dvh - env(safe-area-inset-top)); }
   .athlete-edit-modal > header,
@@ -5846,6 +5923,10 @@ body {
   .modal-backdrop .athlete-edit-modal form,
   .team-form,
   .profile-form { padding: 16px 18px calc(22px + env(safe-area-inset-bottom)) !important; }
+  .athlete-edit-modal form,
+  .modal-backdrop .athlete-edit-modal form { row-gap: 10px !important; column-gap: 14px !important; }
+  .athlete-edit-modal form label,
+  .modal-backdrop .athlete-edit-modal form label { gap: 3px !important; }
   .athlete-edit-modal input,
   .athlete-edit-modal select,
   .modal-backdrop .athlete-edit-modal input,
