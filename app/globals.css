@@ -2561,6 +2561,10 @@ body {
 .finance-page .finance-metrics .metric-icon { width: 34px; height: 34px; font-size: 15px; }
 .finance-page .finance-metrics .metric-card-value { font-size: 18px; }
 .finance-page .finance-metrics .metric-card-detail { margin-top: 3px; font-size: 9px; }
+/* Clareia a barra superior fixa ao rolar até aqui pelos cards/atalhos de
+   status (o alvo não pode ficar escondido embaixo do topbar sticky). */
+#finance-charges-panel { scroll-margin-top: calc(72px + env(safe-area-inset-top)); }
+
 .finance-page .finance-charges {
   /* Sem flex/overflow: agora que .finance-page.section-page tem altura
      natural, este card flui normalmente — o único scroll é o da página

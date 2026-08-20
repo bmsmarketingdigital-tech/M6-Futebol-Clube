@@ -266,6 +266,15 @@ export function FinanceManagement({
   const [chargeStatusFilter, setChargeStatusFilter] = useState<
     "all" | "received" | Charge["status"]
   >("all");
+  // Clicar num card/atalho de status filtra a lista, mas ela fica mais
+  // abaixo na tela -- sem rolar até lá o dono da escola não tem como notar
+  // que algo mudou. Filtra e leva a visão até o painel de cobranças.
+  const selectChargeStatus = useCallback((status: typeof chargeStatusFilter) => {
+    setChargeStatusFilter(status);
+    document
+      .getElementById("finance-charges-panel")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
   const [chargeCategoryFilter, setChargeCategoryFilter] = useState("all");
   const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -1055,7 +1064,7 @@ export function FinanceManagement({
           detail={`competência ${monthLabel(month)}`}
           tone="green"
           active={chargeStatusFilter === "all"}
-          onClick={() => setChargeStatusFilter("all")}
+          onClick={() => selectChargeStatus("all")}
         />
         <FinanceMetric
           icon={CheckCircle2}
@@ -1064,7 +1073,7 @@ export function FinanceManagement({
           detail={`${data.summary.paidCount} baixa(s)`}
           tone="blue"
           active={chargeStatusFilter === "received"}
-          onClick={() => setChargeStatusFilter("received")}
+          onClick={() => selectChargeStatus("received")}
         />
         <FinanceMetric
           icon={Clock}
@@ -1073,7 +1082,7 @@ export function FinanceManagement({
           detail="dentro do vencimento"
           tone="orange"
           active={chargeStatusFilter === "open"}
-          onClick={() => setChargeStatusFilter("open")}
+          onClick={() => selectChargeStatus("open")}
         />
         <FinanceMetric
           icon={AlertTriangle}
@@ -1082,7 +1091,7 @@ export function FinanceManagement({
           detail={`${data.summary.overdueCount} vencida(s)`}
           tone="red"
           active={chargeStatusFilter === "overdue"}
-          onClick={() => setChargeStatusFilter("overdue")}
+          onClick={() => selectChargeStatus("overdue")}
         />
         <FinanceMetric
           icon={Minus}
@@ -1113,13 +1122,13 @@ export function FinanceManagement({
           </div>
         </div>
         <div className="billing-portfolio-grid">
-          <button type="button" onClick={() => setChargeStatusFilter("open")}>
+          <button type="button" onClick={() => selectChargeStatus("open")}>
             <span className="portfolio-dot open" />
             <small>EM ABERTO</small>
             <b>{data.summary.openCount}</b>
             <em>{money(data.summary.openCents)}</em>
           </button>
-          <button type="button" onClick={() => setChargeStatusFilter("overdue")}>
+          <button type="button" onClick={() => selectChargeStatus("overdue")}>
             <span className="portfolio-dot overdue" />
             <small>VENCIDAS</small>
             <b>{data.summary.totalOverdueCount}</b>
@@ -1166,7 +1175,7 @@ export function FinanceManagement({
         />
       )}
 
-      <div className="card finance-charges">
+      <div className="card finance-charges" id="finance-charges-panel">
         <div className="card-header">
           <div>
             <h2>Painel de mensalidades · {monthLabel(month)}</h2>
