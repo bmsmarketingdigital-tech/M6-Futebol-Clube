@@ -320,22 +320,6 @@ export function FinanceManagement({
     }
   }, [notify]);
 
-  async function seedDemoFinance() {
-    setWorking(true);
-    try {
-      const response = await fetch("/api/finance/demo-seed", { method: "POST" });
-      const payload = await readJson<{ error?: string }>(response);
-      if (!response.ok) throw new Error(payload.error || "Não foi possível carregar o cenário de teste.");
-      notify("Cenário criado: mensalidade paga, mensalidade em aberto e gastos de teste.");
-      await loadFinance();
-      onChanged();
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Não foi possível carregar o cenário de teste.");
-    } finally {
-      setWorking(false);
-    }
-  }
-
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       void loadFinance();
@@ -951,9 +935,6 @@ export function FinanceManagement({
               <span>Mês de referência</span>
               <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
             </label>
-<button className="secondary-button" type="button" onClick={() => void seedDemoFinance()}>
-  Carregar cenário de teste
-</button>
 <button className="primary-button" type="button" onClick={() => setNewExpenseOpen(true)}>
               + Lançar gasto
             </button>

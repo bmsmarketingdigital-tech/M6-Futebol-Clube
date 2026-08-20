@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getD1, getDb } from "../../../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../../../db/postgres";
 import {
   athleteComboCoverage,
   athletes,
@@ -20,19 +21,26 @@ function split(total: number, count: number) {
   return Array.from({ length: count }, (_, index) => base + (index < rest ? 1 : 0));
 }
 
+type ApplyComboBody = {
+  athleteId?: string;
+  comboId?: string;
+  startDate?: string;
+  firstDueDate?: string;
+};
+
 export async function POST(request: Request) {
   const context = await getApiContext(request);
   if (!context) {
     return Response.json({ error: "Não autorizado." }, { status: 401 });
   }
 
-  const body = (await request.json()) as {
-    athleteId?: string;
-    comboId?: string;
-    startDate?: string;
-    firstDueDate?: string;
-  };
+  const body = (await request.json()) as ApplyComboBody;
   const organizationId = context.membership.organizationId;
+
+  if (postgresConfigured()) {
+    return applyComboPostgres(organizationId, body);
+  }
+
   const db = getDb();
   const [athlete] = await db
     .select({ id: athletes.id, active: athletes.active })
@@ -228,6 +236,172 @@ export async function POST(request: Request) {
       error instanceof Error &&
       /unique|athlete_combo_coverage_active_unique|athlete_billing_month_reservation_unique/i.test(error.message)
     ) {
+      return Response.json(
+        { error: "O atleta já possui um combo ativo em uma ou mais competências selecionadas." },
+        { status: 409 },
+      );
+    }
+    throw error;
+  }
+
+  return Response.json(
+    { athleteComboId, installmentCount: count, amounts, coveredMonths: months },
+    { status: 201 },
+  );
+}
+
+// Mesma logica de aplicar um Combo a um atleta, traduzida para Postgres.
+// Duas camadas de protecao contra sobreposicao de competencia (igual ao D1):
+// checagem na aplicacao (existingPayments/existingCoverage, abaixo) e os
+// indices unicos parciais athlete_combo_coverage_active_unique /
+// athlete_billing_month_reservation_unique como ultima linha de defesa
+// contra corrida entre duas aplicacoes simultaneas.
+async function applyComboPostgres(organizationId: string, body: ApplyComboBody) {
+  const sql = getPostgresClient();
+
+  const [athlete] = await sql<{ id: string; active: number }[]>`
+    SELECT id, active FROM athletes
+    WHERE id = ${body.athleteId ?? ""} AND organization_id = ${organizationId}
+    LIMIT 1
+  `;
+  const [combo] = await sql<{
+    id: string;
+    name: string;
+    duration_months: number;
+    base_amount_cents: number;
+    discount_type: string;
+    discount_value: number;
+    final_amount_cents: number;
+    billing_mode: string;
+    installment_count: number;
+  }[]>`
+    SELECT id, name, duration_months, base_amount_cents, discount_type,
+           discount_value, final_amount_cents, billing_mode, installment_count
+    FROM billing_combos
+    WHERE id = ${body.comboId ?? ""} AND organization_id = ${organizationId} AND active = 1
+    LIMIT 1
+  `;
+
+  if (!athlete || athlete.active !== 1) {
+    return Response.json({ error: "Atleta inválido ou inativo." }, { status: 409 });
+  }
+  if (!combo) {
+    return Response.json({ error: "Combo inválido ou inativo." }, { status: 409 });
+  }
+  if (combo.final_amount_cents <= 0) {
+    return Response.json({ error: "O valor final do Combo deve ser maior que zero." }, { status: 400 });
+  }
+
+  const startDate = body.startDate ?? "";
+  const firstDueDate = body.firstDueDate ?? startDate;
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(startDate) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(firstDueDate)
+  ) {
+    return Response.json({ error: "Datas inválidas." }, { status: 400 });
+  }
+
+  const count = combo.billing_mode === "upfront" ? 1 : combo.installment_count;
+  const amounts = split(combo.final_amount_cents, count);
+  const months = Array.from({ length: combo.duration_months }, (_, index) =>
+    addMonths(startDate, index).slice(0, 7),
+  );
+
+  const existing = await sql<{ id: string; reference_month: string }[]>`
+    SELECT id, reference_month FROM payments
+    WHERE organization_id = ${organizationId} AND athlete_id = ${athlete.id}
+  `;
+  if (existing.some((payment) => months.includes(payment.reference_month))) {
+    return Response.json(
+      { error: "Já existe cobrança para uma competência coberta pelo combo." },
+      { status: 409 },
+    );
+  }
+
+  const existingCoverage = await sql<{ reference_month: string }[]>`
+    SELECT reference_month FROM athlete_combo_coverage
+    WHERE organization_id = ${organizationId} AND athlete_id = ${athlete.id} AND active = 1
+  `;
+  const conflictingMonths = existingCoverage
+    .map((coverage) => coverage.reference_month)
+    .filter((month) => months.includes(month));
+  if (conflictingMonths.length > 0) {
+    return Response.json(
+      {
+        error: "O atleta já possui um combo ativo em uma ou mais competências selecionadas.",
+        conflictingMonths,
+      },
+      { status: 409 },
+    );
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const athleteComboId = crypto.randomUUID();
+
+  try {
+    await sql.begin(async (transaction) => {
+      await transaction`
+        INSERT INTO athlete_combos (
+          id, organization_id, athlete_id, combo_id, combo_name_snapshot,
+          duration_months, base_amount_cents, discount_type, discount_value,
+          final_amount_cents, installment_count, start_date, end_date, status,
+          created_at, updated_at
+        ) VALUES (
+          ${athleteComboId}, ${organizationId}, ${athlete.id}, ${combo.id}, ${combo.name},
+          ${combo.duration_months}, ${combo.base_amount_cents}, ${combo.discount_type},
+          ${combo.discount_value}, ${combo.final_amount_cents}, ${count}, ${startDate},
+          ${addMonths(startDate, combo.duration_months)}, 'active', ${now}, ${now}
+        )
+      `;
+
+      for (const month of months) {
+        await transaction`
+          INSERT INTO athlete_billing_month_reservations
+            (id, organization_id, athlete_id, reference_month, source_type, source_id, created_at)
+          VALUES (${crypto.randomUUID()}, ${organizationId}, ${athlete.id}, ${month}, 'combo', ${athleteComboId}, ${now})
+        `;
+        await transaction`
+          INSERT INTO athlete_combo_coverage
+            (id, organization_id, athlete_id, athlete_combo_id, reference_month, active, created_at, released_at)
+          VALUES (${crypto.randomUUID()}, ${organizationId}, ${athlete.id}, ${athleteComboId}, ${month}, 1, ${now}, NULL)
+        `;
+      }
+
+      for (let index = 0; index < count; index += 1) {
+        const paymentId = crypto.randomUUID();
+        const referenceMonth = months[index] ?? months[months.length - 1];
+        const dueDate = index === 0 ? firstDueDate : addMonths(firstDueDate, index);
+        await transaction`
+          INSERT INTO payments (
+            id, organization_id, athlete_id, athlete_combo_id, combo_installment_number,
+            combo_installment_total, reference_month, amount_cents, due_date, plan_name,
+            status, created_at, updated_at
+          ) VALUES (
+            ${paymentId}, ${organizationId}, ${athlete.id}, ${athleteComboId}, ${index + 1},
+            ${count}, ${referenceMonth}, ${amounts[index]}, ${dueDate}, ${combo.name},
+            'open', ${now}, ${now}
+          )
+        `;
+        await transaction`
+          INSERT INTO athlete_combo_installments (
+            id, organization_id, athlete_combo_id, installment_number, installment_total,
+            reference_month, due_date, amount_cents, payment_id, created_at
+          ) VALUES (
+            ${crypto.randomUUID()}, ${organizationId}, ${athleteComboId}, ${index + 1}, ${count},
+            ${referenceMonth}, ${dueDate}, ${amounts[index]}, ${paymentId}, ${now}
+          )
+        `;
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const constraint =
+      error && typeof error === "object" && "constraint_name" in error
+        ? String((error as { constraint_name?: string }).constraint_name)
+        : "";
+    if (/unique|athlete_combo_coverage_active_unique|athlete_billing_month_reservation_unique/i.test(
+      `${message} ${constraint}`,
+    )) {
       return Response.json(
         { error: "O atleta já possui um combo ativo em uma ou mais competências selecionadas." },
         { status: 409 },

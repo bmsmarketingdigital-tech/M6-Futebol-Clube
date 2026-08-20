@@ -1,5 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "../../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../../db/postgres";
 import { billingCombos, billingPlans } from "../../../../db/schema";
 import { getApiContext } from "../../api-auth";
 
@@ -67,6 +68,41 @@ function validateCombo(body: Record<string, unknown>) {
 export async function GET(request: Request) {
   const context = await getApiContext(request);
   if (!context) return Response.json({ error: "Faca login para acessar os combos." }, { status: 401 });
+  const organizationId = context.membership.organizationId;
+
+  if (postgresConfigured()) {
+    const sql = getPostgresClient();
+    const rows = await sql`
+      SELECT c.*, p.name AS plan_name
+      FROM billing_combos c
+      LEFT JOIN billing_plans p
+        ON p.id = c.base_plan_id AND p.organization_id = c.organization_id
+      WHERE c.organization_id = ${organizationId}
+      ORDER BY c.created_at DESC
+    `;
+    return Response.json({
+      combos: rows.map((row) => ({
+        id: row.id,
+        organizationId: row.organization_id,
+        name: row.name,
+        comboType: row.combo_type,
+        durationMonths: row.duration_months,
+        description: row.description,
+        basePlanId: row.base_plan_id,
+        baseAmountCents: row.base_amount_cents,
+        discountType: row.discount_type,
+        discountValue: row.discount_value,
+        finalAmountCents: row.final_amount_cents,
+        billingMode: row.billing_mode,
+        installmentCount: row.installment_count,
+        active: Boolean(row.active),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        planName: row.plan_name,
+      })),
+    });
+  }
+
   const rows = await getDb()
     .select({ combo: billingCombos, planName: billingPlans.name })
     .from(billingCombos)
@@ -77,7 +113,7 @@ export async function GET(request: Request) {
         eq(billingPlans.organizationId, billingCombos.organizationId),
       ),
     )
-    .where(eq(billingCombos.organizationId, context.membership.organizationId))
+    .where(eq(billingCombos.organizationId, organizationId))
     .orderBy(desc(billingCombos.createdAt));
   return Response.json({ combos: rows.map(({ combo, planName }) => ({ ...combo, planName })) });
 }
@@ -89,24 +125,74 @@ export async function POST(request: Request) {
   const parsed = validateCombo(body);
   if ("error" in parsed) return Response.json({ error: parsed.error }, { status: 400 });
 
+  const organizationId = context.membership.organizationId;
+  const id = crypto.randomUUID();
+  const comboType = String(body.comboType ?? "custom");
+  const description = body.description ? String(body.description) : null;
+  const basePlanId = body.basePlanId ? String(body.basePlanId) : null;
+  const billingMode = body.billingMode === "upfront" ? "upfront" : "installments";
+  const active = body.active !== false;
+
+  if (postgresConfigured()) {
+    const sql = getPostgresClient();
+    const now = Math.floor(Date.now() / 1000);
+    const [row] = await sql`
+      INSERT INTO billing_combos (
+        id, organization_id, name, combo_type, duration_months, description,
+        base_plan_id, base_amount_cents, discount_type, discount_value,
+        final_amount_cents, billing_mode, installment_count, active,
+        created_at, updated_at
+      ) VALUES (
+        ${id}, ${organizationId}, ${parsed.name}, ${comboType}, ${parsed.durationMonths},
+        ${description}, ${basePlanId}, ${parsed.base}, ${parsed.discountType},
+        ${parsed.discountValue}, ${parsed.final}, ${billingMode}, ${parsed.installmentCount},
+        ${active ? 1 : 0}, ${now}, ${now}
+      )
+      RETURNING *
+    `;
+    return Response.json(
+      {
+        combo: {
+          id: row.id,
+          organizationId: row.organization_id,
+          name: row.name,
+          comboType: row.combo_type,
+          durationMonths: row.duration_months,
+          description: row.description,
+          basePlanId: row.base_plan_id,
+          baseAmountCents: row.base_amount_cents,
+          discountType: row.discount_type,
+          discountValue: row.discount_value,
+          finalAmountCents: row.final_amount_cents,
+          billingMode: row.billing_mode,
+          installmentCount: row.installment_count,
+          active: Boolean(row.active),
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        },
+      },
+      { status: 201 },
+    );
+  }
+
   const now = new Date();
   const [row] = await getDb()
     .insert(billingCombos)
     .values({
-      id: crypto.randomUUID(),
-      organizationId: context.membership.organizationId,
+      id,
+      organizationId,
       name: parsed.name,
-      comboType: String(body.comboType ?? "custom"),
+      comboType,
       durationMonths: parsed.durationMonths,
-      description: body.description ? String(body.description) : null,
-      basePlanId: body.basePlanId ? String(body.basePlanId) : null,
+      description,
+      basePlanId,
       baseAmountCents: parsed.base,
       discountType: parsed.discountType as "none" | "fixed" | "percent",
       discountValue: parsed.discountValue,
       finalAmountCents: parsed.final,
-      billingMode: body.billingMode === "upfront" ? "upfront" : "installments",
+      billingMode,
       installmentCount: parsed.installmentCount,
-      active: body.active !== false,
+      active,
       createdAt: now,
       updatedAt: now,
     })

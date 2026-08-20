@@ -97,6 +97,23 @@ export function ensurePostgresSchema() {
           )
         `;
       }
+
+      // Combos financeiros nunca funcionaram no Postgres (getD1()/getDb()
+      // direto, sem branch) até esta migração, então essas duas tabelas
+      // devem estar vazias em produção -- seguro criar os índices únicos
+      // parciais que faltavam sem nenhum dado existente violá-los. São a
+      // última linha de defesa contra corrida entre duas aplicações
+      // simultâneas de combo para o mesmo atleta/competência (a checagem em
+      // app/api/finance/combos/apply/route.ts cobre o caso comum sequencial).
+      await sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS athlete_combo_coverage_active_unique
+        ON athlete_combo_coverage (organization_id, athlete_id, reference_month)
+        WHERE active = 1
+      `;
+      await sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS athlete_billing_month_reservation_unique
+        ON athlete_billing_month_reservations (organization_id, athlete_id, reference_month)
+      `;
     })().catch((error) => {
       postgresSchemaReady = null;
       throw error;

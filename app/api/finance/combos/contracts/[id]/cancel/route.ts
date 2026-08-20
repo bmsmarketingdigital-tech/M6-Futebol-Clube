@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getD1, getDb } from "../../../../../../../db";
+import { getPostgresClient, postgresConfigured } from "../../../../../../../db/postgres";
 import { athleteCombos } from "../../../../../../../db/schema";
 import { getApiContext } from "../../../../../api-auth";
 
@@ -26,6 +27,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { id } = await params;
   const organizationId = context.membership.organizationId;
+
+  if (postgresConfigured()) {
+    return cancelContractPostgres(id, organizationId);
+  }
+
   const [contract] = await getDb()
     .select()
     .from(athleteCombos)
@@ -113,6 +119,118 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   await d1.batch(statements);
+
+  return Response.json({
+    ok: true,
+    athleteComboId: id,
+    status: "cancelled",
+    preservedMonths,
+    releasedMonths,
+    cancelledPayments,
+  });
+}
+
+// Mesma logica do D1 acima, traduzida para Postgres: para cada mes coberto
+// pelo contrato, so libera (cancela cobranca + desativa cobertura + apaga
+// reserva do mes) quando o mes e futuro, a cobrança ainda esta em aberto e
+// nao tem nenhum historico financeiro (nada pago, nenhuma transacao) --
+// qualquer mes com historico e preservado. Tudo dentro de uma unica
+// transacao, igual ao d1.batch().
+async function cancelContractPostgres(id: string, organizationId: string) {
+  const sql = getPostgresClient();
+
+  const [contract] = await sql<{ id: string }[]>`
+    SELECT id FROM athlete_combos
+    WHERE id = ${id} AND organization_id = ${organizationId}
+    LIMIT 1
+  `;
+  if (!contract) {
+    return Response.json({ error: "Contrato de Combo nao encontrado." }, { status: 404 });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const currentMonth = currentReferenceMonth();
+
+  const rows = await sql<CoverageRow[]>`
+    SELECT
+      c.reference_month,
+      c.active,
+      p.id AS payment_id,
+      p.status AS payment_status,
+      COALESCE(p.paid_amount_cents,0) AS paid_amount_cents,
+      COALESCE((SELECT SUM(amount_cents) FROM payment_transactions t WHERE t.payment_id = p.id),0) AS transaction_total
+    FROM athlete_combo_coverage c
+    LEFT JOIN payments p
+      ON p.athlete_combo_id = c.athlete_combo_id
+     AND p.organization_id = c.organization_id
+     AND p.athlete_id = c.athlete_id
+     AND p.reference_month = c.reference_month
+    WHERE c.organization_id = ${organizationId}
+      AND c.athlete_combo_id = ${id}
+    ORDER BY c.reference_month
+  `;
+
+  const preservedMonths: string[] = [];
+  const releasedMonths: string[] = [];
+  const cancelledPayments: string[] = [];
+
+  await sql.begin(async (transaction) => {
+    await transaction`
+      UPDATE athlete_combos SET status='cancelled', updated_at=${now}
+      WHERE id=${id} AND organization_id=${organizationId} AND status!='cancelled'
+    `;
+
+    for (const row of rows) {
+      const isFuture = row.reference_month > currentMonth;
+      const hasFinancialHistory = row.paid_amount_cents > 0 || row.transaction_total !== 0;
+      const canRelease =
+        row.active === 1 &&
+        isFuture &&
+        row.payment_id &&
+        row.payment_status === "open" &&
+        !hasFinancialHistory;
+
+      if (!canRelease) {
+        preservedMonths.push(row.reference_month);
+        continue;
+      }
+
+      await transaction`
+        UPDATE payments SET status='cancelled', paid_at=NULL, payment_method=NULL, updated_at=${now}
+        WHERE id=${row.payment_id} AND organization_id=${organizationId} AND athlete_combo_id=${id}
+          AND status='open' AND COALESCE(paid_amount_cents,0)=0
+          AND NOT EXISTS (SELECT 1 FROM payment_transactions WHERE payment_id=payments.id)
+      `;
+      await transaction`
+        UPDATE athlete_combo_coverage SET active=0, released_at=${now}
+        WHERE organization_id=${organizationId} AND athlete_combo_id=${id}
+          AND reference_month=${row.reference_month} AND active=1
+          AND EXISTS (
+            SELECT 1 FROM payments p
+            WHERE p.organization_id=athlete_combo_coverage.organization_id
+              AND p.athlete_combo_id=athlete_combo_coverage.athlete_combo_id
+              AND p.athlete_id=athlete_combo_coverage.athlete_id
+              AND p.reference_month=athlete_combo_coverage.reference_month
+              AND p.status='cancelled' AND COALESCE(p.paid_amount_cents,0)=0
+              AND NOT EXISTS (SELECT 1 FROM payment_transactions WHERE payment_id=p.id)
+          )
+      `;
+      await transaction`
+        DELETE FROM athlete_billing_month_reservations
+        WHERE organization_id=${organizationId} AND source_type='combo' AND source_id=${id}
+          AND reference_month=${row.reference_month}
+          AND EXISTS (
+            SELECT 1 FROM athlete_combo_coverage c
+            WHERE c.organization_id=athlete_billing_month_reservations.organization_id
+              AND c.athlete_combo_id=athlete_billing_month_reservations.source_id
+              AND c.reference_month=athlete_billing_month_reservations.reference_month
+              AND c.active=0 AND c.released_at=${now}
+          )
+      `;
+      releasedMonths.push(row.reference_month);
+      cancelledPayments.push(row.payment_id as string);
+    }
+  });
 
   return Response.json({
     ok: true,
