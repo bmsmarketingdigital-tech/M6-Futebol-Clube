@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { getD1, getDb } from "../../../../../db";
 import { getPostgresClient, postgresConfigured } from "../../../../../db/postgres";
 import {
@@ -9,12 +9,69 @@ import {
   teams,
 } from "../../../../../db/schema";
 import { getApiContext } from "../../../api-auth";
+import { sendWhatsAppMessage } from "../../../check-in/whatsapp-bridge";
 
 export const dynamic = "force-dynamic";
 
 function validDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) &&
     !Number.isNaN(new Date(`${value}T12:00:00`).getTime());
+}
+
+function formatDateBR(value: string) {
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+// Só notifica presença quando a chamada do dia é feita pela primeira vez —
+// reabrir e corrigir uma chamada já salva (edição) não deve reenviar
+// mensagem para quem já foi avisado.
+async function notifyPresentGuardians(
+  organizationId: string,
+  teamName: string,
+  date: string,
+  roster: { id: string; name: string }[],
+  submitted: Map<string, { present: boolean; note: string | null }>,
+) {
+  const presentAthletes = roster.filter(
+    (athlete) => submitted.get(athlete.id)?.present !== false,
+  );
+  if (presentAthletes.length === 0) return 0;
+  const presentIds = presentAthletes.map((athlete) => athlete.id);
+
+  let phoneByAthleteId: Map<string, string | null>;
+  if (postgresConfigured()) {
+    const sqlClient = getPostgresClient();
+    const rows = await sqlClient<{ id: string; guardian_phone: string | null }[]>`
+      SELECT id, guardian_phone FROM athletes
+      WHERE organization_id = ${organizationId}
+        AND id IN ${sqlClient(presentIds)}`;
+    phoneByAthleteId = new Map(rows.map((row) => [row.id, row.guardian_phone]));
+  } else {
+    const db = getDb();
+    const rows = await db
+      .select({ id: athletes.id, guardianPhone: athletes.guardianPhone })
+      .from(athletes)
+      .where(
+        and(
+          eq(athletes.organizationId, organizationId),
+          inArray(athletes.id, presentIds),
+        ),
+      );
+    phoneByAthleteId = new Map(rows.map((row) => [row.id, row.guardianPhone]));
+  }
+
+  let notified = 0;
+  for (const athlete of presentAthletes) {
+    const phone = phoneByAthleteId.get(athlete.id);
+    if (!phone) continue;
+    const message =
+      `Presença confirmada: ${athlete.name} participou do treino da turma ` +
+      `${teamName} hoje (${formatDateBR(date)}).`;
+    const delivery = await sendWhatsAppMessage(phone, message);
+    if (delivery.status === "sent") notified += 1;
+  }
+  return notified;
 }
 
 async function getAuthorizedTeam(request: Request, teamId: string) {
@@ -240,7 +297,8 @@ export async function POST(
           SELECT id, status FROM attendance_sessions
           WHERE team_id = ${id} AND session_date = ${date} FOR UPDATE`;
         if (sessions[0]?.status === "canceled") return { conflict: true as const };
-        if (!sessions[0]) {
+        const isNewSession = !sessions[0];
+        if (isNewSession) {
           const sessionId = crypto.randomUUID();
           await transaction`
             INSERT INTO attendance_sessions
@@ -270,7 +328,7 @@ export async function POST(
               updated_at = ${Math.floor(Date.now() / 1000)}
             WHERE id = ${athlete.id} AND organization_id = ${organizationId}`;
         }
-        return { conflict: false as const };
+        return { conflict: false as const, isNewSession };
       });
       if (result.conflict) {
         return Response.json(
@@ -279,9 +337,12 @@ export async function POST(
         );
       }
       const presentCount = roster.filter((athlete) => submitted.get(athlete.id)?.present !== false).length;
+      const notified = result.isNewSession
+        ? await notifyPresentGuardians(organizationId, authorized.team.name, date, roster, submitted)
+        : 0;
       return Response.json({
         saved: true, date, total: roster.length, present: presentCount,
-        absent: roster.length - presentCount,
+        absent: roster.length - presentCount, notified,
       });
     }
 
@@ -307,6 +368,7 @@ export async function POST(
       );
     }
 
+    const isNewSession = !session;
     if (!session) {
       try {
         [session] = await db
@@ -412,12 +474,22 @@ export async function POST(
     const presentCount = roster.filter(
       (athlete) => submitted.get(athlete.id)?.present !== false,
     ).length;
+    const notified = isNewSession
+      ? await notifyPresentGuardians(
+          authorized.context.membership.organizationId,
+          authorized.team.name,
+          date,
+          roster,
+          submitted,
+        )
+      : 0;
     return Response.json({
       saved: true,
       date,
       total: roster.length,
       present: presentCount,
       absent: roster.length - presentCount,
+      notified,
     });
   } catch (error) {
     console.error("Failed to save attendance", error);
