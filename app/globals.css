@@ -735,7 +735,7 @@ select option { background: #ffffff; color: #1a1917; }
 
 @media (max-width: 900px) {
   .system-splash {
-    background-position: 76% center;
+    background-position: 100% center;
   }
   .system-splash .splash-shade {
     background:
@@ -773,8 +773,10 @@ select option { background: #ffffff; color: #1a1917; }
 
 @media (max-width: 520px) {
   .system-splash {
+    /* Enquadra só o jogador (canto direito da arte) -- o resto da imagem tem
+       texto/cards que ficam cortados de forma estranha em telas estreitas. */
     background-size: auto 100%;
-    background-position: 78% center;
+    background-position: 100% center;
   }
 }
 
