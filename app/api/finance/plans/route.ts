@@ -37,7 +37,7 @@ function planToDto(row: BillingPlanRow) {
 export async function GET(request: Request) {
   const context = await getApiContext(request);
   if (!context) {
-    return Response.json({ error: "Acesso nÃ£o autorizado." }, { status: 401 });
+    return Response.json({ error: "Acesso não autorizado." }, { status: 401 });
   }
 
   if (postgresConfigured()) {
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
   try {
     const context = await getApiContext(request);
     if (!context) {
-      return Response.json({ error: "Acesso nÃ£o autorizado." }, { status: 401 });
+      return Response.json({ error: "Acesso não autorizado." }, { status: 401 });
     }
     const parsed = parsePlanPayload(await request.json());
     if ("error" in parsed) {
@@ -113,7 +113,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Failed to create billing plan", error);
     return Response.json(
-      { error: "NÃ£o foi possÃ­vel criar o plano." },
+      { error: "Não foi possível criar o plano." },
       { status: 500 },
     );
   }

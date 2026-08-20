@@ -67,7 +67,7 @@ export async function POST(request: Request) {
       );
     } catch {
       return Response.json(
-        { error: "JÃ¡ existe uma categoria com esse nome." },
+        { error: "Já existe uma categoria com esse nome." },
         { status: 409 },
       );
     }

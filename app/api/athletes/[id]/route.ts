@@ -180,7 +180,7 @@ export async function PATCH(
       `;
 
       if (!existingAthlete) {
-        return Response.json({ error: "Atleta nÃ£o encontrado." }, { status: 404 });
+        return Response.json({ error: "Atleta não encontrado." }, { status: 404 });
       }
 
       const categoryChanged = existingAthlete.category !== category;
@@ -197,7 +197,7 @@ export async function PATCH(
           age > 18
         ) {
           return Response.json(
-            { error: "A data de nascimento deve corresponder Ã  idade de 4 a 18 anos." },
+            { error: "A data de nascimento deve corresponder à idade de 4 a 18 anos." },
             { status: 400 },
           );
         }
@@ -252,7 +252,7 @@ export async function PATCH(
       });
 
       if (!updated) {
-        return Response.json({ error: "Atleta nÃ£o encontrado." }, { status: 404 });
+        return Response.json({ error: "Atleta não encontrado." }, { status: 404 });
       }
 
       return Response.json({ athlete: toDto(updated) });
@@ -388,7 +388,7 @@ export async function DELETE(
       `;
 
       if (!archived) {
-        return Response.json({ error: "Atleta nÃ£o encontrado." }, { status: 404 });
+        return Response.json({ error: "Atleta não encontrado." }, { status: 404 });
       }
 
       return Response.json({ archived: true, id: archived.id });

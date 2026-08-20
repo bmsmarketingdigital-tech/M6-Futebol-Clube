@@ -167,7 +167,7 @@ export async function POST(request: Request) {
         `;
         if (validAthletes.length !== value.athleteIds.length) {
           return Response.json(
-            { error: "Um ou mais atletas selecionados nÃ£o sÃ£o vÃ¡lidos." },
+            { error: "Um ou mais atletas selecionados não são válidos." },
             { status: 400 },
           );
         }
@@ -175,7 +175,7 @@ export async function POST(request: Request) {
           return Response.json(
             {
               error:
-                "Um ou mais atletas selecionados sÃ£o de categoria diferente da turma.",
+                "Um ou mais atletas selecionados são de categoria diferente da turma.",
             },
             { status: 409 },
           );

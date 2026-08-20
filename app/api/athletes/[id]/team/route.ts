@@ -41,7 +41,7 @@ export async function PATCH(
         LIMIT 1
       `;
       if (!athlete) {
-        return Response.json({ error: "Atleta nÃ£o encontrado." }, { status: 404 });
+        return Response.json({ error: "Atleta não encontrado." }, { status: 404 });
       }
 
       const [currentMembership] = await sql<{ team_id: string }[]>`
@@ -123,13 +123,13 @@ export async function PATCH(
 
       if ("error" in result) {
         if (result.error === "NOT_FOUND") {
-          return Response.json({ error: "Turma nÃ£o encontrada." }, { status: 404 });
+          return Response.json({ error: "Turma não encontrada." }, { status: 404 });
         }
         if (result.error === "CATEGORY_MISMATCH") {
           return Response.json(
             {
               error:
-                "A turma selecionada Ã© de categoria diferente da categoria atual do atleta.",
+                "A turma selecionada é de categoria diferente da categoria atual do atleta.",
             },
             { status: 409 },
           );

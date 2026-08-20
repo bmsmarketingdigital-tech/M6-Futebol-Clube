@@ -304,7 +304,7 @@ export async function POST(request: Request) {
             athlete: { id: athlete.id, name: athlete.name, category: athlete.category },
             teamName: enrollment.teamName,
             scannedAt: existing.scannedAt.toISOString(),
-            message: "Entrada jÃ¡ registrada nesta sessÃ£o.",
+            message: "Entrada já registrada nesta sessão.",
           });
         }
       }

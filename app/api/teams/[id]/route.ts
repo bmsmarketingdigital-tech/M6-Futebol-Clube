@@ -64,7 +64,7 @@ export async function PATCH(
         LIMIT 1
       `;
       if (!current) {
-        return Response.json({ error: "Turma nÃ£o encontrada." }, { status: 404 });
+        return Response.json({ error: "Turma não encontrada." }, { status: 404 });
       }
 
       if (value.athleteIds.length > 0) {
@@ -77,7 +77,7 @@ export async function PATCH(
         `;
         if (validAthletes.length !== value.athleteIds.length) {
           return Response.json(
-            { error: "Um ou mais atletas selecionados nÃ£o sÃ£o vÃ¡lidos." },
+            { error: "Um ou mais atletas selecionados não são válidos." },
             { status: 400 },
           );
         }
@@ -85,7 +85,7 @@ export async function PATCH(
           return Response.json(
             {
               error:
-                "Um ou mais atletas selecionados sÃ£o de categoria diferente da turma.",
+                "Um ou mais atletas selecionados são de categoria diferente da turma.",
             },
             { status: 409 },
           );
@@ -154,7 +154,7 @@ export async function PATCH(
       });
 
       if (!updated) {
-        return Response.json({ error: "Turma nÃ£o encontrada." }, { status: 404 });
+        return Response.json({ error: "Turma não encontrada." }, { status: 404 });
       }
 
       return Response.json({ team: teamToDto(updated, value.athleteIds) });
@@ -336,7 +336,7 @@ export async function DELETE(
       });
 
       if (!archived) {
-        return Response.json({ error: "Turma nÃ£o encontrada." }, { status: 404 });
+        return Response.json({ error: "Turma não encontrada." }, { status: 404 });
       }
 
       return Response.json({ archived: true, id: archived.id });

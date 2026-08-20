@@ -39,7 +39,7 @@ export async function POST(
 ) {
   const context = await getApiContext(request);
   if (!context) {
-    return Response.json({ error: "Acesso nÃ£o autorizado." }, { status: 401 });
+    return Response.json({ error: "Acesso não autorizado." }, { status: 401 });
   }
   const { id } = await params;
 
@@ -57,7 +57,7 @@ export async function POST(
     `;
     return plan
       ? Response.json({ plan: planToDto(plan) })
-      : Response.json({ error: "Plano arquivado nÃ£o encontrado." }, { status: 404 });
+      : Response.json({ error: "Plano arquivado não encontrado." }, { status: 404 });
   }
 
   const [plan] = await getDb()
@@ -73,5 +73,5 @@ export async function POST(
     .returning();
   return plan
     ? Response.json({ plan: planToDto(plan) })
-    : Response.json({ error: "Plano arquivado nÃ£o encontrado." }, { status: 404 });
+    : Response.json({ error: "Plano arquivado não encontrado." }, { status: 404 });
 }

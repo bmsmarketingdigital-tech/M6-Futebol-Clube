@@ -40,7 +40,7 @@ export async function PATCH(
       LIMIT 1
     `;
     if (!category) {
-      return Response.json({ error: "Categoria nÃ£o encontrada." }, { status: 404 });
+      return Response.json({ error: "Categoria não encontrada." }, { status: 404 });
     }
 
     const [duplicate] = await sql<{ id: string }[]>`
@@ -51,7 +51,7 @@ export async function PATCH(
     `;
     if (duplicate && duplicate.id !== id) {
       return Response.json(
-        { error: "JÃ¡ existe uma categoria com esse nome." },
+        { error: "Já existe uma categoria com esse nome." },
         { status: 409 },
       );
     }
@@ -77,7 +77,7 @@ export async function PATCH(
       });
     } catch {
       return Response.json(
-        { error: "JÃ¡ existe uma categoria com esse nome." },
+        { error: "Já existe uma categoria com esse nome." },
         { status: 409 },
       );
     }
@@ -174,7 +174,7 @@ export async function DELETE(
       LIMIT 1
     `;
     if (!category) {
-      return Response.json({ error: "Categoria nÃ£o encontrada." }, { status: 404 });
+      return Response.json({ error: "Categoria não encontrada." }, { status: 404 });
     }
 
     const [[athleteInUse], [teamInUse]] = await Promise.all([
@@ -193,7 +193,7 @@ export async function DELETE(
       return Response.json(
         {
           error:
-            "Essa categoria estÃ¡ em uso. Edite os atletas e as turmas antes de excluÃ­-la.",
+            "Essa categoria está em uso. Edite os atletas e as turmas antes de excluí-la.",
         },
         { status: 409 },
       );
@@ -232,7 +232,7 @@ export async function DELETE(
       return Response.json(
         {
           error:
-            "Essa categoria estÃ¡ em uso ou Ã© a Ãºnica cadastrada. Atualize os vÃ­nculos e tente novamente.",
+            "Essa categoria está em uso ou é a única cadastrada. Atualize os vínculos e tente novamente.",
         },
         { status: 409 },
       );

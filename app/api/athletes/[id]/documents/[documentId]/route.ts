@@ -138,7 +138,7 @@ export async function DELETE(
       `;
       if (!deletedRow) {
         return Response.json(
-          { error: "Documento nÃ£o encontrado." },
+          { error: "Documento não encontrado." },
           { status: 404 },
         );
       }

@@ -240,7 +240,7 @@ export async function POST(request: Request) {
         enrolledTeamId = compatibleTeams[0].id;
       } else if (compatibleTeams.length > 1) {
         return Response.json(
-          { error: "Selecione a turma em que o atleta serÃ¡ matriculado." },
+          { error: "Selecione a turma em que o atleta será matriculado." },
           { status: 400 },
         );
       }

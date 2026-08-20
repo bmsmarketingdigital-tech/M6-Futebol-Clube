@@ -25,6 +25,7 @@ export function CategoryManagerModal({
     Object.fromEntries(categories.map((category) => [category.id, category.name])),
   );
   const [busyId, setBusyId] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<CategoryRecord | null>(null);
 
   async function addCategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -101,7 +102,7 @@ export function CategoryManagerModal({
   }
 
   async function deleteCategory(category: CategoryRecord) {
-    if (!window.confirm(`Excluir a categoria ${category.name}?`)) return;
+    setConfirmDelete(null);
     setBusyId(category.id);
     try {
       const response = await fetch(`/api/categories/${category.id}`, {
@@ -196,7 +197,7 @@ export function CategoryManagerModal({
                   type="button"
                   className="category-delete"
                   disabled={busyId === category.id}
-                  onClick={() => void deleteCategory(category)}
+                  onClick={() => setConfirmDelete(category)}
                   aria-label={`Excluir ${category.name}`}
                   title="Excluir categoria"
                 >
@@ -207,6 +208,22 @@ export function CategoryManagerModal({
           })}
         </div>
       </section>
+
+      {confirmDelete && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { event.stopPropagation(); setConfirmDelete(null); }}>
+          <div className="modal confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="category-delete-title" onMouseDown={(event) => event.stopPropagation()}>
+            <button className="modal-close" onClick={() => setConfirmDelete(null)} aria-label="Fechar">
+              <X size={18} strokeWidth={1.75} />
+            </button>
+            <h2 id="category-delete-title">Excluir categoria</h2>
+            <p>Tem certeza que deseja excluir a categoria &quot;{confirmDelete.name}&quot;? Essa ação não pode ser desfeita.</p>
+            <div className="confirm-modal-buttons">
+              <button className="filter-button" type="button" onClick={() => setConfirmDelete(null)}>Cancelar</button>
+              <button className="danger-confirm-button" type="button" onClick={() => void deleteCategory(confirmDelete)}>Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
