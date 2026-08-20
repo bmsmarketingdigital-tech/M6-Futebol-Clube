@@ -74,27 +74,6 @@ export function ensurePostgresSchema() {
         CREATE UNIQUE INDEX IF NOT EXISTS sports_categories_org_name_unique
         ON sports_categories (organization_id, name)
       `;
-      // DIAGNÓSTICO TEMPORÁRIO (remover depois de confirmar a causa da
-      // duplicata "SUB-13"): confere se o índice está válido e se ainda
-      // sobra algum grupo duplicado exato após o DELETE acima.
-      try {
-        const indexRows = await sql<{ indisvalid: boolean; indisready: boolean }[]>`
-          SELECT indisvalid, indisready FROM pg_index
-          WHERE indexrelid = 'sports_categories_org_name_unique'::regclass
-        `;
-        const dupeRows = await sql<{ organization_id: string; name: string; count: number }[]>`
-          SELECT organization_id, name, COUNT(*)::int AS count
-          FROM sports_categories
-          GROUP BY organization_id, name
-          HAVING COUNT(*) > 1
-        `;
-        console.error(
-          "sports_categories diagnostic",
-          JSON.stringify({ index: indexRows[0], duplicates: dupeRows }),
-        );
-      } catch (diagnosticError) {
-        console.error("sports_categories diagnostic failed", diagnosticError);
-      }
     })().catch((error) => {
       postgresSchemaReady = null;
       throw error;
