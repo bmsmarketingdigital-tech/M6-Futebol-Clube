@@ -913,6 +913,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
             );
           }}
           onTeamChanged={() => void loadTeams()}
+          onManageCategories={() => setCategoryManagerOpen(true)}
           notify={notify}
         />
       )}

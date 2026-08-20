@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { Settings, X } from "lucide-react";
 import type { AthleteRecord } from "./AthleteProfileModal";
 import { AthleteFinancialSection } from "./AthleteFinancialSection";
 import type { CategoryRecord } from "./CategoryManagerModal";
@@ -15,6 +15,7 @@ export function AthleteEditModal({
   onSaved,
   onDeleted,
   onTeamChanged,
+  onManageCategories,
   notify,
 }: {
   athlete: AthleteRecord;
@@ -24,6 +25,7 @@ export function AthleteEditModal({
   onSaved: (athlete: AthleteRecord) => void;
   onDeleted: (athleteId: string) => void;
   onTeamChanged: () => void;
+  onManageCategories: () => void;
   notify: (message: string) => void;
 }) {
   const [saving, setSaving] = useState(false);
@@ -185,8 +187,19 @@ export function AthleteEditModal({
               defaultValue={athlete.birthDate ?? ""}
             />
           </label>
-          <label>
-            Categoria
+          <label className="category-field">
+            <span className="category-label">
+              Categoria
+              <button
+                type="button"
+                className="category-settings-button"
+                onClick={onManageCategories}
+                aria-label="Configurar categorias"
+                title="Configurar categorias"
+              >
+                <Settings size={14} strokeWidth={1.75} />
+              </button>
+            </span>
             <select
               name="category"
               value={category}
