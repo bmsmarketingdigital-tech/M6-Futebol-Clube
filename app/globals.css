@@ -5880,11 +5880,14 @@ body {
   }
   .expense-actions { grid-column: 1 / -1; flex-wrap: wrap; }
 
-  /* Modais viram folhas de aplicativo em tela cheia. */
+  /* Modais viram folhas de aplicativo em tela cheia. Precisa ficar acima da
+     bottom nav (z-index:90) — senão a barra cobre o rodapé do modal (botões
+     "Salvar"/"Excluir" ficam escondidos atrás dela). */
   .modal-backdrop,
   .category-backdrop {
     position: fixed !important;
     inset: 0 !important;
+    z-index: 95;
     width: 100dvw;
     height: 100dvh;
     padding: 0;
@@ -6289,7 +6292,8 @@ body {
   .toast {
     right: 12px;
     left: 12px;
-    bottom: calc(12px + env(safe-area-inset-bottom));
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    z-index: 95;
     width: auto;
     max-width: none;
     min-width: 0;
