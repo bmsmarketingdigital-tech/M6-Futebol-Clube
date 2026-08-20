@@ -5663,9 +5663,13 @@ body {
   /* Categorias, turmas e chamada */
   .teams-page .team-toolbar-card,
   .attendance-page .attendance-toolbar-card { padding: 0; }
-  .teams-page .team-toolbar { display: grid; grid-template-columns: 1fr 1fr; }
+  /* Busca numa linha só; Categoria/Dia/Ordenar juntos na linha seguinte, em
+     vez de 2+1 (que deixava "Ordenar" sozinho com um vão vazio ao lado). O
+     contador de resultados some no mobile -- a lista logo abaixo já mostra
+     quantas turmas existem, mais uma linha de texto não ajuda em nada. */
+  .teams-page .team-toolbar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .teams-page .team-toolbar .athlete-list-search { grid-column: 1 / -1; }
-  .teams-page .team-toolbar > strong { grid-column: 1 / -1; justify-self: start; }
+  .teams-page .team-toolbar > strong { display: none; }
   .teams-page .class-grid { display: grid; grid-template-columns: 1fr; gap: 10px; height: auto; padding: 10px 0 0; overflow: visible; }
   .teams-page .class-card { min-height: 0; height: auto; padding: 16px; border-radius: 19px; }
   .teams-page .class-card h3 { margin: 14px 0 3px; font-size: 20px; }
