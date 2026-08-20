@@ -23,21 +23,23 @@ function formatDateBR(value: string) {
   return `${day}/${month}/${year}`;
 }
 
-// Só notifica presença quando a chamada do dia é feita pela primeira vez —
+// Só notifica falta quando a chamada do dia é feita pela primeira vez —
 // reabrir e corrigir uma chamada já salva (edição) não deve reenviar
-// mensagem para quem já foi avisado.
-async function notifyPresentGuardians(
+// mensagem para quem já foi avisado. Notifica ausência (não presença): o
+// caso real é o atleta dizer em casa que vai treinar, não aparecer, e o
+// responsável só descobrir pela chamada.
+async function notifyAbsentGuardians(
   organizationId: string,
   teamName: string,
   date: string,
   roster: { id: string; name: string }[],
   submitted: Map<string, { present: boolean; note: string | null }>,
 ) {
-  const presentAthletes = roster.filter(
-    (athlete) => submitted.get(athlete.id)?.present !== false,
+  const absentAthletes = roster.filter(
+    (athlete) => submitted.get(athlete.id)?.present === false,
   );
-  if (presentAthletes.length === 0) return 0;
-  const presentIds = presentAthletes.map((athlete) => athlete.id);
+  if (absentAthletes.length === 0) return 0;
+  const absentIds = absentAthletes.map((athlete) => athlete.id);
 
   let phoneByAthleteId: Map<string, string | null>;
   if (postgresConfigured()) {
@@ -45,7 +47,7 @@ async function notifyPresentGuardians(
     const rows = await sqlClient<{ id: string; guardian_phone: string | null }[]>`
       SELECT id, guardian_phone FROM athletes
       WHERE organization_id = ${organizationId}
-        AND id IN ${sqlClient(presentIds)}`;
+        AND id IN ${sqlClient(absentIds)}`;
     phoneByAthleteId = new Map(rows.map((row) => [row.id, row.guardian_phone]));
   } else {
     const db = getDb();
@@ -55,18 +57,18 @@ async function notifyPresentGuardians(
       .where(
         and(
           eq(athletes.organizationId, organizationId),
-          inArray(athletes.id, presentIds),
+          inArray(athletes.id, absentIds),
         ),
       );
     phoneByAthleteId = new Map(rows.map((row) => [row.id, row.guardianPhone]));
   }
 
   let notified = 0;
-  for (const athlete of presentAthletes) {
+  for (const athlete of absentAthletes) {
     const phone = phoneByAthleteId.get(athlete.id);
     if (!phone) continue;
     const message =
-      `Presença confirmada: ${athlete.name} participou do treino da turma ` +
+      `Aviso: ${athlete.name} não compareceu ao treino da turma ` +
       `${teamName} hoje (${formatDateBR(date)}).`;
     const delivery = await sendWhatsAppMessage(phone, message);
     if (delivery.status === "sent") notified += 1;
@@ -338,7 +340,7 @@ export async function POST(
       }
       const presentCount = roster.filter((athlete) => submitted.get(athlete.id)?.present !== false).length;
       const notified = result.isNewSession
-        ? await notifyPresentGuardians(organizationId, authorized.team.name, date, roster, submitted)
+        ? await notifyAbsentGuardians(organizationId, authorized.team.name, date, roster, submitted)
         : 0;
       return Response.json({
         saved: true, date, total: roster.length, present: presentCount,
@@ -475,7 +477,7 @@ export async function POST(
       (athlete) => submitted.get(athlete.id)?.present !== false,
     ).length;
     const notified = isNewSession
-      ? await notifyPresentGuardians(
+      ? await notifyAbsentGuardians(
           authorized.context.membership.organizationId,
           authorized.team.name,
           date,
