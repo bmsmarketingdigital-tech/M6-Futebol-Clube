@@ -177,6 +177,9 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
   const [teamModalOpen, setTeamModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamRecord | null>(null);
   const [attendanceTeam, setAttendanceTeam] = useState<TeamRecord | null>(null);
+  const [attendanceStatusToday, setAttendanceStatusToday] = useState<
+    Record<string, "completed" | "canceled">
+  >({});
   const [toast, setToast] = useState("");
   const [loadingAthletes, setLoadingAthletes] = useState(true);
   const [savingAthlete, setSavingAthlete] = useState(false);
@@ -260,6 +263,22 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
     }
   }, []);
 
+  const loadAttendanceStatusToday = useCallback(async () => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const response = await fetch(`/api/teams/attendance-status?date=${today}`, {
+        headers: { Accept: "application/json" },
+      });
+      const payload = (await response.json()) as {
+        statuses?: Record<string, "completed" | "canceled">;
+      };
+      if (response.ok) setAttendanceStatusToday(payload.statuses ?? {});
+    } catch {
+      // Indicador informativo apenas — sem estado, os cards mostram "Chamada"
+      // como se ainda estivesse pendente, o que é seguro.
+    }
+  }, []);
+
   const loadCategories = useCallback(async () => {
     try {
       const response = await fetch("/api/categories", {
@@ -325,11 +344,12 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
       void loadAthletes();
       void loadTeams();
       void loadCategories();
+      void loadAttendanceStatusToday();
       if (user.role === "admin") void loadFinanceOverview();
       void loadDashboardSummary();
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [loadAthletes, loadCategories, loadDashboardSummary, loadFinanceOverview, loadTeams, user.role]);
+  }, [loadAthletes, loadAttendanceStatusToday, loadCategories, loadDashboardSummary, loadFinanceOverview, loadTeams, user.role]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void checkReminders(), 0);
@@ -738,6 +758,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
               summary={dashboardSummary}
               canViewFinance={user.role === "admin"}
               userName={user.displayName}
+              attendanceStatusToday={attendanceStatusToday}
             />
           ) : section === "Combos" ? (
             <CombosManagement athletes={athletes} notify={notify} onBack={() => setSection("Visão geral")} />
@@ -778,6 +799,7 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
                 setTeamModalOpen(true);
               }}
               onAttendance={setAttendanceTeam}
+              attendanceStatusToday={attendanceStatusToday}
               onOpenAthlete={
                 section === "Atletas" ? setEditingAthlete : setProfileAthlete
               }
@@ -990,7 +1012,10 @@ function ManagementApp({ user, onSignOut }: { user: SessionUser; onSignOut: () =
         <AttendanceModal
           key={attendanceTeam.id}
           team={attendanceTeam}
-          onClose={() => setAttendanceTeam(null)}
+          onClose={() => {
+            setAttendanceTeam(null);
+            void loadAttendanceStatusToday();
+          }}
           onSaved={() => void loadAthletes()}
           notify={notify}
         />
@@ -1094,6 +1119,7 @@ function Dashboard({
   summary,
   canViewFinance,
   userName,
+  attendanceStatusToday,
 }: {
   athletes: Athlete[];
   categories: CategoryRecord[];
@@ -1106,6 +1132,7 @@ function Dashboard({
   summary: DashboardSummary;
   canViewFinance: boolean;
   userName: string;
+  attendanceStatusToday: Record<string, "completed" | "canceled">;
 }) {
   const averageAttendance = athletes.length
     ? Math.round(
@@ -1223,21 +1250,30 @@ function Dashboard({
           ))}
         </div>
         <div className="quick-team-list">
-          {quickTeams.map((team) => (
-            <button
-              key={team.id}
-              type="button"
-              className="quick-team-card"
-              onClick={() => team.players > 0 ? onAttendance(team) : onOpenTeam(team)}
-            >
-              <span className="quick-team-time">{team.startTime}</span>
-              <span className="quick-team-copy">
-                <strong>{team.category} · {team.place}</strong>
-                <small>{team.scheduleDays.join(" · ")} · {team.coachName} · {team.players} atletas</small>
-              </span>
-              <b>{team.players > 0 ? "Chamada" : "Montar"}</b>
-            </button>
-          ))}
+          {quickTeams.map((team) => {
+            const todayStatus = attendanceStatusToday[team.id];
+            return (
+              <button
+                key={team.id}
+                type="button"
+                className={todayStatus ? `quick-team-card ${todayStatus}` : "quick-team-card"}
+                onClick={() => team.players > 0 ? onAttendance(team) : onOpenTeam(team)}
+              >
+                <span className="quick-team-time">{team.startTime}</span>
+                <span className="quick-team-copy">
+                  <strong>{team.category} · {team.place}</strong>
+                  <small>{team.scheduleDays.join(" · ")} · {team.coachName} · {team.players} atletas</small>
+                </span>
+                <b>
+                  {todayStatus === "completed"
+                    ? <><CheckCircle2 size={14} strokeWidth={2} /> Feita</>
+                    : todayStatus === "canceled"
+                      ? "Cancelada"
+                      : team.players > 0 ? "Chamada" : "Montar"}
+                </b>
+              </button>
+            );
+          })}
           {quickTeams.length === 0 && (
             <div className="agenda-empty">
               <strong>Nenhuma turma nesta categoria</strong>
@@ -1379,6 +1415,7 @@ function SectionView({
   onNewTeam,
   onOpenTeam,
   onAttendance,
+  attendanceStatusToday,
   onOpenAthlete,
   canViewFinance,
   onBack,
@@ -1392,6 +1429,7 @@ function SectionView({
   onNewTeam: () => void;
   onOpenTeam: (team: TeamRecord) => void;
   onAttendance: (team: TeamRecord) => void;
+  attendanceStatusToday: Record<string, "completed" | "canceled">;
   onOpenAthlete: (athlete: Athlete) => void;
   canViewFinance: boolean;
   onBack: () => void;
@@ -1706,13 +1744,28 @@ function SectionView({
         </div>
       ) : section === "Presença" ? (
 <div className="attendance-browser"><div className="card attendance-toolbar-card"><div className="attendance-toolbar"><label className="athlete-list-search"><span><Search size={14} strokeWidth={1.75} /></span><input value={attendanceQuery} onChange={(event) => setAttendanceQuery(event.target.value)} placeholder="Buscar turma, categoria ou professor..." /></label><label className="athlete-category-filter"><span>Categoria</span><select value={attendanceCategory} onChange={(event) => setAttendanceCategory(event.target.value)}><option value="all">Todas</option>{categories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}</select></label><label className="athlete-category-filter"><span>Dia</span><select value={attendanceDay} onChange={(event) => setAttendanceDay(event.target.value)}><option value="all">Todos</option><option value="Seg">Segunda</option><option value="Ter">Terça</option><option value="Qua">Quarta</option><option value="Qui">Quinta</option><option value="Sex">Sexta</option><option value="Sáb">Sábado</option><option value="Dom">Domingo</option></select></label><strong>{visibleAttendanceTeams.length} turma(s)</strong></div></div><div className="attendance-team-grid">
-            {visibleAttendanceTeams.map((team) => (
-            <button className="card attendance-team-card" key={team.id} onClick={() => onAttendance(team)}>
-              <span className={`attention-icon ${team.color === "orange" ? "orange" : "green"}`}><CheckSquare size={15} strokeWidth={1.75} /></span>
-              <div><strong>{team.name} · {team.category}</strong><small>{team.scheduleDays.join(" e ")} · {team.startTime} · {team.players} atletas</small></div>
-              <b>Fazer chamada →</b>
-            </button>
-          ))}
+            {visibleAttendanceTeams.map((team) => {
+              const todayStatus = attendanceStatusToday[team.id];
+              return (
+                <button
+                  className={todayStatus ? `card attendance-team-card ${todayStatus}` : "card attendance-team-card"}
+                  key={team.id}
+                  onClick={() => onAttendance(team)}
+                >
+                  <span className={`attention-icon ${todayStatus === "completed" ? "green" : todayStatus === "canceled" ? "red" : team.color === "orange" ? "orange" : "green"}`}>
+                    {todayStatus === "completed" ? <CheckCircle2 size={15} strokeWidth={1.75} /> : <CheckSquare size={15} strokeWidth={1.75} />}
+                  </span>
+                  <div><strong>{team.name} · {team.category}</strong><small>{team.scheduleDays.join(" e ")} · {team.startTime} · {team.players} atletas</small></div>
+                  <b>
+                    {todayStatus === "completed"
+                      ? "Chamada feita hoje"
+                      : todayStatus === "canceled"
+                        ? "Aula cancelada hoje"
+                        : "Fazer chamada →"}
+                  </b>
+                </button>
+              );
+            })}
  {teams.length === 0 && <div className="card class-empty"><span><CheckSquare size={20} strokeWidth={1.75} /></span><strong>Nenhuma turma disponível</strong><small>Cadastre uma turma antes de registrar presenças.</small><button className="primary-button" onClick={onNewTeam}>Criar turma</button></div>}
  </div></div>
       ) : section === "Treinos" ? (

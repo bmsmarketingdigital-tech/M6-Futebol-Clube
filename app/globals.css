@@ -1075,12 +1075,20 @@ input[type="email"], input[type="password"], input[type="date"], input[type="dat
   padding: 0 13px;
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   border-radius: 12px;
   background: var(--accent);
   color: var(--text-on-accent);
   font-size: 12px;
   font-weight: 900;
 }
+/* Chamada já feita/cancelada hoje: sai do estilo de call-to-action (pill
+   sólida na cor da marca) para um selo informativo, pra não parecer que
+   ainda falta uma ação aqui. */
+.quick-team-card.completed { border-color: var(--success-subtle); }
+.quick-team-card.completed b { background: var(--success-subtle); color: var(--success); }
+.quick-team-card.canceled { border-color: var(--danger-subtle); }
+.quick-team-card.canceled b { background: var(--danger-subtle); color: var(--danger); }
 
 .finance-card { min-width: 0; }
 .chart-head { padding: 16px 22px 0; display: flex; justify-content: space-between; align-items: flex-end; }
@@ -1366,6 +1374,10 @@ input[type="email"], input[type="password"], input[type="date"], input[type="dat
 .attendance-team-card div strong { display: block; font-size: 10px; }
 .attendance-team-card div small { display: block; color: var(--muted); font-size: 8px; margin-top: 4px; }
 .attendance-team-card > b { color: var(--green); font-size: 8px; }
+.attendance-team-card.completed { border-color: var(--success-subtle); background: var(--success-subtle); }
+.attendance-team-card.completed:hover { border-color: var(--success); }
+.attendance-team-card.canceled { border-color: var(--danger-subtle); background: var(--danger-subtle); }
+.attendance-team-card.canceled > b { color: var(--danger); }
 .module-two-columns { display: grid; grid-template-columns: 1.2fr .8fr; gap: 15px; }
 .training-plan, .insight-card, .overview-module { padding: 26px; }
 .training-plan h2, .insight-card h2 { margin: 2px 0 6px; font-size: 21px; letter-spacing: -.5px; }
