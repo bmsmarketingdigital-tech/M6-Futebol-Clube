@@ -74,6 +74,29 @@ export function ensurePostgresSchema() {
         CREATE UNIQUE INDEX IF NOT EXISTS sports_categories_org_name_unique
         ON sports_categories (organization_id, name)
       `;
+
+      // As mesmas 4 tabelas usam id inteiro autoincremento no schema
+      // D1/SQLite original (organization_members, team_athletes,
+      // class_reminders, attendance_records). A migração para o Supabase
+      // preservou os ids existentes mas nunca reajustou a sequence do
+      // Postgres para depois do maior id -- por isso um INSERT novo podia
+      // pedir um id (ex.: 3) que já existia, batendo na chave primária
+      // ("duplicate key value violates unique constraint team_athletes_pkey").
+      // setval é idempotente: reexecutar isso sem nenhum id fora de ordem
+      // não muda nada.
+      for (const table of [
+        "organization_members",
+        "team_athletes",
+        "class_reminders",
+        "attendance_records",
+      ]) {
+        await sql`
+          SELECT setval(
+            pg_get_serial_sequence(${table}, 'id'),
+            GREATEST(COALESCE((SELECT MAX(id) FROM ${sql(table)}), 0), 1)
+          )
+        `;
+      }
     })().catch((error) => {
       postgresSchemaReady = null;
       throw error;
