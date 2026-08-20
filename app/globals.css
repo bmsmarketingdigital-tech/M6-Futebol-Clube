@@ -1471,6 +1471,7 @@ input[type="email"], input[type="password"], input[type="date"], input[type="dat
 .team-form { padding: 22px 28px 26px; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
 .team-form > label { color: var(--text-secondary); font-size: 9px; font-weight: 800; }
 .team-form .wide { grid-column: 1 / -1; }
+.team-time-row { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
 .team-form input, .team-form select { width: 100%; height: 40px; margin-top: 6px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--ink); outline: none; font-size: 10px; }
 .team-form input:focus, .team-form select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
 .field-label { display: block; margin-bottom: 7px; color: var(--text-secondary); font-size: 9px; font-weight: 800; }
@@ -5938,6 +5939,12 @@ body {
   .modal-backdrop .athlete-edit-modal form,
   .team-form,
   .profile-form { padding: 16px 18px calc(22px + env(safe-area-inset-bottom)) !important; }
+  /* .team-form herda "overflow: hidden" de uma regra de desktop sem media
+     query (globals.css ~2271) que nunca é desfeita para telas menores —
+     dentro do modal com altura travada isso torna o conteúdo abaixo da
+     dobra (Local, Capacidade, atletas) inacessível, sem nenhuma barra de
+     rolagem. */
+  .team-form { overflow-y: auto !important; }
   .athlete-edit-modal form,
   .modal-backdrop .athlete-edit-modal form { row-gap: 10px !important; column-gap: 14px !important; }
   .athlete-edit-modal form label,

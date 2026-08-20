@@ -195,8 +195,10 @@ export function TeamModal({
               ))}
             </div>
           </div>
-          <label>Início<input name="startTime" type="time" defaultValue={team?.startTime ?? "08:00"} required /></label>
-          <label>Término<input name="endTime" type="time" defaultValue={team?.endTime ?? "09:00"} required /></label>
+          <div className="team-time-row wide">
+            <label>Início<input name="startTime" type="time" defaultValue={team?.startTime ?? "08:00"} required /></label>
+            <label>Término<input name="endTime" type="time" defaultValue={team?.endTime ?? "09:00"} required /></label>
+          </div>
           <label>Local<input name="place" defaultValue={team?.place ?? "Campo 1"} required /></label>
           <label>Capacidade<input name="capacity" type="number" min="1" max="100" defaultValue={team?.capacity ?? 24} required /></label>
  <div className={`roster-picker wide ${rosterOpen ? "roster-picker-modal" : "roster-picker-collapsed"}`}>
