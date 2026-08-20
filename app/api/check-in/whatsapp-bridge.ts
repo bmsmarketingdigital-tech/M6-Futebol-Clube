@@ -156,6 +156,15 @@ export async function controlWhatsAppBridge(action: "connect" | "disconnect", ph
       await logoutEvolutionInstance();
       return getWhatsAppBridgeStatus();
     }
+    if (phone) {
+      // O WhatsApp so aceita pedir um codigo de pareamento na PRIMEIRA tentativa
+      // de conexao de uma sessao. A tela ja busca um QR Code automaticamente ao
+      // abrir (sem numero), o que "trava" a sessao em modo QR -- pedir o codigo
+      // depois disso simplesmente nao funciona. Por isso, ao pedir um codigo com
+      // numero, reiniciamos a tentativa de conexao (logout) primeiro.
+      await logoutEvolutionInstance();
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
     return getWhatsAppBridgeStatus(phone);
   }
   const payload = await bridgeRequest<Omit<WhatsAppBridgeStatus, "configured" | "pairingCode">>(
