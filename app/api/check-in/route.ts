@@ -88,7 +88,7 @@ export async function GET(request: Request) {
         ...row,
         scannedAt: row.scannedAt.toISOString(),
       })),
-      whatsapp: await getWhatsAppBridgeStatus(),
+      whatsapp: await getWhatsAppBridgeStatus(context.membership.organizationId),
     });
   } catch (error) {
     console.error("Failed to list check-ins", error);
@@ -315,6 +315,7 @@ export async function POST(request: Request) {
     let notificationError = checkIn.notificationError;
     if (athlete.guardianPhone) {
       const delivery = await sendWhatsAppMessage(
+        organizationId,
         athlete.guardianPhone,
         message,
       );

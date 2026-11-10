@@ -18,7 +18,7 @@ export async function POST(request: Request) {
         { status: 401 },
       );
     }
-    if (!whatsappBridgeConfigured()) {
+  if (!whatsappBridgeConfigured(context.membership.organizationId)) {
       return Response.json(
         { error: "Conecte o WhatsApp no aplicativo Windows primeiro." },
         { status: 409 },
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     let failed = 0;
     for (const item of queued) {
       if (!item.phone) continue;
-      const delivery = await sendWhatsAppMessage(item.phone, item.message);
+      const delivery = await sendWhatsAppMessage(context.membership.organizationId, item.phone, item.message);
       const notificationStatus =
         delivery.status === "delivery_unknown" ? "failed" : delivery.status;
       if (delivery.status === "sent") sent += 1;

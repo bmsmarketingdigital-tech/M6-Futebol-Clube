@@ -70,7 +70,7 @@ async function notifyAbsentGuardians(
     const message =
       `Aviso: ${athlete.name} não compareceu ao treino da turma ` +
       `${teamName} hoje (${formatDateBR(date)}).`;
-    const delivery = await sendWhatsAppMessage(phone, message);
+    const delivery = await sendWhatsAppMessage(organizationId, phone, message);
     if (delivery.status === "sent") notified += 1;
   }
   return notified;

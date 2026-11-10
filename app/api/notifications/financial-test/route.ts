@@ -62,8 +62,8 @@ export async function POST(request: Request) {
 
   activeRequests.add(idempotencyKey);
   try {
-    const whatsapp = await getWhatsAppBridgeStatus();
-    if (whatsapp.status !== "connected") {
+    const whatsapp = await getWhatsAppBridgeStatus(context.membership.organizationId);
+    if (whatsapp.status !== "connected" || (whatsapp.phoneVerification && whatsapp.phoneVerification !== "confirmed")) {
       return Response.json({ error: "WhatsApp precisa estar conectado." }, { status: 409 });
     }
 

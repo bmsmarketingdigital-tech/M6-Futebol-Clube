@@ -191,7 +191,7 @@ export async function processClassReminders(
       const message = `Lembrete: amanhã (${target.formatted}) tem treino da turma ${current.name} às ${current.startTime} em ${current.place}.`;
       teamAttempts += 1;
       attempted += 1;
-      const delivery = await sender(current.phone, message);
+      const delivery = await sender(organizationId, current.phone, message);
       if (delivery.status === "sent") { teamSent += 1; remindersSent += 1; }
     }
     if (teamAttempts === 0) {

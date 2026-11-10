@@ -127,7 +127,7 @@ export async function POST(
       const message = `Aviso: o treino da turma ${team.name} do dia ${formatDateBR(date)} foi cancelado. Motivo: ${outcome.reason}.`;
       let notified = 0;
       for (const phone of phones) {
-        const delivery = await sendWhatsAppMessage(phone, message);
+        const delivery = await sendWhatsAppMessage(organizationId, phone, message);
         if (delivery.status === "sent") notified += 1;
       }
       return Response.json({ canceled: true, date, reason: outcome.reason, notified });
@@ -272,7 +272,7 @@ export async function POST(
       const message = `Aviso: o treino da turma ${team.name} do dia ${formatDateBR(date)} foi cancelado. Motivo: ${reason}.`;
       let notified = 0;
       for (const phone of phones) {
-        const delivery = await sendWhatsAppMessage(phone, message);
+        const delivery = await sendWhatsAppMessage(organizationId, phone, message);
         if (delivery.status === "sent") notified += 1;
       }
 

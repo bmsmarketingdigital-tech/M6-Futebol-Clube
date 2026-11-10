@@ -582,8 +582,8 @@ async function runNotificationQueue(
     ? 0
     : Math.min(60_000, Math.max(0, dependencies.minIntervalMs ?? policy.minIntervalMs));
   const sleep = dependencies.sleep ?? ((milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
-  const bridge = await statusReader();
-  if (bridge.status !== "connected") {
+  const bridge = await statusReader(organizationId);
+  if (bridge.status !== "connected" || bridge.phoneVerification === "mismatch" || bridge.phoneVerification === "unknown") {
     return { sent: 0, failed: 0, deliveryUnknown: 0, processed: 0, disconnected: true };
   }
 
@@ -604,7 +604,7 @@ async function runNotificationQueue(
       continue;
     }
     if (!(await beginAttempt(item, origin))) break;
-    const delivery = await sender(item.phone, item.message);
+    const delivery = await sender(item.organizationId, item.phone, item.message);
     sendAttempts += 1;
     const result =
       delivery.status === "pending"

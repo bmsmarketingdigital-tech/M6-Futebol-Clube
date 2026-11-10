@@ -58,7 +58,7 @@ async function notificationOverview(organizationId: string) {
         ORDER BY n.updated_at DESC
         LIMIT 10
       `,
-      getWhatsAppBridgeStatus(),
+      getWhatsAppBridgeStatus(organizationId),
     ]);
     return {
       sentLast30Days: sentRow?.total ?? 0,
@@ -77,7 +77,7 @@ async function notificationOverview(organizationId: string) {
         updatedAt: item.updated_at,
       })),
       whatsapp: {
-        connected: whatsapp.status === "connected",
+        connected: whatsapp.status === "connected" && !whatsapp.phoneMismatch && (!whatsapp.phoneVerification || whatsapp.phoneVerification === "confirmed"),
         status: whatsapp.status,
         connectedPhone: whatsapp.connectedPhone,
       },
@@ -133,7 +133,7 @@ async function notificationOverview(organizationId: string) {
       )
       .orderBy(desc(notificationOutbox.updatedAt))
       .limit(10),
-    getWhatsAppBridgeStatus(),
+    getWhatsAppBridgeStatus(organizationId),
   ]);
   return {
     sentLast30Days: sent[0]?.total ?? 0,
@@ -143,7 +143,7 @@ async function notificationOverview(organizationId: string) {
       phone: item.phone.replace(/\d(?=\d{4})/g, "•"),
     })),
     whatsapp: {
-      connected: whatsapp.status === "connected",
+      connected: whatsapp.status === "connected" && !whatsapp.phoneMismatch && (!whatsapp.phoneVerification || whatsapp.phoneVerification === "confirmed"),
       status: whatsapp.status,
       connectedPhone: whatsapp.connectedPhone,
     },

@@ -62,7 +62,7 @@ test("A-E: revalidação fica entre lock e tentativa/sender e usa superseded", (
   const loop = source.slice(source.indexOf("async function runNotificationQueue"));
   assert.ok(loop.indexOf("reserveNext") < loop.indexOf("revalidateFinancialNotification"));
   assert.ok(loop.indexOf("revalidateFinancialNotification") < loop.indexOf("beginAttempt"));
-  assert.ok(loop.indexOf("beginAttempt") < loop.indexOf("sender(item.phone"));
+  assert.ok(loop.indexOf("beginAttempt") < loop.indexOf("sender(item.organizationId"));
   assert.match(source, /status='superseded'/);
   assert.match(source, /Telefone do responsável mudou/);
   for (const marker of ["paid", "cancelled", "Atleta inativo", "before_due", "due_today", "overdue"]) assert.ok(source.includes(marker));

@@ -1,4 +1,5 @@
 import { checkPostgresConnection, postgresConfigured } from "../../../../db/postgres";
+import { evolutionConfigurationPresent } from "../../check-in/evolution-provider";
 import { getRuntimeEnv } from "../../runtime-env";
 
 export const dynamic = "force-dynamic";
@@ -28,10 +29,7 @@ export async function GET() {
     databaseConfigured: hasDatabase,
     databaseReachable,
     supabaseUrlConfigured: configured("SUPABASE_URL") || configured("NEXT_PUBLIC_SUPABASE_URL"),
-    evolutionConfigured:
-      configured("EVOLUTION_API_URL") &&
-      configured("EVOLUTION_API_KEY") &&
-      configured("EVOLUTION_API_INSTANCE"),
+    evolutionConfigured: evolutionConfigurationPresent(getRuntimeEnv()),
     asaasConfigured: configured("ASAAS_API_KEY"),
     databaseError,
   });
