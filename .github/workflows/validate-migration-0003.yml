@@ -1,0 +1,183 @@
+name: Validate migration 0003 (PostgreSQL 16)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: migration_test
+          POSTGRES_PASSWORD: synthetic-only-password
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U migration_test -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: migration_test
+      PGPASSWORD: synthetic-only-password
+      PGSSLMODE: disable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client-16
+          fi
+          psql --version
+
+      - name: Apply migrations and validate fresh and upgrade schemas
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PGOPTIONS='-c client_min_messages=warning'
+          postgres_version="$(psql -X -At -d postgres -c 'SHOW server_version;')"
+          [[ "$postgres_version" == 16.* ]]
+          echo "POSTGRES_VERSION=$postgres_version"
+
+          psql -X -v ON_ERROR_STOP=1 -d postgres <<'SQL'
+          CREATE ROLE service_role NOLOGIN;
+          CREATE ROLE anon NOLOGIN;
+          CREATE ROLE authenticated NOLOGIN;
+          CREATE DATABASE fresh_schema;
+          CREATE DATABASE upgrade_schema;
+          SQL
+
+          psql -X -v ON_ERROR_STOP=1 -d fresh_schema -f supabase/migrations/0001_initial_schema.sql
+          echo 'FRESH_0001_PASS=SIM'
+          psql -X -v ON_ERROR_STOP=1 -d fresh_schema -f supabase/migrations/0002_whatsapp_organization_connections.sql
+          echo 'FRESH_0002_PASS=SIM'
+          psql -X -v ON_ERROR_STOP=1 -d fresh_schema -f supabase/migrations/0003_absence_notification_outbox.sql
+          echo 'FRESH_0003_PASS=SIM'
+
+          cat > /tmp/assert-outbox-schema.sql <<'SQL'
+          DO $$
+          DECLARE outbox regclass := 'public.notification_outbox'::regclass;
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conrelid = outbox AND contype = 'c'
+                AND pg_get_constraintdef(oid) ILIKE '%absence%'
+            ) THEN RAISE EXCEPTION 'absence event constraint missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conrelid = outbox AND contype = 'c'
+                AND pg_get_constraintdef(oid) ILIKE '%attendance%'
+            ) THEN RAISE EXCEPTION 'attendance origin constraint missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_index i
+              JOIN pg_class idx ON idx.oid = i.indexrelid
+              WHERE i.indrelid = outbox AND i.indisunique
+                AND pg_get_indexdef(i.indexrelid) ILIKE '%(idempotency_key)%'
+            ) THEN RAISE EXCEPTION 'idempotency unique index missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_indexes
+              WHERE schemaname = 'public' AND tablename = 'notification_outbox'
+                AND indexname = 'notification_outbox_eligible_idx'
+                AND indexdef ILIKE '%(organization_id, status, next_attempt_at)%'
+            ) THEN RAISE EXCEPTION 'organization eligibility index missing'; END IF;
+            IF (SELECT count(*) FROM pg_constraint WHERE conrelid = outbox AND contype = 'f') < 4
+              THEN RAISE EXCEPTION 'outbox foreign keys missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'notification_outbox'
+                AND column_name = 'organization_id' AND is_nullable = 'NO'
+            ) THEN RAISE EXCEPTION 'organization_id missing or nullable'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'notification_outbox'
+                AND column_name = 'status' AND is_nullable = 'NO'
+            ) THEN RAISE EXCEPTION 'status missing or nullable'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'notification_outbox'
+                AND column_name = 'attempt_count' AND is_nullable = 'NO'
+            ) THEN RAISE EXCEPTION 'attempt_count missing or nullable'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'notification_outbox'
+                AND column_name = 'max_attempts' AND is_nullable = 'NO'
+            ) THEN RAISE EXCEPTION 'max_attempts missing or nullable'; END IF;
+            IF (SELECT count(*) FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'notification_outbox'
+                  AND column_name IN ('created_at','updated_at')) <> 2
+              THEN RAISE EXCEPTION 'outbox timestamps missing'; END IF;
+          END $$;
+          SQL
+          psql -X -v ON_ERROR_STOP=1 -d fresh_schema -f /tmp/assert-outbox-schema.sql
+          echo 'OUTBOX_CONSTRAINTS_PRESENT=SIM'
+          echo 'IDEMPOTENCY_UNIQUE_PRESENT=SIM'
+          echo 'ELIGIBILITY_INDEX_PRESENT=SIM'
+          echo 'ORGANIZATION_SCOPE_PRESENT=SIM'
+          echo 'FRESH_SCHEMA_PASS=SIM'
+
+          psql -X -v ON_ERROR_STOP=1 -d fresh_schema <<'SQL'
+          INSERT INTO organizations(id,name,slug,created_at) VALUES
+            ('org-a','Synthetic A','synthetic-a',1),
+            ('org-b','Synthetic B','synthetic-b',1);
+          INSERT INTO teams(id,organization_id,name,category,created_at) VALUES
+            ('team-a','org-a','Team A','Sub-7',1),
+            ('team-b','org-b','Team B','Sub-7',1);
+          INSERT INTO athletes(id,organization_id,full_name,birth_year,category,guardian_name,created_by,created_at,updated_at) VALUES
+            ('athlete-a','org-a','Synthetic Athlete A',2018,'Sub-7','Guardian A','workflow',1,1),
+            ('athlete-b','org-b','Synthetic Athlete B',2018,'Sub-7','Guardian B','workflow',1,1);
+          INSERT INTO notification_outbox(id,organization_id,athlete_id,team_id,event_type,idempotency_key,phone,message,created_at,updated_at)
+          VALUES ('absence-a','org-a','athlete-a','team-a','absence','absence:org-a:session-1:athlete-a','5511999990001','synthetic',1,1)
+          ON CONFLICT (idempotency_key) DO NOTHING;
+          INSERT INTO notification_outbox(id,organization_id,athlete_id,team_id,event_type,idempotency_key,phone,message,created_at,updated_at)
+          VALUES ('absence-a-duplicate','org-a','athlete-a','team-a','absence','absence:org-a:session-1:athlete-a','5511999990001','synthetic',1,1)
+          ON CONFLICT (idempotency_key) DO NOTHING;
+          INSERT INTO notification_outbox(id,organization_id,athlete_id,team_id,event_type,idempotency_key,phone,message,created_at,updated_at)
+          VALUES ('absence-b','org-b','athlete-b','team-b','absence','absence:org-b:session-1:athlete-a','5511999990002','synthetic',1,1)
+          ON CONFLICT (idempotency_key) DO NOTHING;
+          DO $$ BEGIN
+            IF (SELECT count(*) FROM notification_outbox WHERE event_type='absence') <> 2
+              THEN RAISE EXCEPTION 'idempotency or cross-tenant insert assertion failed'; END IF;
+            IF (SELECT count(*) FROM notification_outbox WHERE organization_id='org-a') <> 1
+              OR (SELECT count(*) FROM notification_outbox WHERE organization_id='org-b') <> 1
+              THEN RAISE EXCEPTION 'organization scope assertion failed'; END IF;
+          END $$;
+          SQL
+          echo 'DUPLICATE_INSERT_DB_BLOCKED=SIM'
+          echo 'CROSS_TENANT_INSERT_PASS=SIM'
+          echo 'CROSS_TENANT_COLLISION=NÃO'
+
+          psql -X -v ON_ERROR_STOP=1 -d upgrade_schema -f supabase/migrations/0001_initial_schema.sql
+          echo 'UPGRADE_0001_PASS=SIM'
+          psql -X -v ON_ERROR_STOP=1 -d upgrade_schema -f supabase/migrations/0002_whatsapp_organization_connections.sql
+          echo 'UPGRADE_0002_PASS=SIM'
+          psql -X -v ON_ERROR_STOP=1 -d upgrade_schema <<'SQL'
+          INSERT INTO organizations(id,name,slug,created_at) VALUES ('upgrade-org','Upgrade fixture','upgrade-fixture',1);
+          INSERT INTO teams(id,organization_id,name,category,created_at) VALUES ('upgrade-team','upgrade-org','Upgrade Team','Sub-7',1);
+          INSERT INTO athletes(id,organization_id,full_name,birth_year,category,guardian_name,created_by,created_at,updated_at) VALUES
+            ('upgrade-athlete','upgrade-org','Preserved Athlete',2018,'Sub-7','Preserved Guardian','workflow',1,1);
+          INSERT INTO notification_outbox(id,organization_id,athlete_id,team_id,event_type,idempotency_key,phone,message,created_at,updated_at)
+          VALUES ('upgrade-row','upgrade-org','upgrade-athlete','upgrade-team','enrollment','enrollment:upgrade-org:upgrade-athlete','5511999990003','preserve-me',10,10);
+          SQL
+          before_data="$(psql -X -At -d upgrade_schema -c "SELECT count(*) || ':' || md5(coalesce(string_agg(id || ':' || event_type || ':' || idempotency_key || ':' || message, ',' ORDER BY id),'')) FROM notification_outbox")"
+          before_columns="$(psql -X -At -d upgrade_schema -c "SELECT md5(string_agg(table_name || '.' || column_name, ',' ORDER BY table_name,column_name)) FROM information_schema.columns WHERE table_schema='public'")"
+          psql -X -v ON_ERROR_STOP=1 -d upgrade_schema -f supabase/migrations/0003_absence_notification_outbox.sql
+          echo 'UPGRADE_0003_PASS=SIM'
+          after_data="$(psql -X -At -d upgrade_schema -c "SELECT count(*) || ':' || md5(coalesce(string_agg(id || ':' || event_type || ':' || idempotency_key || ':' || message, ',' ORDER BY id),'')) FROM notification_outbox")"
+          after_columns="$(psql -X -At -d upgrade_schema -c "SELECT md5(string_agg(table_name || '.' || column_name, ',' ORDER BY table_name,column_name)) FROM information_schema.columns WHERE table_schema='public'")"
+          [[ "$before_data" == "$after_data" ]]
+          [[ "$before_columns" == "$after_columns" ]]
+          psql -X -v ON_ERROR_STOP=1 -d upgrade_schema -f /tmp/assert-outbox-schema.sql
+          echo 'UPGRADE_PREEXISTING_DATA_PRESERVED=SIM'
+          echo 'UPGRADE_SCHEMA_PASS=SIM'
+          echo 'DESTRUCTIVE_EFFECT_FOUND=NÃO'
