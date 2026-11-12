@@ -5,6 +5,8 @@ import {
   sendWhatsAppMessage,
 } from "../check-in/whatsapp-bridge";
 import { getRuntimeEnv } from "../runtime-env";
+import { sanitizeDeliveryError } from "./sanitize-delivery-error.mjs";
+import { normalizeNotificationPhone } from "./normalize-phone.mjs";
 
 export type NotificationOrigin =
   | "startup"
@@ -13,6 +15,7 @@ export type NotificationOrigin =
   | "verify_now"
   | "enrollment"
   | "controlled_test"
+  | "attendance"
   | "manual";
 
 export type OutboxInput = {
@@ -20,7 +23,7 @@ export type OutboxInput = {
   athleteId: string;
   paymentId?: string | null;
   teamId?: string | null;
-  eventType: "before_due" | "due_today" | "overdue" | "enrollment" | "controlled_test";
+  eventType: "before_due" | "due_today" | "overdue" | "enrollment" | "controlled_test" | "absence";
   idempotencyKey: string;
   phone: string;
   message: string;
@@ -74,9 +77,7 @@ export function readFinancialDispatchPolicy(
 }
 
 function normalizePhone(phone: string | null | undefined) {
-  let normalized = String(phone || "").replace(/\D/g, "");
-  if (!normalized.startsWith("55") && [10, 11].includes(normalized.length)) normalized = `55${normalized}`;
-  return normalized;
+  return normalizeNotificationPhone(phone) ?? "";
 }
 
 function saoPauloDate() {
@@ -603,8 +604,25 @@ async function runNotificationQueue(
       if (dependencies.notificationId) break;
       continue;
     }
+    const normalizedPhone = normalizeNotificationPhone(item.phone);
+    if (!normalizedPhone) {
+      await supersede(item, "Telefone do responsável inválido; envio não tentado.");
+      totals.processed += 1;
+      if (dependencies.notificationId) break;
+      continue;
+    }
+    item.phone = normalizedPhone;
     if (!(await beginAttempt(item, origin))) break;
-    const delivery = await sender(item.organizationId, item.phone, item.message);
+    let delivery: Awaited<ReturnType<Sender>>;
+    try {
+      delivery = await sender(item.organizationId, item.phone, item.message);
+    } catch (error) {
+      delivery = {
+        status: "failed",
+        error: sanitizeDeliveryError(error),
+        providerMessageId: null,
+      };
+    }
     sendAttempts += 1;
     const result =
       delivery.status === "pending"
@@ -614,10 +632,14 @@ async function runNotificationQueue(
             providerMessageId: null,
           }
         : delivery;
-    await finishAttempt(item, result);
+    const safeResult = {
+      ...result,
+      error: result.error ? sanitizeDeliveryError(new Error(result.error)) : null,
+    };
+    await finishAttempt(item, safeResult);
     totals.processed += 1;
-    if (result.status === "sent") totals.sent += 1;
-    else if (result.status === "delivery_unknown") totals.deliveryUnknown += 1;
+    if (safeResult.status === "sent") totals.sent += 1;
+    else if (safeResult.status === "delivery_unknown") totals.deliveryUnknown += 1;
     else totals.failed += 1;
     if (dependencies.notificationId) break;
     if (sendAttempts < maxPerRun && minIntervalMs > 0) {

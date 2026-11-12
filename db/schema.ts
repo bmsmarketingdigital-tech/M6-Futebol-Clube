@@ -790,7 +790,7 @@ export const notificationOutbox = sqliteTable(
     legacyNotificationId: text("legacy_notification_id"),
     originalNotificationId: text("original_notification_id"),
     eventType: text("event_type", {
-      enum: ["before_due", "due_today", "overdue", "enrollment", "controlled_test"],
+      enum: ["before_due", "due_today", "overdue", "enrollment", "controlled_test", "absence"],
     }).notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
     phone: text("phone").notNull(),
@@ -808,7 +808,7 @@ export const notificationOutbox = sqliteTable(
     sentAt: integer("sent_at", { mode: "timestamp" }),
     providerMessageId: text("provider_message_id"),
     lastAttemptOrigin: text("last_attempt_origin", {
-      enum: ["startup", "reconnect", "automatic", "verify_now", "enrollment", "controlled_test", "manual"],
+      enum: ["startup", "reconnect", "automatic", "verify_now", "enrollment", "controlled_test", "attendance", "manual"],
     }),
     manualResendCount: integer("manual_resend_count").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),

@@ -9,18 +9,14 @@ import {
   teams,
 } from "../../../../../db/schema";
 import { getApiContext } from "../../../api-auth";
-import { sendWhatsAppMessage } from "../../../check-in/whatsapp-bridge";
+import { enqueueNotification } from "../../../notifications/outbox";
+import { queueAbsenceNotifications } from "../../../notifications/absence-queue.mjs";
 
 export const dynamic = "force-dynamic";
 
 function validDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) &&
     !Number.isNaN(new Date(`${value}T12:00:00`).getTime());
-}
-
-function formatDateBR(value: string) {
-  const [year, month, day] = value.split("-");
-  return `${day}/${month}/${year}`;
 }
 
 // Só notifica falta quando a chamada do dia é feita pela primeira vez —
@@ -30,6 +26,8 @@ function formatDateBR(value: string) {
 // responsável só descobrir pela chamada.
 async function notifyAbsentGuardians(
   organizationId: string,
+  teamId: string,
+  sessionId: string,
   teamName: string,
   date: string,
   roster: { id: string; name: string }[],
@@ -63,17 +61,32 @@ async function notifyAbsentGuardians(
     phoneByAthleteId = new Map(rows.map((row) => [row.id, row.guardianPhone]));
   }
 
-  let notified = 0;
-  for (const athlete of absentAthletes) {
-    const phone = phoneByAthleteId.get(athlete.id);
-    if (!phone) continue;
-    const message =
-      `Aviso: ${athlete.name} não compareceu ao treino da turma ` +
-      `${teamName} hoje (${formatDateBR(date)}).`;
-    const delivery = await sendWhatsAppMessage(organizationId, phone, message);
-    if (delivery.status === "sent") notified += 1;
+  return queueAbsenceNotifications({
+    organizationId,
+    teamId,
+    sessionId,
+    teamName,
+    date,
+    roster: absentAthletes,
+    submitted,
+    phoneByAthleteId,
+    enqueue: enqueueNotification,
+    onError: (details) => console.error(JSON.stringify({ event: "ABSENCE_NOTIFICATION_ENQUEUE_ERROR", ...details })),
+  });
+}
+
+async function notifyAbsentGuardiansSafely(...args: Parameters<typeof notifyAbsentGuardians>) {
+  try {
+    return await notifyAbsentGuardians(...args);
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: "ABSENCE_NOTIFICATION_ENQUEUE_ERROR",
+      organizationId: args[0],
+      sessionId: args[2],
+      errorName: error instanceof Error ? error.name : "Error",
+    }));
+    return 0;
   }
-  return notified;
 }
 
 async function getAuthorizedTeam(request: Request, teamId: string) {
@@ -330,7 +343,7 @@ export async function POST(
               updated_at = ${Math.floor(Date.now() / 1000)}
             WHERE id = ${athlete.id} AND organization_id = ${organizationId}`;
         }
-        return { conflict: false as const, isNewSession };
+        return { conflict: false as const, isNewSession, sessionId: sessions[0].id };
       });
       if (result.conflict) {
         return Response.json(
@@ -340,7 +353,7 @@ export async function POST(
       }
       const presentCount = roster.filter((athlete) => submitted.get(athlete.id)?.present !== false).length;
       const notified = result.isNewSession
-        ? await notifyAbsentGuardians(organizationId, authorized.team.name, date, roster, submitted)
+        ? await notifyAbsentGuardiansSafely(organizationId, id, result.sessionId, authorized.team.name, date, roster, submitted)
         : 0;
       return Response.json({
         saved: true, date, total: roster.length, present: presentCount,
@@ -477,8 +490,10 @@ export async function POST(
       (athlete) => submitted.get(athlete.id)?.present !== false,
     ).length;
     const notified = isNewSession
-      ? await notifyAbsentGuardians(
+      ? await notifyAbsentGuardiansSafely(
           authorized.context.membership.organizationId,
+          id,
+          session.id,
           authorized.team.name,
           date,
           roster,

@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ArrowLeft, CalendarClock, Check, CheckCircle2, MessageCircle, Plus, X } from "lucide-react";
 import type { TeamRecord } from "./TeamManagement";
 import { readApiResponse } from "./api-response";
+import { performWhatsAppAction, WhatsAppActionError } from "./whatsapp-action.mjs";
 
 type Recipient = { id: string; athleteId: string; guardianName: string; guardianEmail: string | null; guardianPhone: string | null; readAt: string | null };
 type Communication = {
@@ -110,12 +111,17 @@ function WhatsAppCommunicationCard({ notify }: { notify: (message: string) => vo
   async function action(path: string, message: string, bridgeAction?: "connect" | "disconnect", phone?: string) {
     setBusy(true);
     try {
-      const response = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: bridgeAction ? JSON.stringify({ action: bridgeAction, phone }) : undefined });
-      const payload = await readApiResponse<{ whatsapp?: CommunicationWhatsAppStatus }>(response);
-      if (!response.ok) throw new Error(payload.error || "Falha na operação.");
-    if (payload.whatsapp) setStatus(payload.whatsapp);
+      const payload = await performWhatsAppAction({
+        path,
+        body: bridgeAction ? { action: bridgeAction, phone } : undefined,
+      }) as { whatsapp?: CommunicationWhatsAppStatus };
+      if (payload.whatsapp) setStatus(payload.whatsapp);
       notify(message);
-    } catch (error) { notify(error instanceof Error ? error.message : "Falha na operação."); }
+    } catch (error) {
+      notify(error instanceof WhatsAppActionError
+        ? error.message
+        : "Não foi possível concluir a solicitação. Tente novamente.");
+    }
     finally { setBusy(false); }
   }
 

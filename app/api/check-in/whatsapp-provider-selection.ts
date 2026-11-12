@@ -1,5 +1,6 @@
 import { evolutionConfigured } from "./evolution-provider";
 import { getRuntimeEnv } from "../runtime-env";
+import { selectWhatsAppProviderFromConfig } from "./provider-choice.mjs";
 
 const runtime = getRuntimeEnv();
 
@@ -9,9 +10,10 @@ export function selectWhatsAppProvider(
   organizationId: string,
   source: Record<string, string | undefined> = runtime,
 ): WhatsAppProvider {
-  if (source.WHATSAPP_BRIDGE_URL?.trim()) return "local";
-  if (evolutionConfigured(organizationId, source)) return "evolution";
-  return "none";
+  return selectWhatsAppProviderFromConfig(
+    source,
+    evolutionConfigured(organizationId, source),
+  );
 }
 
 export function whatsappBridgeConfigured(

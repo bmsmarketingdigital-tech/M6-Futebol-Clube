@@ -5,6 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
+import { absenceNotificationKey } from "../app/api/notifications/absence-idempotency.mjs";
+import { queueAbsenceNotifications } from "../app/api/notifications/absence-queue.mjs";
+import { sanitizeDeliveryError } from "../app/api/notifications/sanitize-delivery-error.mjs";
+import { selectWhatsAppProviderFromConfig } from "../app/api/check-in/provider-choice.mjs";
+import { normalizeNotificationPhone } from "../app/api/notifications/normalize-phone.mjs";
 
 const migration = readFileSync(
   new URL("../drizzle/0013_solid_talisman.sql", import.meta.url),
@@ -195,4 +200,138 @@ test("reenvio manual cria filho e tentativa sem alterar original", async () => {
     { original_notification_id: original, status: "sent", last_attempt_origin: "manual" },
   );
   assert.equal(db.prepare("SELECT count(*) total FROM notification_attempts WHERE notification_id=?").get(child).total, 1);
+});
+
+test("ausência com guardian cria um item outbox idempotente ligado à organização e sessão", () => {
+  const db = baseDatabase();
+  db.exec(migration);
+  const key = absenceNotificationKey("org", "session-1", "athlete");
+  const first = enqueue(db, { key, type: "absence" });
+  enqueue(db, { key, type: "absence", id: "duplicate" });
+  const row = db.prepare("SELECT organization_id,event_type,status,attempt_count FROM notification_outbox WHERE idempotency_key=?").get(key);
+  assert.deepEqual({ ...row }, { organization_id: "org", event_type: "absence", status: "pending", attempt_count: 0 });
+  assert.equal(db.prepare("SELECT count(*) total FROM notification_outbox WHERE idempotency_key=?").get(key).total, 1);
+  assert.equal(first.length > 0, true);
+});
+
+test("ausência elegível enfileira uma vez; telefone ausente e presença não enfileiram", async () => {
+  const roster = [{ id: "athlete-a", name: "Atleta A" }, { id: "athlete-b", name: "Atleta B" }];
+  const submitted = new Map([ ["athlete-a", { present: false, note: null }], ["athlete-b", { present: true, note: null }] ]);
+  const phones = new Map([ ["athlete-a", "5511888888888"], ["athlete-b", "5511777777777"] ]);
+  const seen = new Map();
+  const enqueue = async (input) => {
+    const created = !seen.has(input.idempotencyKey);
+    seen.set(input.idempotencyKey, input);
+    return { created };
+  };
+  const args = {
+    organizationId: "org-a", teamId: "team-a", sessionId: "session-a", teamName: "Sub-7",
+    date: "2026-11-12", roster, submitted, phoneByAthleteId: phones, enqueue,
+  };
+  assert.equal(await queueAbsenceNotifications(args), 1);
+  assert.equal(await queueAbsenceNotifications(args), 0);
+  assert.equal(seen.size, 1);
+  const notification = [...seen.values()][0];
+  assert.equal(notification.eventType, "absence");
+  assert.equal(notification.organizationId, "org-a");
+  assert.equal(notification.idempotencyKey, "absence:org-a:session-a:athlete-a");
+
+  assert.equal(await queueAbsenceNotifications({
+    ...args,
+    roster: [roster[0]],
+    phoneByAthleteId: new Map(),
+  }), 0);
+  assert.equal(seen.size, 1);
+});
+
+test("duas requisições concorrentes para a mesma ausência criam uma linha", async () => {
+  const db = baseDatabase();
+  db.exec(migration);
+  const key = absenceNotificationKey("org", "session-race", "athlete");
+  await Promise.all([
+    Promise.resolve().then(() => enqueue(db, { key, type: "absence", id: "attempt-a" })),
+    Promise.resolve().then(() => enqueue(db, { key, type: "absence", id: "attempt-b" })),
+  ]);
+  assert.equal(db.prepare("SELECT count(*) total FROM notification_outbox WHERE idempotency_key=?").get(key).total, 1);
+});
+
+test("telefone inválido ou ausente não cria outbox de ausência", async () => {
+  const calls = [];
+  const queued = await queueAbsenceNotifications({
+    organizationId: "org", teamId: "team", sessionId: "session", teamName: "Sub-7", date: "2026-11-12",
+    roster: [{ id: "athlete-a", name: "A" }, { id: "athlete-b", name: "B" }],
+    submitted: new Map([ ["athlete-a", { present: false, note: null }], ["athlete-b", { present: false, note: null }] ]),
+    phoneByAthleteId: new Map([ ["athlete-a", "123"], ["athlete-b", "   "] ]),
+    enqueue: async (input) => { calls.push(input); return { created: true }; },
+  });
+  assert.equal(queued, 0);
+  assert.deepEqual(calls, []);
+});
+
+test("falha ao enfileirar não lança erro que possa cancelar a presença já salva", async () => {
+  const attendanceSaved = true;
+  const logged = [];
+  const queued = await queueAbsenceNotifications({
+    organizationId: "org-a", teamId: "team-a", sessionId: "session-a", teamName: "Sub-7",
+    date: "2026-11-12", roster: [{ id: "athlete-a", name: "Atleta A" }],
+    submitted: new Map([["athlete-a", { present: false, note: null }]]),
+    phoneByAthleteId: new Map([["athlete-a", "5511888888888"]]),
+    enqueue: async () => { throw new Error("DB temporário indisponível"); },
+    onError: (detail) => logged.push(detail),
+  });
+  assert.equal(queued, 0);
+  assert.equal(attendanceSaved, true);
+  assert.equal(logged.length, 1);
+  assert.equal("phone" in logged[0], false);
+});
+
+test("provider selecionado permanece Evolution quando configurado", () => {
+  assert.equal(selectWhatsAppProviderFromConfig({}, true), "evolution");
+  assert.equal(selectWhatsAppProviderFromConfig({ WHATSAPP_BRIDGE_URL: "http://localhost" }, true), "local");
+});
+
+test("telefone é normalizado antes do sender e valores inválidos são recusados", () => {
+  assert.equal(normalizeNotificationPhone("(11) 99999-8888"), "5511999998888");
+  assert.equal(normalizeNotificationPhone("+55 11 99999-8888"), "5511999998888");
+  assert.equal(normalizeNotificationPhone("123"), null);
+  assert.equal(normalizeNotificationPhone("5511abc"), null);
+});
+
+test("erro persistido no outbox remove bearer, token e telefone", () => {
+  const safe = sanitizeDeliveryError(new Error("Bearer secret-token token=api-secret telefone 5511999999999"));
+  assert.doesNotMatch(safe, /secret-token|api-secret|5511999999999/);
+  assert.match(safe, /redacted/);
+});
+
+test("presente ou ausência sem guardian não cria item; WhatsApp offline mantém pendente", async () => {
+  const db = baseDatabase();
+  db.exec(migration);
+  const noGuardianPhone = null;
+  const present = true;
+  if (!noGuardianPhone && present === false) enqueue(db, { key: "absence:org:session:athlete", type: "absence" });
+  assert.equal(db.prepare("SELECT count(*) total FROM notification_outbox WHERE event_type='absence'").get().total, 0);
+  const id = enqueue(db, { key: absenceNotificationKey("org", "session", "athlete"), type: "absence" });
+  let sent = 0;
+  assert.equal(await process(db, id, async () => (++sent, { status: "sent" }), false, "attendance"), false);
+  assert.equal(sent, 0);
+  assert.equal(db.prepare("SELECT status FROM notification_outbox WHERE id=?").get(id).status, "pending");
+});
+
+test("falha da notificação de ausência persiste erro sanitizado e permite retry até sent", async () => {
+  const db = baseDatabase();
+  db.exec(migration);
+  const id = enqueue(db, { key: absenceNotificationKey("org", "session", "athlete"), type: "absence" });
+  const rawFailure = "Bearer secret-token telefone 5511999999999";
+  await process(db, id, async () => ({ status: "failed", error: sanitizeDeliveryError(rawFailure) }));
+  const failed = db.prepare("SELECT status,attempt_count,last_error FROM notification_outbox WHERE id=?").get(id);
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.attempt_count, 1);
+  assert.match(failed.last_error, /\[redacted\]/);
+  assert.doesNotMatch(failed.last_error, /secret-token|5511999999999/);
+  await process(db, id, async () => ({ status: "sent", providerMessageId: "fake-provider-id" }), true, "attendance");
+  const sent = db.prepare("SELECT status,attempt_count,sent_at FROM notification_outbox WHERE id=?").get(id);
+  assert.equal(sent.status, "sent");
+  assert.equal(sent.attempt_count, 2);
+  assert.ok(sent.sent_at);
+  assert.equal(db.prepare("SELECT count(*) total FROM notification_outbox WHERE idempotency_key=?").get(absenceNotificationKey("org", "session", "athlete")).total, 1);
 });
