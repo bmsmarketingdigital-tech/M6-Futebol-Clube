@@ -2,6 +2,11 @@ name: Validate migration 0003 (PostgreSQL 16)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/whatsapp-runtime-diagnostics
+    paths:
+      - .github/workflows/validate-migration-0003.yml
 
 permissions:
   contents: read
