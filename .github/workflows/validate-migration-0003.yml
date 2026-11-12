@@ -7,6 +7,7 @@ on:
       - fix/whatsapp-runtime-diagnostics
     paths:
       - .github/workflows/validate-migration-0003.yml
+      - supabase/migrations/0003_absence_notification_outbox.sql
 
 permissions:
   contents: read
