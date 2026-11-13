@@ -59,13 +59,16 @@ test("K: somente uma criação Asaas concorrente obtém reserva local", () => {
 
 test("A-E: revalidação fica entre lock e tentativa/sender e usa superseded", () => {
   const source = readFileSync(new URL("../app/api/notifications/outbox.ts", import.meta.url), "utf8");
+  const rules = readFileSync(new URL("../app/api/notifications/revalidation-rules.mjs", import.meta.url), "utf8");
   const loop = source.slice(source.indexOf("async function runNotificationQueue"));
-  assert.ok(loop.indexOf("reserveNext") < loop.indexOf("revalidateFinancialNotification"));
-  assert.ok(loop.indexOf("revalidateFinancialNotification") < loop.indexOf("beginAttempt"));
+  assert.ok(loop.indexOf("reserveNext") < loop.indexOf("revalidateNotification"));
+  assert.ok(loop.indexOf("revalidateNotification") < loop.indexOf("beginAttempt"));
   assert.ok(loop.indexOf("beginAttempt") < loop.indexOf("sender(item.organizationId"));
-  assert.match(source, /status='superseded'/);
-  assert.match(source, /Telefone do responsável mudou/);
-  for (const marker of ["paid", "cancelled", "Atleta inativo", "before_due", "due_today", "overdue"]) assert.ok(source.includes(marker));
+  assert.match(source, /SET status = 'superseded'/);
+  assert.match(rules, /phone_changed/);
+  for (const marker of ["paid", "cancelled", "athlete_inactive", "before_due", "due_today", "overdue"]) {
+    assert.ok(source.includes(marker) || rules.includes(marker));
+  }
 });
 
 test("L,N,O: migração exata converte somente IDs auditados e preserva históricos", () => {

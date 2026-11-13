@@ -11,12 +11,14 @@ import {
 } from "../app/api/notifications/financial-test.ts";
 
 const root = new URL("../", import.meta.url);
-const [automation, route, outbox, bridge, triggers] = await Promise.all([
+const [automation, route, outbox, bridge, triggers, financialMessage, revalidationRules] = await Promise.all([
   readFile(new URL("app/api/finance/billing-automation.ts", root), "utf8"),
   readFile(new URL("app/api/notifications/financial-test/route.ts", root), "utf8"),
   readFile(new URL("app/api/notifications/outbox.ts", root), "utf8"),
   readFile(new URL("desktop/whatsapp-service.cjs", root), "utf8"),
   readFile(new URL("db/notification-history-triggers.ts", root), "utf8"),
+  readFile(new URL("app/api/notifications/financial-message.ts", root), "utf8"),
+  readFile(new URL("app/api/notifications/revalidation-rules.mjs", root), "utf8"),
 ]);
 
 const settings = {
@@ -43,20 +45,20 @@ const validRequest = {
 test("1 before_due usa o gerador real e uma data de referencia aplicavel", () => {
   assert.equal(referenceDateForFinancialTest("before_due", "2026-08-10", settings), "2026-08-07");
   assert.match(automation, /export function buildBillingNotification/);
-  assert.match(automation, /vence em \$\{difference\} dia/);
+  assert.match(financialMessage, /vence em \$\{difference\} dia/);
   assert.match(route, /buildBillingNotification\(payment, referenceDate, settings\)/);
 });
 
 test("2 due_today usa o mesmo template real", () => {
   assert.equal(referenceDateForFinancialTest("due_today", "2026-08-10", settings), "2026-08-10");
-  assert.match(automation, /type: "due_today"/);
-  assert.match(automation, /vence hoje/);
+  assert.match(financialMessage, /type: "due_today"/);
+  assert.match(financialMessage, /vence hoje/);
 });
 
 test("3 overdue usa o mesmo template real", () => {
   assert.equal(referenceDateForFinancialTest("overdue", "2026-08-10", settings), "2026-08-15");
-  assert.match(automation, /type: "overdue"/);
-  assert.match(automation, /consta em aberto/);
+  assert.match(financialMessage, /type: "overdue"/);
+  assert.match(financialMessage, /consta em aberto/);
 });
 
 test("4 telefone configurado correto e confirmacao administrativa sao aceitos", () => {
@@ -108,19 +110,21 @@ test("11 revalidacao financeira real recebe o contexto temporal controlado", () 
   assert.match(route, /financialTest: \{/);
   assert.match(outbox, /revalidateFinancialNotification\(/);
   assert.match(outbox, /financialTest\?\.referenceDate \?\? saoPauloDate\(\)/);
+  assert.match(outbox, /revalidateNotification\(/);
 });
 
 test("12 mensalidade paga ou cancelada e recusada", () => {
-  assert.match(outbox, /\["paid", "cancelled"\]\.includes\(String\(current\.status\)\)/);
+  assert.match(revalidationRules, /current\.status === "paid"/);
+  assert.match(revalidationRules, /current\.status === "cancelled"/);
 });
 
 test("13 saldo zero e recusado", () => {
-  assert.match(outbox, /balance <= 0/);
+  assert.match(revalidationRules, /amount - paid <= 0/);
 });
 
 test("14 atleta inativo e telefone logico invalido sao recusados", () => {
-  assert.match(outbox, /!Number\(current\.athleteActive\)/);
-  assert.match(outbox, /if \(!guardianPhone\)/);
+  assert.match(revalidationRules, /!current\.athleteActive/);
+  assert.match(revalidationRules, /phone_missing/);
 });
 
 test("15 WhatsApp desconectado e conector sem TEST_MODE bloqueiam antes da outbox", () => {

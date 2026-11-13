@@ -7,6 +7,8 @@ import {
 import { getRuntimeEnv } from "../runtime-env";
 import { sanitizeDeliveryError } from "./sanitize-delivery-error.mjs";
 import { normalizeNotificationPhone } from "./normalize-phone.mjs";
+import { buildBillingNotification } from "./financial-message";
+import { evaluateAbsenceSnapshot, evaluateEnrollmentSnapshot, evaluateFinancialSnapshot, parseAbsenceIdempotencyKey, parseEnrollmentIdempotencyKey } from "./revalidation-rules.mjs";
 
 export type NotificationOrigin =
   | "startup"
@@ -41,6 +43,7 @@ type ReservedNotification = OutboxInput & {
   id: string;
   attemptCount: number;
   lockToken: string;
+  createdAt: number;
 };
 
 type Sender = typeof sendWhatsAppMessage;
@@ -58,9 +61,15 @@ type QueueTotals = {
   sent: number;
   failed: number;
   deliveryUnknown: number;
+  deferred: number;
   processed: number;
   disconnected: boolean;
 };
+
+type RevalidationResult =
+  | { kind: "valid"; refreshedMessage?: string }
+  | { kind: "invalid"; reason: string }
+  | { kind: "transient_error"; error: string };
 
 function boundedInteger(value: string | undefined, fallback: number, minimum: number, maximum: number) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -84,10 +93,6 @@ function saoPauloDate() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
   }).format(new Date());
-}
-
-function dayDifference(today: string, dueDate: string) {
-  return Math.round((Date.parse(`${dueDate}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86_400_000);
 }
 
 function testModeAllowedPhone() {
@@ -195,7 +200,6 @@ async function quarantineExpiredLocks(organizationId: string, notificationId?: s
 
 async function reserveNext(
   organizationId: string,
-  origin: NotificationOrigin,
   notificationId?: string,
 ): Promise<ReservedNotification | null> {
   const now = unixNow();
@@ -214,6 +218,7 @@ async function reserveNext(
       message: string;
       attempt_count: number;
       lock_token: string;
+      created_at: number;
     }[]>`
       WITH candidate AS (
         SELECT id
@@ -250,7 +255,6 @@ async function reserveNext(
           locked_at = ${now},
           locked_until = ${now + LOCK_SECONDS},
           lock_token = ${lockToken},
-          last_attempt_origin = ${origin},
           last_error = NULL,
           updated_at = ${now}
       FROM candidate
@@ -265,7 +269,8 @@ async function reserveNext(
         outbox.phone,
         outbox.message,
         outbox.attempt_count,
-        outbox.lock_token
+        outbox.lock_token,
+        outbox.created_at
     `;
     if (!row) return null;
     return {
@@ -280,6 +285,7 @@ async function reserveNext(
       message: row.message,
       attemptCount: row.attempt_count,
       lockToken: row.lock_token,
+      createdAt: row.created_at,
     };
   }
   const targetFilter = notificationId ? "AND id = ?" : "";
@@ -292,7 +298,7 @@ async function reserveNext(
         OR '55' || replace(replace(replace(replace(replace(replace(phone, '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', '') = ?
       )`
     : "";
-  const bindings: unknown[] = [now, now + LOCK_SECONDS, lockToken, origin, now, organizationId, now];
+  const bindings: unknown[] = [now, now + LOCK_SECONDS, lockToken, now, organizationId, now];
   if (notificationId) bindings.push(notificationId);
   if (allowedPhone) bindings.push(allowedPhone, allowedPhone);
   bindings.push(now);
@@ -301,7 +307,7 @@ async function reserveNext(
       `UPDATE notification_outbox
        SET status = 'processing',
            locked_at = ?, locked_until = ?, lock_token = ?,
-           last_attempt_origin = ?, last_error = NULL, updated_at = ?
+           last_error = NULL, updated_at = ?
        WHERE id = (
          SELECT id FROM notification_outbox
          WHERE organization_id = ?
@@ -319,7 +325,8 @@ async function reserveNext(
        RETURNING id, organization_id AS organizationId, athlete_id AS athleteId,
          payment_id AS paymentId, team_id AS teamId, event_type AS eventType,
          idempotency_key AS idempotencyKey, phone, message,
-         attempt_count AS attemptCount, lock_token AS lockToken`,
+          attempt_count AS attemptCount, lock_token AS lockToken,
+          created_at AS createdAt`,
     )
     .bind(...bindings)
     .first<ReservedNotification>();
@@ -330,19 +337,27 @@ async function reserveNext(
 export async function revalidateFinancialNotification(
   item: ReservedNotification,
   financialTest?: FinancialTestContext,
-) {
-  if (!["before_due", "due_today", "overdue"].includes(item.eventType)) return null;
-  if (item.idempotencyKey.startsWith("financial-test:") && !financialTest) {
-    return "Teste financeiro controlado sem contexto autorizado.";
+): Promise<RevalidationResult> {
+  if (!["before_due", "due_today", "overdue"].includes(item.eventType)) {
+    return { kind: "valid" };
   }
-  if (!item.paymentId) return "Mensalidade vinculada não está mais disponível.";
+  if (item.idempotencyKey.startsWith("financial-test:") && !financialTest) {
+    return { kind: "invalid", reason: "controlled_test_context_missing" };
+  }
+  if (!item.paymentId) {
+    return { kind: "invalid", reason: "payment_not_found" };
+  }
+
   const current = postgresConfigured()
-    ? (await getPostgresClient()<Record<string, string | number | null>[]>`
+    ? (await getPostgresClient()<Record<string, string | number | boolean | null>[]> `
         SELECT
+          p.organization_id AS "organizationId",
+          p.athlete_id AS "athleteId",
           p.status,
           p.amount_cents AS "amountCents",
           p.paid_amount_cents AS "paidAmountCents",
           p.due_date AS "dueDate",
+          a.name AS "athleteName",
           a.active AS "athleteActive",
           a.guardian_phone AS "guardianPhone",
           COALESCE(s.enabled, 1) AS enabled,
@@ -363,25 +378,25 @@ export async function revalidateFinancialNotification(
         LIMIT 1
       `)[0]
     : await getD1().prepare(`SELECT
+        p.organization_id AS organizationId, p.athlete_id AS athleteId,
         p.status, p.amount_cents AS amountCents, p.paid_amount_cents AS paidAmountCents,
-        p.due_date AS dueDate, a.active AS athleteActive, a.guardian_phone AS guardianPhone,
+        p.due_date AS dueDate, a.name AS athleteName, a.active AS athleteActive,
+        a.guardian_phone AS guardianPhone,
         COALESCE(s.enabled, 1) AS enabled,
         COALESCE(s.before_due_enabled, 1) AS beforeDueEnabled,
         COALESCE(s.before_due_days, 3) AS beforeDueDays,
         COALESCE(s.due_today_enabled, 1) AS dueTodayEnabled,
         COALESCE(s.overdue_enabled, 1) AS overdueEnabled,
         COALESCE(s.overdue_days, 5) AS overdueDays
-      FROM payments p JOIN athletes a ON a.id = p.athlete_id
+      FROM payments p
+      JOIN athletes a ON a.id = p.athlete_id AND a.organization_id = p.organization_id
       LEFT JOIN billing_notification_settings s ON s.organization_id = p.organization_id
-      WHERE p.id = ? AND p.organization_id = ? AND a.id = ?`)
-      .bind(item.paymentId, item.organizationId, item.athleteId).first<Record<string, string | number | null>>();
-  if (!current) return "Mensalidade ou atleta não encontrado na revalidação.";
-  const balance = Number(current.amountCents) - Number(current.paidAmountCents || 0);
-  if (["paid", "cancelled"].includes(String(current.status)) || balance <= 0) return "Mensalidade quitada, cancelada ou sem saldo.";
-  if (!Number(current.athleteActive)) return "Atleta inativo.";
-  const guardianPhone = normalizePhone(String(current.guardianPhone || ""));
-  if (!guardianPhone) return "Atleta sem telefone atual valido.";
-  const currentPhone = financialTest ? normalizePhone(item.phone) : guardianPhone;
+      WHERE p.id = ? AND p.organization_id = ? AND a.id = ?
+      LIMIT 1`)
+      .bind(item.paymentId, item.organizationId, item.athleteId)
+      .first<Record<string, string | number | boolean | null>>();
+
+  const currentPhone = financialTest ? normalizePhone(item.phone) : normalizePhone(String(current?.guardianPhone || ""));
   if (financialTest) {
     const expectedKey = `financial-test:${financialTest.runId}:${financialTest.type}`;
     if (
@@ -389,21 +404,119 @@ export async function revalidateFinancialNotification(
       item.idempotencyKey !== expectedKey ||
       currentPhone !== normalizePhone(financialTest.authorizedPhone)
     ) {
-      return "Contexto do teste financeiro controlado nao corresponde a outbox reservada.";
+      return { kind: "invalid", reason: "controlled_test_context_mismatch" };
     }
   }
-  if (!currentPhone) return "Atleta sem telefone atual válido.";
-  if (currentPhone !== normalizePhone(item.phone)) return "Telefone do responsável mudou desde a criação da notificação.";
-  if (!Number(current.enabled)) return "Notificações financeiras foram desativadas.";
-  const difference = dayDifference(
-    financialTest?.referenceDate ?? saoPauloDate(),
-    String(current.dueDate),
-  );
-  const applicable =
-    (item.eventType === "before_due" && Number(current.beforeDueEnabled) && difference > 0 && difference <= Number(current.beforeDueDays)) ||
-    (item.eventType === "due_today" && Number(current.dueTodayEnabled) && difference === 0) ||
-    (item.eventType === "overdue" && Number(current.overdueEnabled) && difference < 0 && Math.abs(difference) >= Number(current.overdueDays));
-  return applicable ? null : `O evento ${item.eventType} não é mais aplicável à data atual.`;
+  const validation = evaluateFinancialSnapshot({
+    item,
+    current: current ? {
+      ...current,
+      guardianPhone: financialTest ? currentPhone : current.guardianPhone,
+      athleteActive: Boolean(Number(current.athleteActive)),
+      enabled: Boolean(Number(current.enabled)),
+    } : null,
+  });
+  if (validation.kind === "invalid") return validation;
+
+  const today = financialTest?.referenceDate ?? saoPauloDate();
+  const notification = buildBillingNotification({
+    athleteName: String(current.athleteName || ""),
+    amountCents,
+    paidAmountCents,
+    dueDate: String(current.dueDate),
+  }, today, {
+    enabled: Boolean(current.enabled),
+    beforeDueEnabled: Boolean(current.beforeDueEnabled),
+    beforeDueDays: Number(current.beforeDueDays),
+    dueTodayEnabled: Boolean(current.dueTodayEnabled),
+    overdueEnabled: Boolean(current.overdueEnabled),
+    overdueDays: Number(current.overdueDays),
+  });
+  if (!notification || notification.type !== item.eventType) {
+    return { kind: "invalid", reason: "financial_event_no_longer_applicable" };
+  }
+  return { kind: "valid", refreshedMessage: notification.message };
+}
+
+async function revalidateAbsenceNotification(item: ReservedNotification): Promise<RevalidationResult> {
+  const reference = parseAbsenceIdempotencyKey(item.idempotencyKey, item.organizationId, item.athleteId);
+  if (!reference || !item.teamId) return { kind: "invalid", reason: "absence_reference_mismatch" };
+  const current = postgresConfigured()
+    ? (await getPostgresClient()<Record<string, string | number | boolean | null>[]>`
+        SELECT s.organization_id AS "organizationId", s.team_id AS "teamId",
+          s.session_date AS "sessionDate", s.status AS "sessionStatus",
+          r.athlete_id AS "recordAthleteId", r.present,
+          a.active AS "athleteActive", a.guardian_phone AS "guardianPhone",
+          ta.active AS "teamActive"
+        FROM attendance_sessions s
+        LEFT JOIN attendance_records r ON r.session_id = s.id AND r.athlete_id = ${item.athleteId}
+        LEFT JOIN athletes a ON a.id = r.athlete_id AND a.organization_id = s.organization_id
+        LEFT JOIN team_athletes ta ON ta.organization_id = s.organization_id
+          AND ta.team_id = s.team_id AND ta.athlete_id = r.athlete_id
+        WHERE s.id = ${reference.sessionId}
+          AND s.organization_id = ${item.organizationId}
+          AND s.team_id = ${item.teamId}
+        LIMIT 1
+      `)[0]
+    : await getD1().prepare(`SELECT s.organization_id AS organizationId,
+        s.team_id AS teamId, s.session_date AS sessionDate, s.status AS sessionStatus,
+        r.athlete_id AS recordAthleteId, r.present, a.active AS athleteActive,
+        a.guardian_phone AS guardianPhone, ta.active AS teamActive
+      FROM attendance_sessions s
+      LEFT JOIN attendance_records r ON r.session_id = s.id AND r.athlete_id = ?
+      LEFT JOIN athletes a ON a.id = r.athlete_id AND a.organization_id = s.organization_id
+      LEFT JOIN team_athletes ta ON ta.organization_id = s.organization_id
+        AND ta.team_id = s.team_id AND ta.athlete_id = r.athlete_id
+      WHERE s.id = ? AND s.organization_id = ? AND s.team_id = ? LIMIT 1`)
+      .bind(item.athleteId, reference.sessionId, item.organizationId, item.teamId)
+      .first<Record<string, string | number | boolean | null>>();
+  return evaluateAbsenceSnapshot({
+    item,
+    session: current ? { id: reference.sessionId, organizationId: current.organizationId, teamId: current.teamId, sessionDate: current.sessionDate, status: current.sessionStatus } : null,
+    record: current?.recordAthleteId ? { athleteId: current.recordAthleteId, present: Boolean(current.present) } : null,
+    athlete: current?.recordAthleteId ? { organizationId: item.organizationId, active: Boolean(current.athleteActive), guardianPhone: current.guardianPhone } : null,
+    teamMembership: current?.recordAthleteId ? { teamId: item.teamId, active: Boolean(current.teamActive) } : null,
+  });
+}
+
+async function revalidateEnrollmentNotification(item: ReservedNotification): Promise<RevalidationResult> {
+  const reference = parseEnrollmentIdempotencyKey(item.idempotencyKey, item.organizationId, item.athleteId, item.teamId);
+  if (!reference) return { kind: "invalid", reason: "enrollment_reference_mismatch" };
+  const current = postgresConfigured()
+    ? (await getPostgresClient()<Record<string, string | number | boolean | null>[]>`
+        SELECT a.active AS "athleteActive", a.guardian_phone AS "guardianPhone", ta.active AS "teamActive"
+        FROM athletes a
+        LEFT JOIN team_athletes ta ON ta.organization_id = a.organization_id
+          AND ta.athlete_id = a.id AND ta.team_id = ${reference.teamId}
+        WHERE a.id = ${item.athleteId} AND a.organization_id = ${item.organizationId}
+        LIMIT 1
+      `)[0]
+    : await getD1().prepare(`SELECT a.active AS athleteActive, a.guardian_phone AS guardianPhone,
+        ta.active AS teamActive FROM athletes a
+      LEFT JOIN team_athletes ta ON ta.organization_id = a.organization_id
+        AND ta.athlete_id = a.id AND ta.team_id = ?
+      WHERE a.id = ? AND a.organization_id = ? LIMIT 1`)
+      .bind(reference.teamId, item.athleteId, item.organizationId)
+      .first<Record<string, string | number | boolean | null>>();
+  return evaluateEnrollmentSnapshot({
+    item,
+    athlete: current ? { organizationId: item.organizationId, active: Boolean(current.athleteActive), guardianPhone: current.guardianPhone } : null,
+    teamMembership: current ? { teamId: item.teamId, active: Boolean(current.teamActive) } : null,
+  });
+}
+
+export async function revalidateNotification(item: ReservedNotification, financialTest?: FinancialTestContext): Promise<RevalidationResult> {
+  try {
+    if (["before_due", "due_today", "overdue"].includes(item.eventType)) {
+      return await revalidateFinancialNotification(item, financialTest);
+    }
+    if (item.eventType === "absence") return await revalidateAbsenceNotification(item);
+    if (item.eventType === "enrollment") return await revalidateEnrollmentNotification(item);
+    if (item.eventType === "controlled_test") return { kind: "valid" };
+    return { kind: "invalid", reason: "unsupported_event_type" };
+  } catch (error) {
+    return { kind: "transient_error", error: sanitizeDeliveryError(error) };
+  }
 }
 
 async function supersede(item: ReservedNotification, reason: string) {
@@ -431,6 +544,42 @@ async function supersede(item: ReservedNotification, reason: string) {
     .bind(reason, now, item.id, item.lockToken).run();
 }
 
+async function deferRevalidation(item: ReservedNotification, reason: string) {
+  const now = unixNow();
+  const nextAttemptAt = now + 5 * 60;
+  const safeReason = `revalidation_transient_error: ${sanitizeDeliveryError(new Error(reason))}`;
+  if (postgresConfigured()) {
+    await getPostgresClient()`
+      UPDATE notification_outbox
+      SET status = 'failed', last_error = ${safeReason}, next_attempt_at = ${nextAttemptAt},
+          lock_token = NULL, locked_at = NULL, locked_until = NULL, updated_at = ${now}
+      WHERE id = ${item.id} AND status = 'processing' AND lock_token = ${item.lockToken}
+    `;
+    return;
+  }
+  await getD1().prepare(`UPDATE notification_outbox
+    SET status='failed', last_error=?, next_attempt_at=?, lock_token=NULL,
+        locked_at=NULL, locked_until=NULL, updated_at=?
+    WHERE id=? AND status='processing' AND lock_token=?`)
+    .bind(safeReason, nextAttemptAt, now, item.id, item.lockToken).run();
+}
+
+async function refreshReservedMessage(item: ReservedNotification, message: string) {
+  const now = unixNow();
+  if (postgresConfigured()) {
+    const [row] = await getPostgresClient()<{ id: string }[]>`
+      UPDATE notification_outbox SET message = ${message}, updated_at = ${now}
+      WHERE id = ${item.id} AND status = 'processing' AND lock_token = ${item.lockToken}
+      RETURNING id
+    `;
+    return Boolean(row);
+  }
+  const row = await getD1().prepare(`UPDATE notification_outbox SET message=?, updated_at=?
+    WHERE id=? AND status='processing' AND lock_token=? RETURNING id`)
+    .bind(message, now, item.id, item.lockToken).first<{ id: string }>();
+  return Boolean(row);
+}
+
 async function beginAttempt(item: ReservedNotification, origin: NotificationOrigin) {
   const now = unixNow();
   if (postgresConfigured()) {
@@ -439,6 +588,7 @@ async function beginAttempt(item: ReservedNotification, origin: NotificationOrig
     }[]>`
       UPDATE notification_outbox
       SET attempt_count = attempt_count + 1,
+          last_attempt_origin = ${origin},
           updated_at = ${now}
       WHERE id = ${item.id}
         AND status = 'processing'
@@ -456,10 +606,10 @@ async function beginAttempt(item: ReservedNotification, origin: NotificationOrig
     return true;
   }
   const row = await getD1().prepare(`UPDATE notification_outbox
-    SET attempt_count = attempt_count + 1, updated_at=?
+    SET attempt_count = attempt_count + 1, last_attempt_origin=?, updated_at=?
     WHERE id=? AND status='processing' AND lock_token=?
     RETURNING attempt_count AS attemptCount`)
-    .bind(now, item.id, item.lockToken).first<{ attemptCount: number }>();
+    .bind(origin, now, item.id, item.lockToken).first<{ attemptCount: number }>();
   if (!row) return false;
   item.attemptCount = row.attemptCount;
   await getD1().prepare(`INSERT INTO notification_attempts
@@ -558,7 +708,7 @@ async function runNotificationQueue(
   } = {},
 ): Promise<QueueTotals> {
   if (financialNotificationTestEnabled() && !dependencies.notificationId) {
-    return { sent: 0, failed: 0, deliveryUnknown: 0, processed: 0, disconnected: false };
+    return { sent: 0, failed: 0, deliveryUnknown: 0, deferred: 0, processed: 0, disconnected: false };
   }
   if (dependencies.financialTest) {
     const configuredPhone = testModeAllowedPhone();
@@ -585,28 +735,51 @@ async function runNotificationQueue(
   const sleep = dependencies.sleep ?? ((milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   const bridge = await statusReader(organizationId);
   if (bridge.status !== "connected" || bridge.phoneVerification === "mismatch" || bridge.phoneVerification === "unknown") {
-    return { sent: 0, failed: 0, deliveryUnknown: 0, processed: 0, disconnected: true };
+    return { sent: 0, failed: 0, deliveryUnknown: 0, deferred: 0, processed: 0, disconnected: true };
   }
 
   await quarantineExpiredLocks(organizationId, dependencies.notificationId);
-  const totals = { sent: 0, failed: 0, deliveryUnknown: 0, processed: 0, disconnected: false };
+  const totals = { sent: 0, failed: 0, deliveryUnknown: 0, deferred: 0, processed: 0, disconnected: false };
   let sendAttempts = 0;
   for (let reservations = 0; reservations < ABSOLUTE_MAX_BATCH && sendAttempts < maxPerRun; reservations += 1) {
-    const item = await reserveNext(organizationId, origin, dependencies.notificationId);
+    const item = await reserveNext(organizationId, dependencies.notificationId);
     if (!item) break;
-    const supersededReason = await revalidateFinancialNotification(
+    // Re-read business state only after the atomic claim; no network call holds a DB lock.
+    // A small state-change race remains between this read and provider acceptance.
+    const validation = await revalidateNotification(
       item,
       dependencies.financialTest,
     );
-    if (supersededReason) {
-      await supersede(item, supersededReason);
+    if (validation.kind === "invalid") {
+      await supersede(item, validation.reason);
       totals.processed += 1;
       if (dependencies.notificationId) break;
       continue;
     }
+    if (validation.kind === "transient_error") {
+      await deferRevalidation(item, validation.error);
+      totals.deferred += 1;
+      totals.processed += 1;
+      if (dependencies.notificationId) break;
+      continue;
+    }
+    if (validation.refreshedMessage && validation.refreshedMessage !== item.message) {
+      let refreshed = false;
+      try {
+        refreshed = await refreshReservedMessage(item, validation.refreshedMessage);
+      } catch (error) {
+        await deferRevalidation(item, sanitizeDeliveryError(error));
+        totals.deferred += 1;
+        totals.processed += 1;
+        if (dependencies.notificationId) break;
+        continue;
+      }
+      if (!refreshed) break;
+      item.message = validation.refreshedMessage;
+    }
     const normalizedPhone = normalizeNotificationPhone(item.phone);
     if (!normalizedPhone) {
-      await supersede(item, "Telefone do responsável inválido; envio não tentado.");
+      await supersede(item, "phone_invalid");
       totals.processed += 1;
       if (dependencies.notificationId) break;
       continue;

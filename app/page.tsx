@@ -1691,7 +1691,7 @@ function SectionView({
               </label>
               <label className="athlete-category-filter">
                 <span>Categoria</span>
-                <select value={teamCategory} onChange={(event) => setTeamCategory(event.target.value)}>
+                <select aria-label="Categoria" value={teamCategory} onChange={(event) => setTeamCategory(event.target.value)}>
                   <option value="all">Todas</option>
                   {categories.map((category) => (
                     <option key={category.id} value={category.name}>{category.name}</option>
@@ -1700,7 +1700,7 @@ function SectionView({
               </label>
               <label className="athlete-category-filter">
                 <span>Dia</span>
-                <select value={teamDay} onChange={(event) => setTeamDay(event.target.value)}>
+                <select aria-label="Dia" value={teamDay} onChange={(event) => setTeamDay(event.target.value)}>
                   <option value="all">Todos</option>
                   <option value="Seg">Segunda</option>
                   <option value="Ter">Terça</option>
@@ -1713,7 +1713,7 @@ function SectionView({
               </label>
               <label className="athlete-category-filter">
                 <span>Ordenar</span>
-                <select value={teamSort} onChange={(event) => setTeamSort(event.target.value as typeof teamSort)}>
+                <select aria-label="Ordenar" value={teamSort} onChange={(event) => setTeamSort(event.target.value as typeof teamSort)}>
                   <option value="schedule">Horário</option>
                   <option value="category">Categoria</option>
                   <option value="name">Nome</option>

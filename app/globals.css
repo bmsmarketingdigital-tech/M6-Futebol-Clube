@@ -5683,9 +5683,13 @@ body {
      vez de 2+1 (que deixava "Ordenar" sozinho com um vão vazio ao lado). O
      contador de resultados some no mobile -- a lista logo abaixo já mostra
      quantas turmas existem, mais uma linha de texto não ajuda em nada. */
-  .teams-page .team-toolbar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .teams-page .team-toolbar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; min-width: 0; padding: 8px; }
   .teams-page .team-toolbar .athlete-list-search { grid-column: 1 / -1; }
   .teams-page .team-toolbar > strong { display: none; }
+  .teams-page .team-toolbar .athlete-category-filter { display: block; position: relative; width: 100%; min-width: 0; overflow: hidden; padding: 0 15px 0 7px; }
+  .teams-page .team-toolbar .athlete-category-filter > span { display: none; }
+  .teams-page .team-toolbar .athlete-category-filter::after { content: ""; position: absolute; right: 8px; top: 50%; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-70%) rotate(45deg); pointer-events: none; }
+  .teams-page .team-toolbar .athlete-category-filter select { display: block; width: 100%; min-width: 0; max-width: 100%; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(10px, 2.8vw, 12px); }
   .teams-page .class-grid { display: grid; grid-template-columns: 1fr; gap: 10px; height: auto; padding: 10px 0 0; overflow: visible; }
   .teams-page .class-card { min-height: 0; height: auto; padding: 16px; border-radius: 19px; }
   .teams-page .class-card h3 { margin: 14px 0 3px; font-size: 20px; }
