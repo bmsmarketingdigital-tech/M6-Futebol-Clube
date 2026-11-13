@@ -4,6 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { safeAbsenceEnqueueErrorDetails } from "../app/api/notifications/absence-queue.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { absenceNotificationKey } from "../app/api/notifications/absence-idempotency.mjs";
 import { queueAbsenceNotifications } from "../app/api/notifications/absence-queue.mjs";
@@ -334,4 +335,24 @@ test("falha da notificação de ausência persiste erro sanitizado e permite ret
   assert.equal(sent.attempt_count, 2);
   assert.ok(sent.sent_at);
   assert.equal(db.prepare("SELECT count(*) total FROM notification_outbox WHERE idempotency_key=?").get(absenceNotificationKey("org", "session", "athlete")).total, 1);
+});
+test("erro PostgreSQL de enqueue preserva diagnóstico técnico e sanitiza dados sensíveis", () => {
+  const error = Object.assign(new Error("new row violates check constraint notification_outbox_event_type_check for 5511999988888 https://user:pass@example.test/path Bearer abc-secret 123e4567-e89b-12d3-a456-426614174000"), {
+    code: "23514",
+    constraint: "notification_outbox_event_type_check",
+    table: "notification_outbox",
+    column: "event_type",
+    severity: "ERROR",
+  });
+  const details = safeAbsenceEnqueueErrorDetails(error);
+  assert.equal(details.errorCode, "23514");
+  assert.equal(details.sqlState, "23514");
+  assert.equal(details.constraint, "notification_outbox_event_type_check");
+  assert.equal(details.table, "notification_outbox");
+  assert.equal(details.column, "event_type");
+  assert.match(details.message, /\[PHONE\]/);
+  assert.match(details.message, /\[URL\]/);
+  assert.match(details.message, /\[REDACTED\]/);
+  assert.match(details.message, /\[ID\]/);
+  assert.doesNotMatch(details.message, /5511999988888|user:pass|abc-secret|123e4567-e89b-12d3-a456-426614174000/);
 });

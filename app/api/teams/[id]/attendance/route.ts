@@ -10,7 +10,7 @@ import {
 } from "../../../../../db/schema";
 import { getApiContext } from "../../../api-auth";
 import { enqueueNotification } from "../../../notifications/outbox";
-import { queueAbsenceNotifications } from "../../../notifications/absence-queue.mjs";
+import { queueAbsenceNotifications, safeAbsenceEnqueueErrorDetails } from "../../../notifications/absence-queue.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -81,9 +81,7 @@ async function notifyAbsentGuardiansSafely(...args: Parameters<typeof notifyAbse
   } catch (error) {
     console.error(JSON.stringify({
       event: "ABSENCE_NOTIFICATION_ENQUEUE_ERROR",
-      organizationId: args[0],
-      sessionId: args[2],
-      errorName: error instanceof Error ? error.name : "Error",
+      ...safeAbsenceEnqueueErrorDetails(error),
     }));
     return 0;
   }

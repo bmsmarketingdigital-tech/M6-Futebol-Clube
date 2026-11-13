@@ -1,4 +1,37 @@
 import { absenceNotificationKey } from "./absence-idempotency.mjs";
+
+const ERROR_FIELD_MAX_LENGTH = 240;
+
+function redactErrorMessage(value) {
+  return String(value ?? "")
+    .replace(/https?:\/\/[^\s"']+/gi, "[URL]")
+    .replace(/\bBearer\s+[^\s"']+/gi, "Bearer [REDACTED]")
+    .replace(/\b(password|passwd|token|secret|authorization|cookie)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+    .replace(/\b[\w.+-]+@[\w.-]+\.[A-Z]{2,}\b/gi, "[EMAIL]")
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "[ID]")
+    .replace(/\b\d{8,15}\b/g, "[PHONE]")
+    .replace(/\bKey \(([^)]+)\)=\(([^)]+)\)/g, "Key ($1)=([REDACTED])")
+    .replace(/[\r\n\t]+/g, " ")
+    .slice(0, ERROR_FIELD_MAX_LENGTH);
+}
+
+export function safeAbsenceEnqueueErrorDetails(error) {
+  const read = (key) => {
+    const value = error && typeof error === "object" ? error[key] : undefined;
+    return typeof value === "string" && value.length ? value.slice(0, ERROR_FIELD_MAX_LENGTH) : undefined;
+  };
+  const message = error instanceof Error ? redactErrorMessage(error.message) : undefined;
+  return {
+    errorName: error instanceof Error ? error.name : "Error",
+    errorCode: read("code") ?? read("errorCode"),
+    sqlState: read("sqlState") ?? read("code"),
+    constraint: read("constraint"),
+    table: read("table"),
+    column: read("column"),
+    severity: read("severity"),
+    message,
+  };
+}
 import { normalizeNotificationPhone } from "./normalize-phone.mjs";
 
 /**
@@ -29,10 +62,7 @@ export async function queueAbsenceNotifications(input) {
       if (result.created) queued += 1;
     } catch (error) {
       input.onError?.({
-        organizationId: input.organizationId,
-        sessionId: input.sessionId,
-        athleteId: athlete.id,
-        errorName: error instanceof Error ? error.name : "Error",
+        ...safeAbsenceEnqueueErrorDetails(error),
       });
     }
   }
