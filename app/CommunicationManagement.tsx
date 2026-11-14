@@ -1,10 +1,19 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
-import { ArrowLeft, CalendarClock, Check, CheckCircle2, MessageCircle, Plus, X } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeft, CalendarClock, Check, CheckCircle2, Loader2, MessageCircle, Plus, X } from "lucide-react";
 import type { TeamRecord } from "./TeamManagement";
 import { readApiResponse } from "./api-response";
 import { performWhatsAppAction, WhatsAppActionError } from "./whatsapp-action.mjs";
+import {
+  beginPairingGeneration,
+  clearPairingCodeOnOpen,
+  copyPairingCodeToClipboard,
+  createPairingRequestGate,
+  mergePairingPollingStatus,
+  pairingFailureStatus,
+  WHATSAPP_CONNECT_TIMEOUT_MS,
+} from "./whatsapp-pairing.mjs";
 
 type Recipient = { id: string; athleteId: string; guardianName: string; guardianEmail: string | null; guardianPhone: string | null; readAt: string | null };
 type Communication = {
@@ -94,35 +103,132 @@ function WhatsAppCommunicationCard({ notify }: { notify: (message: string) => vo
   const [busy, setBusy] = useState(false);
   const [pairingPhone, setPairingPhone] = useState("");
   const [showPairingForm, setShowPairingForm] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const pairingGate = useRef(createPairingRequestGate());
+  const pairingCodeGeneration = useRef<number | null>(null);
+  const statusPollSequence = useRef(0);
+  const actionBusy = useRef(false);
+  const copyFeedbackTimer = useRef<number | undefined>(undefined);
 
   const refresh = useCallback(async () => {
+    if (pairingGate.current.pending) return;
+    const requestGeneration = pairingGate.current.generation;
+    const pollSequence = ++statusPollSequence.current;
     const response = await fetch("/api/check-in/whatsapp");
     const payload = await readApiResponse<{ whatsapp?: CommunicationWhatsAppStatus }>(response);
-    if (payload.whatsapp) setStatus((current) => {
-      const pollingKeepsTemporaryCode = current.status === "qr" && payload.whatsapp?.status === "starting";
-      return pollingKeepsTemporaryCode
-        ? { ...payload.whatsapp, status: "qr", pairingCode: current.pairingCode, qrCodeDataUrl: current.qrCodeDataUrl }
-        : payload.whatsapp;
-    });
+    const incoming = payload.whatsapp;
+    if (!incoming || pollSequence !== statusPollSequence.current || !pairingGate.current.isCurrent(requestGeneration)) return;
+    if (incoming.status === "connected" || incoming.status === "open") {
+      pairingGate.current.invalidate();
+      pairingCodeGeneration.current = null;
+      setStatus(clearPairingCodeOnOpen(incoming));
+      return;
+    }
+    if (incoming.status === "error") {
+      pairingGate.current.invalidate({ failed: true });
+      pairingCodeGeneration.current = null;
+      setStatus({ ...incoming, pairingCode: null, qrCodeDataUrl: "" });
+      return;
+    }
+    if (incoming.status === "qr" && incoming.pairingCode && pairingGate.current.failedGeneration !== requestGeneration) {
+      pairingCodeGeneration.current = requestGeneration;
+    } else if (!["starting", "qr"].includes(incoming.status)) {
+      pairingCodeGeneration.current = null;
+    }
+    setStatus((current) => mergePairingPollingStatus(current, incoming, {
+      requestGeneration,
+      currentGeneration: pairingGate.current.generation,
+      pairingCodeGeneration: pairingCodeGeneration.current,
+      failedGeneration: pairingGate.current.failedGeneration,
+    }) ?? current);
   }, []);
 
   useEffect(() => { const initial = window.setTimeout(() => { void refresh(); }, 0); const timer = window.setInterval(() => { void refresh(); }, 3000); return () => { window.clearTimeout(initial); window.clearInterval(timer); }; }, [refresh]);
+  useEffect(() => () => { if (copyFeedbackTimer.current !== undefined) window.clearTimeout(copyFeedbackTimer.current); }, []);
 
   async function action(path: string, message: string, bridgeAction?: "connect" | "disconnect", phone?: string) {
+    if (actionBusy.current) return;
+    const isConnect = bridgeAction === "connect";
+    const generation = isConnect ? pairingGate.current.begin() : null;
+    if (isConnect && generation === null) return;
+    if (bridgeAction === "disconnect") {
+      pairingGate.current.invalidate();
+      pairingCodeGeneration.current = null;
+      setStatus((current) => ({ ...current, pairingCode: null, qrCodeDataUrl: "" }));
+    }
+    actionBusy.current = true;
     setBusy(true);
+    if (isConnect) {
+      pairingCodeGeneration.current = null;
+      setStatus((current) => beginPairingGeneration(current));
+    }
+    let requestSettled = false;
     try {
       const payload = await performWhatsAppAction({
         path,
         body: bridgeAction ? { action: bridgeAction, phone } : undefined,
+        ...(isConnect ? { timeoutMs: WHATSAPP_CONNECT_TIMEOUT_MS } : {}),
       }) as { whatsapp?: CommunicationWhatsAppStatus };
-      if (payload.whatsapp) setStatus(payload.whatsapp);
+      if (isConnect) {
+        if (!pairingGate.current.isCurrent(generation)) return;
+        const reportedFailure = payload.whatsapp?.status === "error";
+        const completed = pairingGate.current.complete(generation, { failed: reportedFailure });
+        requestSettled = Boolean(completed);
+        if (!completed?.applied) return;
+        if (payload.whatsapp) {
+          if (reportedFailure) {
+            pairingCodeGeneration.current = null;
+            setStatus({ ...payload.whatsapp, pairingCode: null, qrCodeDataUrl: "" });
+          } else if (payload.whatsapp.status === "connected" || payload.whatsapp.status === "open") {
+            pairingCodeGeneration.current = null;
+            setStatus(clearPairingCodeOnOpen(payload.whatsapp));
+          } else {
+            pairingCodeGeneration.current = payload.whatsapp.pairingCode ? completed.generation : null;
+            setStatus({
+              ...payload.whatsapp,
+              pairingCode: payload.whatsapp.pairingCode ?? null,
+              qrCodeDataUrl: payload.whatsapp.pairingCode ? payload.whatsapp.qrCodeDataUrl ?? "" : payload.whatsapp.qrCodeDataUrl ?? "",
+            });
+          }
+        }
+      } else if (payload.whatsapp) {
+        if (payload.whatsapp.status === "connected" || payload.whatsapp.status === "open") {
+          pairingCodeGeneration.current = null;
+          setStatus(clearPairingCodeOnOpen(payload.whatsapp));
+        } else {
+          setStatus(payload.whatsapp);
+        }
+      }
       notify(message);
     } catch (error) {
+      if (isConnect) {
+        const completed = pairingGate.current.complete(generation, { failed: true });
+        requestSettled = Boolean(completed);
+        if (completed?.applied) {
+          pairingCodeGeneration.current = null;
+          setStatus((current) => pairingFailureStatus(current, error));
+        }
+      }
       notify(error instanceof WhatsAppActionError
         ? error.message
         : "Não foi possível concluir a solicitação. Tente novamente.");
     }
-    finally { setBusy(false); }
+    finally {
+      if (isConnect && !requestSettled) pairingGate.current.complete(generation);
+      actionBusy.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function copyPairingCode() {
+    try {
+      await copyPairingCodeToClipboard(status.pairingCode ?? "");
+      setCopied(true);
+      if (copyFeedbackTimer.current !== undefined) window.clearTimeout(copyFeedbackTimer.current);
+      copyFeedbackTimer.current = window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      notify("Não foi possível copiar o código. Você ainda pode digitá-lo manualmente.");
+    }
   }
 
   return <section className={`card whatsapp-connector-card communication-whatsapp-card ${status.status}`}>
@@ -130,21 +236,21 @@ function WhatsAppCommunicationCard({ notify }: { notify: (message: string) => vo
       <span className="eyebrow">NOTIFICAÇÕES AUTOMÁTICAS</span><h2>WhatsApp da comunicação</h2>
       <p>{status.status === "connected" ? `Conectado${status.connectedPhone ? ` · ${status.connectedPhone}` : ""}. Pronto para enviar avisos.` : "Conecte o WhatsApp para enviar confirmações e avisos aos responsáveis."}</p>
     </div></div>
-    <p role="status">{status.phoneMismatch || status.phoneVerification === "mismatch" ? "Atenção: o telefone conectado diverge do esperado. Envios bloqueados." : status.status === "starting" ? "Conectando..." : status.status === "qr" && status.pairingCode ? "Aguardando código" : status.status === "authenticated" ? "Autenticado" : status.status === "connected" && status.phoneVerification === "unknown" ? "Conectado; telefone ainda não confirmado. Envios bloqueados." : status.status === "connected" ? "Conectado" : status.status === "error" ? `Erro: ${status.lastError || "falha na conexão"}` : "Desconectado"}</p>
-    {status.status === "qr" && status.pairingCode && <div className="whatsapp-qr whatsapp-pairing"><strong className="whatsapp-pairing-code">{formatPairingCode(status.pairingCode)}</strong><span><strong>Digite esse código no WhatsApp deste celular</strong><small>Aparelhos conectados → Conectar aparelho → Conectar com número</small></span></div>}
+    <p role="status" aria-live="polite">{busy && pairingGate.current.pending ? "Gerando código..." : status.phoneMismatch || status.phoneVerification === "mismatch" ? "Atenção: o telefone conectado diverge do esperado. Envios bloqueados." : status.status === "starting" ? "Conectando..." : status.status === "qr" && status.pairingCode ? "Aguardando conexão no WhatsApp" : status.status === "authenticated" ? "Autenticado" : status.status === "connected" && status.phoneVerification === "unknown" ? "Conectado; telefone ainda não confirmado. Envios bloqueados." : status.status === "connected" ? "Conectado" : status.status === "error" ? `Erro: ${status.lastError || "falha na conexão"}` : "Desconectado"}</p>
+    {status.status === "qr" && status.pairingCode && <div className="whatsapp-qr whatsapp-pairing"><div className="whatsapp-pairing-code-wrap"><strong className="whatsapp-pairing-code">{formatPairingCode(status.pairingCode)}</strong><button type="button" className="whatsapp-pairing-copy" onClick={() => void copyPairingCode()}>{copied ? "Copiado" : "Copiar código"}</button></div><span className="whatsapp-pairing-instructions"><strong>Digite este código no WhatsApp</strong><small>Abra o WhatsApp &gt; Aparelhos conectados &gt; Conectar com número de telefone e digite este código.</small></span></div>}
     {status.status === "qr" && !status.pairingCode && status.qrCodeDataUrl && <div className="whatsapp-qr"><img src={status.qrCodeDataUrl} alt="QR Code para conectar o WhatsApp" /><span><strong>Escaneie no WhatsApp</strong><small>Use outro aparelho para ver este QR e escaneie com a câmera do WhatsApp do número da escolinha (Aparelhos conectados → Conectar aparelho)</small></span></div>}
     {status.status !== "connected" && !showPairingForm && <button type="button" className="link-button whatsapp-pairing-toggle" onClick={() => setShowPairingForm(true)}>Só tenho este aparelho para conectar? Use um código em vez de QR</button>}
     {status.status !== "connected" && showPairingForm && (
       <div className="whatsapp-pairing-form">
         <label>
           Número do WhatsApp da escolinha
-          <input type="tel" inputMode="tel" placeholder="+55 (11) 99999-9999" value={pairingPhone} onChange={(event) => setPairingPhone(event.target.value)} />
+          <input type="tel" inputMode="tel" placeholder="+55 (11) 99999-9999" value={pairingPhone} onChange={(event) => setPairingPhone(event.target.value)} disabled={busy} />
         </label>
-        <button type="button" className="whatsapp-connect-button" disabled={busy || !pairingPhone.trim()} onClick={() => void action("/api/check-in/whatsapp", "Solicitação de código iniciada.", "connect", pairingPhone)}>{busy ? "Gerando..." : "Gerar código"}</button>
+        <button type="button" className="whatsapp-connect-button" disabled={busy || !pairingPhone.trim()} onClick={() => void action("/api/check-in/whatsapp", "Solicitação de código iniciada.", "connect", pairingPhone)}>{busy ? <><Loader2 size={14} className="whatsapp-pairing-spinner" /> Gerando código...</> : "Gerar código"}</button>
       </div>
     )}
     <div className="whatsapp-connector-actions">
-      {status.status !== "connected" && <button className="whatsapp-connect-button" onClick={() => void action("/api/check-in/whatsapp", "Conector iniciado. Aguarde o QR Code.", "connect")} disabled={busy}>{busy ? "Preparando..." : "Usar QR Code"}</button>}
+      {status.status !== "connected" && <button type="button" className="whatsapp-connect-button" onClick={() => void action("/api/check-in/whatsapp", "Conector iniciado. Aguarde o QR Code.", "connect")} disabled={busy}>{busy ? <><Loader2 size={14} className="whatsapp-pairing-spinner" /> Gerando código...</> : "Usar QR Code"}</button>}
       {status.status === "connected" && <button className="disconnect-button" onClick={() => void action("/api/check-in/whatsapp", "WhatsApp desconectado.", "disconnect")} disabled={busy}>Desconectar</button>}
     </div>
   </section>;

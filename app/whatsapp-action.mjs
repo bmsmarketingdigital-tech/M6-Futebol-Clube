@@ -13,10 +13,17 @@ const CONNECTION_ERROR = "Não foi possível concluir a conexão com o WhatsApp.
 const NETWORK_ERROR = "Não foi possível acessar o serviço de WhatsApp. Verifique a conexão e tente novamente.";
 
 /** @param {{fetchImpl?: typeof fetch, path: string, body?: unknown, timeoutMs?: number}} options */
-export async function performWhatsAppAction({ fetchImpl = fetch, path, body, timeoutMs = 15000 }) {
+export async function performWhatsAppAction({
+  fetchImpl = fetch,
+  path,
+  body,
+  timeoutMs = 15000,
+  setTimeoutImpl = setTimeout,
+  clearTimeoutImpl = clearTimeout,
+}) {
   const controller = new AbortController();
   let timedOut = false;
-  const timer = setTimeout(() => {
+  const timer = setTimeoutImpl(() => {
     timedOut = true;
     controller.abort();
   }, timeoutMs);
@@ -51,6 +58,6 @@ export async function performWhatsAppAction({ fetchImpl = fetch, path, body, tim
     }
     return payload;
   } finally {
-    clearTimeout(timer);
+    clearTimeoutImpl(timer);
   }
 }

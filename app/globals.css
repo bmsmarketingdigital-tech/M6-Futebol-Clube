@@ -1783,7 +1783,15 @@ input[type="email"], input[type="password"], input[type="date"], input[type="dat
 .whatsapp-connector-copy h2 { margin: 3px 0; font-size: 14px; }.whatsapp-connector-copy p { margin: 0; color: var(--muted); font-size: 8px; }
 .whatsapp-qr { display: flex; align-items: center; gap: 11px; }.whatsapp-qr img { width: 82px; height: 82px; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); }
 .whatsapp-qr strong, .whatsapp-qr small { display: block; }.whatsapp-qr strong { font-size: 9px; }.whatsapp-qr small { max-width: 145px; margin-top: 4px; color: var(--muted); font-size: 7px; }
-.whatsapp-pairing-code { flex: 0 0 auto; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); font-size: 15px; font-weight: 800; letter-spacing: 1.5px; font-variant-numeric: tabular-nums; }
+.whatsapp-pairing { flex-wrap: wrap; }
+.whatsapp-pairing-code-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.whatsapp-pairing-code { flex: 0 0 auto; padding: 8px 12px; border: 1px solid #16804f; border-radius: 10px; background: #fff; color: #102a20; font-size: clamp(28px, 7vw, 36px); font-weight: 900; letter-spacing: .12em; line-height: 1.1; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.whatsapp-pairing-copy { min-height: 40px; padding: 0 12px; border: 1px solid var(--success-subtle); border-radius: 10px; background: var(--success-subtle); color: var(--green); font-size: 12px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.whatsapp-pairing-instructions { min-width: 0; }
+.whatsapp-qr .whatsapp-pairing-instructions strong { color: var(--text-primary); font-size: 13px; }
+.whatsapp-qr .whatsapp-pairing-instructions small { max-width: 320px; font-size: 11px; line-height: 1.4; }
+.whatsapp-pairing-spinner { display: inline-block; vertical-align: -2px; animation: whatsapp-pairing-spin .8s linear infinite; }
+@keyframes whatsapp-pairing-spin { to { transform: rotate(360deg); } }
 .whatsapp-pairing-toggle { align-self: flex-start; margin-top: 6px; padding: 0; border: 0; background: transparent; color: var(--accent); font-size: 9px; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .whatsapp-pairing-form { display: flex; align-items: flex-end; gap: 8px; margin-top: 8px; }
 .whatsapp-pairing-form label { flex: 1 1 auto; display: grid; gap: 4px; color: var(--text-secondary); font-size: 9px; font-weight: 700; }
@@ -3224,6 +3232,13 @@ body {
   .checkin-heading { display: block; }.checkin-heading-actions { margin-top: 14px; justify-content: flex-start; flex-wrap: wrap; }.checkin-heading .primary-button { width: auto; padding: 0 12px; font-size: 8px; }
   .checkin-metrics { grid-template-columns: 1fr; }
   .whatsapp-connector-card { grid-template-columns: 1fr; align-items: flex-start; }.whatsapp-connector-actions { justify-content: flex-start; }.whatsapp-connector-actions > small { text-align: left; }
+  .communication-whatsapp-card { grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; padding: 14px; }
+  .communication-whatsapp-card .whatsapp-pairing { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
+  .communication-whatsapp-card .whatsapp-pairing-code-wrap { justify-content: center; flex-wrap: nowrap; width: 100%; }
+  .communication-whatsapp-card .whatsapp-pairing-code { max-width: 100%; padding: 8px 10px; font-size: clamp(28px, 8vw, 36px); letter-spacing: .1em; }
+  .communication-whatsapp-card .whatsapp-pairing-instructions small { max-width: none; font-size: 12px; line-height: 1.35; }
+  .communication-whatsapp-card .whatsapp-pairing-form { flex-direction: column; align-items: stretch; gap: 9px; }
+  .communication-whatsapp-card .whatsapp-pairing-form input { min-width: 0; min-height: 42px; }
   .scanner-layout { min-height: 0; }.scanner-stage { min-height: 390px; padding: 16px; }.scanner-settings { padding: 21px; }
   .checkin-tabs { padding: 0 14px; gap: 16px; overflow-x: auto; }.checkin-tabs button { white-space: nowrap; }
   .drill-editor { overflow-x: auto; }.drill-editor section { min-width: 680px; }
