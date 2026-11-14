@@ -177,7 +177,7 @@ async function quarantineExpiredLocks(organizationId: string, notificationId?: s
         AND status = 'processing'
         AND locked_until IS NOT NULL
         AND locked_until <= ${now}
-        AND (${notificationId ?? null} IS NULL OR id = ${notificationId ?? null})
+        AND (${notificationId ?? ""} = '' OR id = ${notificationId ?? ""})
     `;
     return;
   }
@@ -232,16 +232,16 @@ async function reserveNext(
               AND (next_attempt_at IS NULL OR next_attempt_at <= ${now})
             )
           )
-          AND (${notificationId ?? null} IS NULL OR id = ${notificationId ?? null})
+          AND (${notificationId ?? null}::text IS NULL OR id = ${notificationId ?? null}::text)
           AND (
-            ${notificationId ?? null} IS NOT NULL
+            ${notificationId ?? null}::text IS NOT NULL
             OR (
               event_type != 'controlled_test'
               AND idempotency_key NOT LIKE 'financial-test:%'
             )
           )
           AND (
-            ${allowedPhone ?? null} IS NULL
+            ${allowedPhone ?? null}::text IS NULL
             OR replace(replace(replace(replace(replace(replace(phone, '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', '') = ${allowedPhone ?? null}
             OR '55' || replace(replace(replace(replace(replace(replace(phone, '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', '') = ${allowedPhone ?? null}
           )
@@ -357,7 +357,7 @@ export async function revalidateFinancialNotification(
           p.amount_cents AS "amountCents",
           p.paid_amount_cents AS "paidAmountCents",
           p.due_date AS "dueDate",
-          a.name AS "athleteName",
+          a.full_name AS "athleteName",
           a.active AS "athleteActive",
           a.guardian_phone AS "guardianPhone",
           COALESCE(s.enabled, 1) AS enabled,
@@ -380,7 +380,7 @@ export async function revalidateFinancialNotification(
     : await getD1().prepare(`SELECT
         p.organization_id AS organizationId, p.athlete_id AS athleteId,
         p.status, p.amount_cents AS amountCents, p.paid_amount_cents AS paidAmountCents,
-        p.due_date AS dueDate, a.name AS athleteName, a.active AS athleteActive,
+        p.due_date AS dueDate, a.full_name AS athleteName, a.active AS athleteActive,
         a.guardian_phone AS guardianPhone,
         COALESCE(s.enabled, 1) AS enabled,
         COALESCE(s.before_due_enabled, 1) AS beforeDueEnabled,
@@ -418,6 +418,8 @@ export async function revalidateFinancialNotification(
   });
   if (validation.kind === "invalid") return validation;
 
+  const amountCents = Number(current.amountCents);
+  const paidAmountCents = Number(current.paidAmountCents ?? 0);
   const today = financialTest?.referenceDate ?? saoPauloDate();
   const notification = buildBillingNotification({
     athleteName: String(current.athleteName || ""),
@@ -694,7 +696,7 @@ async function finishAttempt(
   ]);
 }
 
-async function runNotificationQueue(
+export async function runNotificationQueue(
   organizationId: string,
   origin: NotificationOrigin,
   dependencies: {
